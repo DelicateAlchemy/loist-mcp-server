@@ -242,11 +242,31 @@ Use metadata libraries capable of reading image data from audio file tags (e.g.,
 - docs/task-4.3-artwork-extraction.md - Documentation
 </info added on 2025-10-09T15:04:03.952Z>
 
-## 4. Format Validation [pending]
+## 4. Format Validation [done]
 ### Dependencies: None
 ### Description: Validate the audio file format and ensure it meets expected standards for metadata extraction.
 ### Details:
 Check file headers and structure using format-specific libraries. Confirm support for target formats (MP3, FLAC, WAV, Ogg, etc.) and reject unsupported or malformed files.
+<info added on 2025-10-09T15:12:34.681Z>
+**Format Validation Implementation**
+
+Created comprehensive FormatValidator class in src/metadata/format_validator.py that validates audio files through multiple methods:
+- Magic number (file signature) validation for MP3, FLAC, WAV, Ogg, M4A/AAC formats
+- Auto-detection of file format from content
+- Extension vs. signature mismatch detection
+- Corrupted file detection via signature validation
+
+Key validation features include:
+- validate_signature() - Check file signature matches expected format
+- validate_file() - Comprehensive validation (existence, size, signature)
+- is_supported_format() - Check if extension is supported
+- detect_format() - Auto-detect format from signature
+- read_file_signature() - Read first 12 bytes for validation
+
+Implementation provides security benefits by detecting malicious files disguised as audio, corrupted files, mislabeled files, and preventing processing of non-audio files.
+
+Created comprehensive test suite with 24 tests (all passing) and complete documentation in docs/task-4.4-format-validation.md including format validation guide, file signature reference table, and integration patterns.
+</info added on 2025-10-09T15:12:34.681Z>
 
 ## 5. Error Handling for Missing or Corrupt Metadata [pending]
 ### Dependencies: 4.1, 4.2, 4.3, 4.4

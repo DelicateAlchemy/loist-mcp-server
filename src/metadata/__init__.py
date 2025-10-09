@@ -16,11 +16,20 @@ from .extractor import (
     MetadataExtractionError,
 )
 
+from .format_validator import (
+    FormatValidator,
+    FormatValidationError,
+    validate_audio_format,
+)
+
 __all__ = [
     "MetadataExtractor",
     "extract_metadata",
     "extract_id3_tags",
     "extract_artwork",
     "MetadataExtractionError",
+    "FormatValidator",
+    "FormatValidationError",
+    "validate_audio_format",
 ]
 
