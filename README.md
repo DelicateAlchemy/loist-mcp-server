@@ -150,6 +150,79 @@ SERVER_PORT=8080
 - 🔄 PostgreSQL integration
 - 🔄 Google Cloud Storage integration
 
+## Docker
+
+### Building the Docker Image
+
+Using the build script:
+```bash
+./scripts/docker/build.sh
+```
+
+Or manually:
+```bash
+docker build -t music-library-mcp:latest .
+```
+
+**Image Details:**
+- Base: Python 3.11-slim
+- Size: ~245MB (multi-stage build)
+- User: Non-root (fastmcpuser)
+- Security: Minimal attack surface
+
+### Running with Docker
+
+Using the run script:
+```bash
+./scripts/docker/run.sh
+```
+
+Or manually:
+```bash
+docker run --rm -p 8080:8080 \
+  -e SERVER_TRANSPORT=http \
+  -e LOG_LEVEL=INFO \
+  -e AUTH_ENABLED=false \
+  music-library-mcp:latest
+```
+
+### Using Docker Compose
+
+For local development with hot reload:
+
+```bash
+docker-compose up
+```
+
+Services:
+- **mcp-server**: FastMCP server on port 8080
+- **postgres**: PostgreSQL (commented out, ready for Phase 2)
+
+### Cloud Run Deployment
+
+Build and push to Google Container Registry:
+
+```bash
+# Configure gcloud
+gcloud config set project YOUR_PROJECT_ID
+
+# Build for Cloud Run
+docker build -t gcr.io/YOUR_PROJECT_ID/music-library-mcp:latest .
+
+# Push to GCR
+docker push gcr.io/YOUR_PROJECT_ID/music-library-mcp:latest
+
+# Deploy to Cloud Run
+gcloud run deploy music-library-mcp \
+  --image gcr.io/YOUR_PROJECT_ID/music-library-mcp:latest \
+  --platform managed \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --memory 2Gi \
+  --timeout 600s \
+  --set-env-vars "SERVER_TRANSPORT=http,LOG_LEVEL=INFO"
+```
+
 ## Development
 
 ### Install Development Dependencies

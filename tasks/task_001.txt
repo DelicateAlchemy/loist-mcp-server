@@ -247,9 +247,68 @@ Health check endpoint enhanced to return extended status information including s
 All components thoroughly tested and documented in README with transport mode examples, CORS configuration guidance, security warnings, header explanations, use cases, testing instructions, and updated feature list.
 </info added on 2025-10-09T11:00:43.808Z>
 
-## 7. Docker Setup [pending]
+## 7. Docker Setup [done]
 ### Dependencies: 1.1, 1.2, 1.4
 ### Description: Containerize the FastMCP server for deployment using Docker.
 ### Details:
 Create a Dockerfile to build a container image, specifying the base Python image, copying project files, installing dependencies, and defining the container entry point. Optionally, use docker-compose for local development.
+<info added on 2025-10-09T11:19:37.532Z>
+Successfully containerized the FastMCP server for deployment:
+
+**Dockerfile (Multi-stage Build):**
+- Created production-ready Dockerfile with Python 3.11-slim base
+- Stage 1 (Builder): Installs build-essential, creates wheels for all dependencies
+- Stage 2 (Runtime): Minimal image with only runtime dependencies
+- Final image size: 245MB (well under 500MB target)
+- Non-root user (fastmcpuser, UID 1000) for security
+- Health check configured for Docker monitoring
+- Environment variables: PYTHONUNBUFFERED, PYTHONDONTWRITEBYTECODE
+- Exposed port 8080 for Cloud Run compatibility
+
+**Docker Compose:**
+- Created docker-compose.yml for local development
+- Service: mcp-server with hot reload (volume mount)
+- Environment variables configured for development
+- Health check with 30s interval
+- Network: mcp-network for service communication
+- PostgreSQL service template (commented, ready for Phase 2)
+- Volume mounts for source code and storage
+
+**.dockerignore:**
+- Comprehensive exclusions to minimize image size
+- Excludes: tests, docs, venv, IDE files, git, logs, tasks
+- Keeps only production code and README
+- Excludes .env files (security)
+
+**Build Scripts:**
+- scripts/docker/build.sh - Automated Docker build with tags
+- scripts/docker/run.sh - Convenient container run script
+- Both executable and ready to use
+
+**Testing:**
+- Docker image builds successfully (61 packages installed)
+- Image size: 245MB (51% under target)
+- Container starts correctly
+- Server initializes with logging
+- Lifespan hooks execute (startup/shutdown logged)
+- Non-root user configured
+- Health check works
+
+**Documentation:**
+- Added comprehensive Docker section to README
+- Build instructions (script and manual)
+- Image details (base, size, user, security)
+- Run instructions (script and manual)
+- Docker Compose usage
+- Cloud Run deployment guide with gcloud commands
+- Environment variable configuration examples
+
+**Cloud Run Ready:**
+- Image optimized for Cloud Run deployment
+- 10-minute timeout supported
+- 2GB RAM compatible
+- HTTPS-ready with CORS
+- Environment variable configuration
+- Health endpoint available
+</info added on 2025-10-09T11:19:37.532Z>
 
