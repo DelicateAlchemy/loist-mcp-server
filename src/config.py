@@ -57,11 +57,39 @@ class ServerConfig(BaseSettings):
     storage_path: str = "./storage"
     max_file_size: int = 104857600  # 100MB
     
-    # Feature Flags
+    # CORS Configuration
     enable_cors: bool = True
-    cors_origins: str = "*"
+    cors_origins: str = "*"  # Comma-separated origins in production
+    cors_allow_credentials: bool = True
+    cors_allow_methods: str = "GET,POST,OPTIONS"
+    cors_allow_headers: str = "Authorization,Content-Type,Range,X-Requested-With,Accept,Origin"
+    cors_expose_headers: str = "Content-Range,Accept-Ranges,Content-Length,Content-Type"
+    
+    # Feature Flags
     enable_metrics: bool = False
     enable_healthcheck: bool = True
+    
+    @property
+    def cors_origins_list(self) -> list[str]:
+        """Parse CORS origins string into list"""
+        if self.cors_origins == "*":
+            return ["*"]
+        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+    
+    @property
+    def cors_allow_methods_list(self) -> list[str]:
+        """Parse CORS methods string into list"""
+        return [method.strip() for method in self.cors_allow_methods.split(",") if method.strip()]
+    
+    @property
+    def cors_allow_headers_list(self) -> list[str]:
+        """Parse CORS headers string into list"""
+        return [header.strip() for header in self.cors_allow_headers.split(",") if header.strip()]
+    
+    @property
+    def cors_expose_headers_list(self) -> list[str]:
+        """Parse CORS expose headers string into list"""
+        return [header.strip() for header in self.cors_expose_headers.split(",") if header.strip()]
     
     @property
     def log_level_int(self) -> int:

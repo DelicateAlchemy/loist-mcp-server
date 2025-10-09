@@ -86,18 +86,41 @@ loist-mcp-server/
 
 ## Running the Server
 
-### Development Mode
+### Development Mode (STDIO)
 
 ```bash
 source .venv/bin/activate  # Activate virtual environment
-python src/server.py dev
+python src/server.py
 ```
 
-### Production Mode
+Or with MCP Inspector:
+```bash
+fastmcp dev src/server.py
+```
 
+### HTTP Mode (with CORS for iframe embedding)
+
+Set transport to HTTP in `.env`:
+```env
+SERVER_TRANSPORT=http
+SERVER_PORT=8080
+ENABLE_CORS=true
+```
+
+Then run:
 ```bash
 source .venv/bin/activate
 python src/server.py
+```
+
+Server will be available at `http://localhost:8080/mcp`
+
+### SSE Mode (Server-Sent Events)
+
+Set transport to SSE in `.env`:
+```env
+SERVER_TRANSPORT=sse
+SERVER_PORT=8080
 ```
 
 ## Features
@@ -109,21 +132,23 @@ python src/server.py
 - ✅ Lifespan hooks (startup/shutdown)
 - ✅ Bearer token authentication (SimpleBearerAuth)
 - ✅ Centralized error handling & logging
+- ✅ CORS configuration for iframe embedding
 - ✅ Health check tool with extended status
 - ✅ Structured logging (JSON/text formats)
 - ✅ Duplicate handling policies
 - ✅ Environment variable support
+- ✅ Multiple transport modes (STDIO, HTTP, SSE)
 - ✅ Python 3.11+ support
 
 ### Planned Features
 
 - 🔄 Advanced OAuth providers (GitHub, Google, etc.)
 - 🔄 JWT token support
-- 🔄 Audio file ingestion
+- 🔄 Audio file ingestion tools
 - 🔄 Embedding generation
-- 🔄 CORS configuration
 - 🔄 Docker containerization
-- 🔄 HTTP/SSE transport modes
+- 🔄 PostgreSQL integration
+- 🔄 Google Cloud Storage integration
 
 ## Development
 
@@ -344,6 +369,84 @@ Authorization: Bearer your-secret-token-here
 - OAuth providers (GitHub, Google, Microsoft)
 - API key management system
 - Role-based access control (RBAC)
+
+## CORS Configuration
+
+The server supports CORS (Cross-Origin Resource Sharing) for iframe embedding and cross-origin requests.
+
+### Enabling CORS
+
+CORS is enabled by default for HTTP and SSE transports. Configure via environment variables:
+
+```env
+# CORS Configuration
+ENABLE_CORS=true
+CORS_ORIGINS=*  # Development: allow all
+CORS_ALLOW_CREDENTIALS=true
+CORS_ALLOW_METHODS=GET,POST,OPTIONS
+CORS_ALLOW_HEADERS=Authorization,Content-Type,Range,X-Requested-With,Accept,Origin
+CORS_EXPOSE_HEADERS=Content-Range,Accept-Ranges,Content-Length,Content-Type
+```
+
+### Production CORS Setup
+
+**⚠️ Security Warning:** Never use `CORS_ORIGINS=*` with `CORS_ALLOW_CREDENTIALS=true` in production!
+
+For production, specify exact origins:
+
+```env
+CORS_ORIGINS=https://www.notion.so,https://app.slack.com,https://discord.com
+```
+
+### CORS Headers Explained
+
+**Allow Headers** - Headers clients can send:
+- `Authorization` - Bearer token authentication
+- `Content-Type` - Request content type
+- `Range` - For audio seeking/streaming
+- `X-Requested-With`, `Accept`, `Origin` - Standard CORS headers
+
+**Expose Headers** - Headers clients can read:
+- `Content-Range` - Byte range information for seeking
+- `Accept-Ranges` - Server supports range requests
+- `Content-Length` - File size for progress tracking
+- `Content-Type` - Response content type
+
+### CORS for Different Use Cases
+
+**Iframe Embedding (Notion, Slack, Discord):**
+```env
+CORS_ORIGINS=https://www.notion.so,https://app.slack.com,https://discord.com
+CORS_ALLOW_CREDENTIALS=true
+```
+
+**Audio Streaming with Range Requests:**
+```env
+CORS_ALLOW_HEADERS=Range,Authorization,Content-Type
+CORS_EXPOSE_HEADERS=Content-Range,Accept-Ranges,Content-Length
+```
+
+**Development (Local Testing):**
+```env
+CORS_ORIGINS=http://localhost:3000,http://localhost:8000
+```
+
+### Testing CORS
+
+Test CORS with curl:
+```bash
+curl -i -H "Origin: https://www.notion.so" \
+     -H "Access-Control-Request-Method: POST" \
+     -H "Access-Control-Request-Headers: Authorization,Content-Type" \
+     -X OPTIONS http://localhost:8080/mcp
+```
+
+Should see headers:
+```
+Access-Control-Allow-Origin: https://www.notion.so
+Access-Control-Allow-Methods: GET, POST, OPTIONS
+Access-Control-Allow-Headers: Authorization, Content-Type, Range, ...
+```
 
 ## API Documentation
 

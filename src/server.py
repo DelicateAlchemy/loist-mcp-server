@@ -92,8 +92,37 @@ def health_check() -> dict:
         logger.error(f"Health check failed: {error_response}")
         return error_response
 
+def create_http_app():
+    """
+    Create HTTP application with CORS middleware for iframe embedding
+    Only used when transport is HTTP or SSE
+    """
+    from starlette.middleware.cors import CORSMiddleware
+    
+    if not config.enable_cors:
+        logger.info("CORS disabled, returning plain MCP app")
+        return None
+    
+    # Get the FastMCP HTTP app
+    mcp_app = mcp.http_app(path='/mcp')
+    
+    # Add CORS middleware
+    mcp_app.add_middleware(
+        CORSMiddleware,
+        allow_origins=config.cors_origins_list,
+        allow_credentials=config.cors_allow_credentials,
+        allow_methods=config.cors_allow_methods_list,
+        allow_headers=config.cors_allow_headers_list,
+        expose_headers=config.cors_expose_headers_list,
+    )
+    
+    logger.info(f"🌐 CORS enabled for origins: {config.cors_origins_list}")
+    return mcp_app
+
+
 if __name__ == "__main__":
     # Run the FastMCP server
+    # CORS is automatically applied when using HTTP/SSE transport
     mcp.run()
 
 
