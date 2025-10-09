@@ -324,6 +324,341 @@ class TestErrorHandling:
             temp_path.unlink()
 
 
+class TestMetadataQualityAssessment:
+    """Test metadata quality assessment functionality."""
+    
+    def test_quality_assessment_excellent(self):
+        """Test quality assessment for excellent metadata."""
+        from src.metadata import MetadataQualityAssessment
+        
+        metadata = {
+            'artist': 'The Beatles',
+            'title': 'Hey Jude',
+            'album': 'The Beatles 1967-1970',
+            'genre': 'Rock',
+            'year': 1968,
+            'duration': 431.2,
+            'channels': 2,
+            'sample_rate': 44100,
+            'bitrate': 320,
+            'bit_depth': 16,
+            'format': 'MP3'
+        }
+        
+        assessment = MetadataQualityAssessment(metadata, Path("test.mp3"))
+        report = assessment.get_quality_report()
+        
+        assert report['quality_score'] >= 0.9
+        assert report['quality_level'] == "Excellent"
+        assert report['metadata_completeness'] == 100.0
+        assert not report['has_issues']
+        assert len(report['issues']) == 0
+    
+    def test_quality_assessment_missing_essential(self):
+        """Test quality assessment for missing essential fields."""
+        from src.metadata import MetadataQualityAssessment
+        
+        metadata = {
+            'artist': None,  # Missing essential
+            'title': None,  # Missing essential
+            'album': 'Some Album',
+            'genre': None,
+            'year': None,
+            'duration': 431.2,
+            'channels': 2,
+            'sample_rate': 44100,
+            'bitrate': 320,
+            'bit_depth': 16,
+            'format': 'MP3'
+        }
+        
+        assessment = MetadataQualityAssessment(metadata, Path("test.mp3"))
+        report = assessment.get_quality_report()
+        
+        assert report['quality_score'] < 0.5
+        assert report['quality_level'] in ["Poor", "Very Poor"]
+        assert report['has_issues']
+        assert any("Missing essential fields" in issue for issue in report['issues'])
+    
+    def test_quality_assessment_corrupt_data(self):
+        """Test quality assessment for corrupt data."""
+        from src.metadata import MetadataQualityAssessment
+        
+        metadata = {
+            'artist': 'The Beatles',
+            'title': 'Hey Jude',
+            'album': 'The Beatles 1967-1970',
+            'genre': 'Rock',
+            'year': 1800,  # Invalid year
+            'duration': -100,  # Invalid duration
+            'channels': 0,  # Invalid channels
+            'sample_rate': 999999,  # Invalid sample rate
+            'bitrate': 320,
+            'bit_depth': 16,
+            'format': 'MP3'
+        }
+        
+        assessment = MetadataQualityAssessment(metadata, Path("test.mp3"))
+        report = assessment.get_quality_report()
+        
+        assert report['quality_score'] < 0.5
+        assert report['has_issues']
+        assert len(report['issues']) >= 4  # Multiple corruption issues
+        assert any("Invalid year" in issue for issue in report['issues'])
+        assert any("Invalid duration" in issue for issue in report['issues'])
+    
+    def test_quality_assessment_suspicious_text(self):
+        """Test quality assessment for suspicious text fields."""
+        from src.metadata import MetadataQualityAssessment
+        
+        metadata = {
+            'artist': 'A' * 1000,  # Suspiciously long
+            'title': '   ',  # Empty after stripping
+            'album': 'Normal Album',
+            'genre': 'Rock',
+            'year': 1968,
+            'duration': 431.2,
+            'channels': 2,
+            'sample_rate': 44100,
+            'bitrate': 320,
+            'bit_depth': 16,
+            'format': 'MP3'
+        }
+        
+        assessment = MetadataQualityAssessment(metadata, Path("test.mp3"))
+        report = assessment.get_quality_report()
+        
+        assert report['has_issues']
+        assert any("Suspiciously long artist" in issue for issue in report['issues'])
+        assert any("Empty title field" in issue for issue in report['issues'])
+
+
+class TestMetadataQualityError:
+    """Test MetadataQualityError exception."""
+    
+    @patch('mutagen.File')
+    def test_quality_threshold_exception(self, mock_file):
+        """Test MetadataQualityError when quality threshold not met."""
+        from src.metadata import MetadataExtractor, MetadataQualityError
+        
+        # Mock audio with minimal metadata
+        mock_audio = Mock()
+        mock_audio.tags = {}
+        mock_audio.info = Mock()
+        mock_audio.info.length = 100.0
+        mock_file.return_value = mock_audio
+        
+        with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as f:
+            temp_path = Path(f.name)
+            f.write(b"fake mp3")
+        
+        try:
+            with patch.object(MetadataExtractor, 'extract_id3_tags', return_value={}):
+                with pytest.raises(MetadataQualityError) as exc_info:
+                    MetadataExtractor.extract(temp_path, validate_quality=True, quality_threshold=0.9)
+                
+                # Check exception attributes
+                assert exc_info.value.quality_score < 0.9
+                assert len(exc_info.value.issues) > 0
+        finally:
+            temp_path.unlink()
+    
+    @patch('mutagen.File')
+    def test_quality_threshold_pass(self, mock_file):
+        """Test that extraction passes when quality threshold is met."""
+        from src.metadata import MetadataExtractor
+        
+        # Mock audio with good metadata
+        mock_audio = Mock()
+        mock_audio.tags = {}
+        mock_audio.info = Mock()
+        mock_audio.info.length = 100.0
+        mock_file.return_value = mock_audio
+        
+        with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as f:
+            temp_path = Path(f.name)
+            f.write(b"fake mp3")
+        
+        try:
+            with patch.object(MetadataExtractor, 'extract_id3_tags', return_value={
+                'artist': 'Artist', 'title': 'Title', 'album': 'Album'
+            }):
+                metadata = MetadataExtractor.extract(temp_path, validate_quality=True, quality_threshold=0.3)
+                
+                # Should not raise exception
+                assert metadata is not None
+                assert '_quality_report' in metadata
+        finally:
+            temp_path.unlink()
+
+
+class TestMetadataRepair:
+    """Test metadata repair functionality."""
+    
+    def test_validate_and_repair_metadata(self):
+        """Test metadata validation and repair."""
+        from src.metadata import MetadataExtractor
+        
+        corrupt_metadata = {
+            'artist': 'The Beatles',
+            'title': '   ',  # Empty after stripping
+            'album': 'A' * 1000,  # Too long
+            'genre': 'Rock',
+            'year': 1800,  # Invalid year
+            'duration': -100,  # Invalid duration
+            'channels': 0,  # Invalid channels
+            'sample_rate': 999999,  # Invalid sample rate
+            'bitrate': 320,
+            'bit_depth': 16,
+            'format': 'MP3'
+        }
+        
+        repaired = MetadataExtractor.validate_and_repair_metadata(corrupt_metadata, Path("test.mp3"))
+        
+        # Check repairs
+        assert repaired['title'] is None  # Empty field repaired
+        assert len(repaired['album']) == 500  # Truncated
+        assert repaired['year'] is None  # Invalid year repaired
+        assert repaired['duration'] is None  # Invalid duration repaired
+        assert repaired['channels'] is None  # Invalid channels repaired
+        assert repaired['sample_rate'] is None  # Invalid sample rate repaired
+        
+        # Valid fields should remain
+        assert repaired['artist'] == 'The Beatles'
+        assert repaired['genre'] == 'Rock'
+        assert repaired['bitrate'] == 320
+    
+    @patch('mutagen.File')
+    def test_extract_with_fallback_success(self, mock_file):
+        """Test extract_with_fallback when repair is successful."""
+        from src.metadata import MetadataExtractor
+        
+        # Mock audio with some metadata
+        mock_audio = Mock()
+        mock_audio.tags = {}
+        mock_audio.info = Mock()
+        mock_audio.info.length = 100.0
+        mock_file.return_value = mock_audio
+        
+        with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as f:
+            temp_path = Path(f.name)
+            f.write(b"fake mp3")
+        
+        try:
+            with patch.object(MetadataExtractor, 'extract_id3_tags', return_value={
+                'artist': 'Artist', 'title': 'Title', 'album': 'Album'
+            }):
+                metadata, was_repaired = MetadataExtractor.extract_with_fallback(temp_path)
+                
+                assert metadata is not None
+                assert was_repaired is False  # Should not need repair
+                assert '_quality_report' in metadata
+        finally:
+            temp_path.unlink()
+    
+    @patch('mutagen.File')
+    def test_extract_with_fallback_repair(self, mock_file):
+        """Test extract_with_fallback when repair is needed."""
+        from src.metadata import MetadataExtractor, MetadataQualityError
+        
+        # Mock audio with minimal metadata
+        mock_audio = Mock()
+        mock_audio.tags = {}
+        mock_audio.info = Mock()
+        mock_audio.info.length = 100.0
+        mock_file.return_value = mock_audio
+        
+        with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as f:
+            temp_path = Path(f.name)
+            f.write(b"fake mp3")
+        
+        try:
+            with patch.object(MetadataExtractor, 'extract_id3_tags', return_value={}):
+                metadata, was_repaired = MetadataExtractor.extract_with_fallback(temp_path)
+                
+                assert metadata is not None
+                assert was_repaired is True  # Should be repaired
+                assert '_quality_report' in metadata
+        finally:
+            temp_path.unlink()
+
+
+class TestConvenienceFunctions:
+    """Test convenience wrapper functions."""
+    
+    @patch.object(Path, 'exists', return_value=True)
+    @patch('mutagen.File')
+    def test_extract_metadata_function(self, mock_file, mock_exists):
+        """Test extract_metadata convenience function."""
+        from src.metadata import extract_metadata
+        
+        # Mock audio file
+        mock_audio = Mock()
+        mock_audio.tags = {}
+        mock_audio.info = Mock()
+        mock_audio.info.length = 100.0
+        mock_file.return_value = mock_audio
+        
+        with patch('src.metadata.extractor.MetadataExtractor.extract_id3_tags', return_value={
+            'artist': 'Artist', 'title': 'Title', 'album': 'Album'
+        }):
+            metadata = extract_metadata("test.mp3")
+            
+            assert metadata is not None
+            assert 'format' in metadata
+            assert '_quality_report' in metadata
+    
+    @patch.object(Path, 'exists', return_value=True)
+    @patch('mutagen.File')
+    def test_extract_metadata_with_fallback_function(self, mock_file, mock_exists):
+        """Test extract_metadata_with_fallback convenience function."""
+        from src.metadata import extract_metadata_with_fallback
+        
+        # Mock audio file
+        mock_audio = Mock()
+        mock_audio.tags = {}
+        mock_audio.info = Mock()
+        mock_audio.info.length = 100.0
+        mock_file.return_value = mock_audio
+        
+        with patch('src.metadata.extractor.MetadataExtractor.extract_id3_tags', return_value={
+            'artist': 'Artist', 'title': 'Title', 'album': 'Album'
+        }):
+            metadata, was_repaired = extract_metadata_with_fallback("test.mp3")
+            
+            assert metadata is not None
+            assert isinstance(was_repaired, bool)
+            assert '_quality_report' in metadata
+    
+    def test_assess_metadata_quality_function(self):
+        """Test assess_metadata_quality convenience function."""
+        from src.metadata import assess_metadata_quality
+        
+        metadata = {
+            'artist': 'The Beatles',
+            'title': 'Hey Jude',
+            'album': 'The Beatles 1967-1970',
+            'genre': 'Rock',
+            'year': 1968,
+            'duration': 431.2,
+            'channels': 2,
+            'sample_rate': 44100,
+            'bitrate': 320,
+            'bit_depth': 16,
+            'format': 'MP3'
+        }
+        
+        report = assess_metadata_quality(metadata, "test.mp3")
+        
+        assert 'quality_score' in report
+        assert 'quality_level' in report
+        assert 'issues' in report
+        assert 'has_issues' in report
+        assert 'metadata_completeness' in report
+        assert report['quality_score'] >= 0.9
+        assert report['quality_level'] == "Excellent"
+
+
 class TestTechnicalSpecExtraction:
     """Test technical specification extraction."""
     

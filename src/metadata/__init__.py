@@ -10,10 +10,14 @@ This module provides extraction of:
 
 from .extractor import (
     MetadataExtractor,
+    MetadataQualityAssessment,
     extract_metadata,
+    extract_metadata_with_fallback,
     extract_id3_tags,
     extract_artwork,
+    assess_metadata_quality,
     MetadataExtractionError,
+    MetadataQualityError,
 )
 
 from .format_validator import (
@@ -24,10 +28,14 @@ from .format_validator import (
 
 __all__ = [
     "MetadataExtractor",
+    "MetadataQualityAssessment",
     "extract_metadata",
+    "extract_metadata_with_fallback",
     "extract_id3_tags",
     "extract_artwork",
+    "assess_metadata_quality",
     "MetadataExtractionError",
+    "MetadataQualityError",
     "FormatValidator",
     "FormatValidationError",
     "validate_audio_format",

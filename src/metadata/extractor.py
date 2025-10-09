@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Optional, Dict, Any, Union
+from typing import Optional, Dict, Any, Union, List, Tuple
 from mutagen import File as MutagenFile
 from mutagen.id3 import ID3, ID3NoHeaderError, APIC
 from mutagen.mp3 import MP3
@@ -22,6 +22,7 @@ from mutagen.mp4 import MP4
 from mutagen.oggvorbis import OggVorbis
 from mutagen.wave import WAVE
 import tempfile
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,129 @@ logger = logging.getLogger(__name__)
 class MetadataExtractionError(Exception):
     """Exception raised when metadata extraction fails."""
     pass
+
+
+class MetadataQualityError(Exception):
+    """Exception raised when metadata quality issues are detected."""
+    def __init__(self, message: str, quality_score: float, issues: List[str]):
+        super().__init__(message)
+        self.quality_score = quality_score
+        self.issues = issues
+
+
+class MetadataQualityAssessment:
+    """Assessment of metadata quality and completeness."""
+    
+    def __init__(self, metadata: Dict[str, Any], file_path: Path):
+        self.metadata = metadata
+        self.file_path = file_path
+        self.issues: List[str] = []
+        self.quality_score = 1.0
+        self._assess_quality()
+    
+    def _assess_quality(self):
+        """Assess metadata quality and identify issues."""
+        # Essential fields for quality assessment
+        essential_fields = ['artist', 'title', 'album']
+        optional_fields = ['genre', 'year', 'duration', 'channels', 'sample_rate']
+        
+        # Check for missing essential fields
+        missing_essential = []
+        for field in essential_fields:
+            if not self.metadata.get(field):
+                missing_essential.append(field)
+        
+        if missing_essential:
+            self.issues.append(f"Missing essential fields: {', '.join(missing_essential)}")
+            self.quality_score -= 0.3 * len(missing_essential)
+        
+        # Check for missing optional fields
+        missing_optional = []
+        for field in optional_fields:
+            if not self.metadata.get(field):
+                missing_optional.append(field)
+        
+        if missing_optional:
+            self.issues.append(f"Missing optional fields: {', '.join(missing_optional)}")
+            self.quality_score -= 0.1 * len(missing_optional)
+        
+        # Check for corrupt or invalid data
+        self._check_corrupt_data()
+        
+        # Ensure quality score doesn't go below 0
+        self.quality_score = max(0.0, self.quality_score)
+    
+    def _check_corrupt_data(self):
+        """Check for corrupt or invalid metadata values."""
+        # Check year validity
+        year = self.metadata.get('year')
+        if year is not None:
+            if not isinstance(year, int) or year < 1900 or year > 2030:
+                self.issues.append(f"Invalid year: {year}")
+                self.quality_score -= 0.2
+        
+        # Check duration validity
+        duration = self.metadata.get('duration')
+        if duration is not None:
+            if not isinstance(duration, (int, float)) or duration <= 0 or duration > 86400:  # Max 24 hours
+                self.issues.append(f"Invalid duration: {duration}")
+                self.quality_score -= 0.1
+        
+        # Check sample rate validity
+        sample_rate = self.metadata.get('sample_rate')
+        if sample_rate is not None:
+            if not isinstance(sample_rate, int) or sample_rate <= 0 or sample_rate > 192000:
+                self.issues.append(f"Invalid sample rate: {sample_rate}")
+                self.quality_score -= 0.1
+        
+        # Check channels validity
+        channels = self.metadata.get('channels')
+        if channels is not None:
+            if not isinstance(channels, int) or channels <= 0 or channels > 8:
+                self.issues.append(f"Invalid channel count: {channels}")
+                self.quality_score -= 0.1
+        
+        # Check for suspiciously long or empty strings
+        text_fields = ['artist', 'title', 'album', 'genre']
+        for field in text_fields:
+            value = self.metadata.get(field)
+            if value:
+                if len(str(value)) > 500:  # Suspiciously long
+                    self.issues.append(f"Suspiciously long {field}: {len(str(value))} characters")
+                    self.quality_score -= 0.05
+                elif len(str(value).strip()) == 0:  # Empty after stripping
+                    self.issues.append(f"Empty {field} field")
+                    self.quality_score -= 0.1
+    
+    def get_quality_report(self) -> Dict[str, Any]:
+        """Get comprehensive quality report."""
+        return {
+            'file_path': str(self.file_path),
+            'quality_score': round(self.quality_score, 2),
+            'quality_level': self._get_quality_level(),
+            'issues': self.issues,
+            'has_issues': len(self.issues) > 0,
+            'metadata_completeness': self._calculate_completeness()
+        }
+    
+    def _get_quality_level(self) -> str:
+        """Get human-readable quality level."""
+        if self.quality_score >= 0.9:
+            return "Excellent"
+        elif self.quality_score >= 0.7:
+            return "Good"
+        elif self.quality_score >= 0.5:
+            return "Fair"
+        elif self.quality_score >= 0.3:
+            return "Poor"
+        else:
+            return "Very Poor"
+    
+    def _calculate_completeness(self) -> float:
+        """Calculate metadata completeness percentage."""
+        total_fields = 11  # All metadata fields
+        present_fields = sum(1 for value in self.metadata.values() if value is not None)
+        return round((present_fields / total_fields) * 100, 1)
 
 
 class MetadataExtractor:
@@ -241,7 +365,7 @@ class MetadataExtractor:
             raise MetadataExtractionError(f"Failed to extract MP4 tags: {e}")
     
     @staticmethod
-    def extract(file_path: Path | str) -> Dict[str, Any]:
+    def extract(file_path: Path | str, validate_quality: bool = True, quality_threshold: float = 0.3) -> Dict[str, Any]:
         """
         Extract all available metadata from an audio file.
         
@@ -249,12 +373,15 @@ class MetadataExtractor:
         
         Args:
             file_path: Path to audio file
+            validate_quality: Whether to validate metadata quality
+            quality_threshold: Minimum quality score threshold (0.0-1.0)
         
         Returns:
             Dictionary containing all extracted metadata
         
         Raises:
             MetadataExtractionError: If extraction fails
+            MetadataQualityError: If quality validation fails and threshold not met
         """
         file_path = Path(file_path)
         
@@ -333,11 +460,150 @@ class MetadataExtractor:
                 metadata['title'] = file_path.stem
                 logger.debug(f"Using filename as title: {metadata['title']}")
             
+            # Validate metadata quality if requested
+            if validate_quality:
+                quality_assessment = MetadataQualityAssessment(metadata, file_path)
+                quality_report = quality_assessment.get_quality_report()
+                
+                # Log quality assessment
+                logger.info(
+                    f"Metadata quality assessment for {file_path.name}: "
+                    f"Score={quality_report['quality_score']}, "
+                    f"Level={quality_report['quality_level']}, "
+                    f"Completeness={quality_report['metadata_completeness']}%"
+                )
+                
+                # Log issues if any
+                if quality_report['has_issues']:
+                    logger.warning(f"Metadata quality issues in {file_path.name}: {quality_report['issues']}")
+                
+                # Check if quality meets threshold
+                if quality_report['quality_score'] < quality_threshold:
+                    raise MetadataQualityError(
+                        f"Metadata quality below threshold ({quality_threshold}): "
+                        f"Score={quality_report['quality_score']}, "
+                        f"Issues={quality_report['issues']}",
+                        quality_report['quality_score'],
+                        quality_report['issues']
+                    )
+                
+                # Add quality report to metadata
+                metadata['_quality_report'] = quality_report
+            
             logger.info(f"Successfully extracted metadata from {file_path.name}")
             return metadata
             
         except MetadataExtractionError:
             raise
+        except MetadataQualityError:
+            raise
+        except Exception as e:
+            raise MetadataExtractionError(f"Metadata extraction failed: {e}")
+    
+    @staticmethod
+    def validate_and_repair_metadata(metadata: Dict[str, Any], file_path: Path) -> Dict[str, Any]:
+        """
+        Validate and repair corrupted metadata.
+        
+        Args:
+            metadata: Metadata dictionary to validate
+            file_path: Path to the audio file
+        
+        Returns:
+            Repaired metadata dictionary
+        """
+        repaired_metadata = metadata.copy()
+        
+        # Repair invalid year
+        if repaired_metadata.get('year') is not None:
+            year = repaired_metadata['year']
+            if not isinstance(year, int) or year < 1900 or year > 2030:
+                logger.warning(f"Repairing invalid year {year} in {file_path.name}")
+                repaired_metadata['year'] = None
+        
+        # Repair invalid duration
+        if repaired_metadata.get('duration') is not None:
+            duration = repaired_metadata['duration']
+            if not isinstance(duration, (int, float)) or duration <= 0 or duration > 86400:
+                logger.warning(f"Repairing invalid duration {duration} in {file_path.name}")
+                repaired_metadata['duration'] = None
+        
+        # Repair invalid sample rate
+        if repaired_metadata.get('sample_rate') is not None:
+            sample_rate = repaired_metadata['sample_rate']
+            if not isinstance(sample_rate, int) or sample_rate <= 0 or sample_rate > 192000:
+                logger.warning(f"Repairing invalid sample rate {sample_rate} in {file_path.name}")
+                repaired_metadata['sample_rate'] = None
+        
+        # Repair invalid channels
+        if repaired_metadata.get('channels') is not None:
+            channels = repaired_metadata['channels']
+            if not isinstance(channels, int) or channels <= 0 or channels > 8:
+                logger.warning(f"Repairing invalid channel count {channels} in {file_path.name}")
+                repaired_metadata['channels'] = None
+        
+        # Repair empty or suspiciously long text fields
+        text_fields = ['artist', 'title', 'album', 'genre']
+        for field in text_fields:
+            value = repaired_metadata.get(field)
+            if value:
+                str_value = str(value).strip()
+                if len(str_value) == 0:
+                    logger.warning(f"Repairing empty {field} field in {file_path.name}")
+                    repaired_metadata[field] = None
+                elif len(str_value) > 500:
+                    logger.warning(f"Truncating suspiciously long {field} field in {file_path.name}")
+                    repaired_metadata[field] = str_value[:500]
+        
+        return repaired_metadata
+    
+    @staticmethod
+    def extract_with_fallback(file_path: Path | str) -> Tuple[Dict[str, Any], bool]:
+        """
+        Extract metadata with fallback mechanisms for corrupt data.
+        
+        Args:
+            file_path: Path to audio file
+        
+        Returns:
+            Tuple of (metadata, was_repaired) where was_repaired indicates if repairs were made
+        """
+        file_path = Path(file_path)
+        
+        try:
+            # Try normal extraction with quality validation
+            metadata = MetadataExtractor.extract(file_path, validate_quality=True)
+            return metadata, False
+            
+        except MetadataQualityError as e:
+            logger.warning(f"Metadata quality issues detected in {file_path.name}: {e.issues}")
+            
+            # Try extraction without quality validation
+            try:
+                metadata = MetadataExtractor.extract(file_path, validate_quality=False)
+                
+                # Attempt to repair the metadata
+                repaired_metadata = MetadataExtractor.validate_and_repair_metadata(metadata, file_path)
+                
+                # Re-assess quality after repair
+                quality_assessment = MetadataQualityAssessment(repaired_metadata, file_path)
+                quality_report = quality_assessment.get_quality_report()
+                
+                logger.info(
+                    f"Metadata repaired for {file_path.name}: "
+                    f"Score={quality_report['quality_score']}, "
+                    f"Level={quality_report['quality_level']}"
+                )
+                
+                # Add quality report
+                repaired_metadata['_quality_report'] = quality_report
+                
+                return repaired_metadata, True
+                
+            except Exception as repair_error:
+                logger.error(f"Failed to repair metadata for {file_path.name}: {repair_error}")
+                raise MetadataExtractionError(f"Metadata extraction and repair failed: {repair_error}")
+        
         except Exception as e:
             raise MetadataExtractionError(f"Metadata extraction failed: {e}")
     
@@ -674,7 +940,7 @@ def extract_artwork(
     """
     return MetadataExtractor.extract_artwork(file_path, destination, prefer_front_cover)
 
-def extract_metadata(file_path: Path | str) -> Dict[str, Any]:
+def extract_metadata(file_path: Path | str, validate_quality: bool = True, quality_threshold: float = 0.3) -> Dict[str, Any]:
     """
     Extract all metadata from an audio file.
     
@@ -682,6 +948,8 @@ def extract_metadata(file_path: Path | str) -> Dict[str, Any]:
     
     Args:
         file_path: Path to audio file
+        validate_quality: Whether to validate metadata quality
+        quality_threshold: Minimum quality score threshold (0.0-1.0)
     
     Returns:
         Dictionary of metadata
@@ -691,7 +959,47 @@ def extract_metadata(file_path: Path | str) -> Dict[str, Any]:
         >>> metadata = extract_metadata("song.mp3")
         >>> print(f"{metadata['artist']} - {metadata['title']}")
     """
-    return MetadataExtractor.extract(file_path)
+    return MetadataExtractor.extract(file_path, validate_quality, quality_threshold)
+
+
+def extract_metadata_with_fallback(file_path: Path | str) -> Tuple[Dict[str, Any], bool]:
+    """
+    Extract metadata with fallback mechanisms for corrupt data.
+    
+    Convenience function that uses MetadataExtractor.extract_with_fallback.
+    
+    Args:
+        file_path: Path to audio file
+    
+    Returns:
+        Tuple of (metadata, was_repaired) where was_repaired indicates if repairs were made
+    
+    Example:
+        >>> from src.metadata import extract_metadata_with_fallback
+        >>> metadata, was_repaired = extract_metadata_with_fallback("song.mp3")
+        >>> if was_repaired:
+        ...     print("Metadata was repaired")
+    """
+    return MetadataExtractor.extract_with_fallback(file_path)
+
+
+def assess_metadata_quality(metadata: Dict[str, Any], file_path: Path | str) -> Dict[str, Any]:
+    """
+    Assess metadata quality and completeness.
+    
+    Args:
+        metadata: Metadata dictionary to assess
+        file_path: Path to the audio file
+    
+    Returns:
+        Quality assessment report
+    
+    Example:
+        >>> from src.metadata import assess_metadata_quality
+        >>> report = assess_metadata_quality(metadata, "song.mp3")
+        >>> print(f"Quality: {report['quality_level']} ({report['quality_score']})")
+    """
+    return MetadataQualityAssessment(metadata, Path(file_path)).get_quality_report()
 
 
 def extract_id3_tags(file_path: Path | str) -> Dict[str, Any]:
