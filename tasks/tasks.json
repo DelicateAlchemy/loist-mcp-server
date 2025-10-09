@@ -185,15 +185,15 @@
       "dependencies": [
         1
       ],
-      "status": "pending",
+      "status": "in-progress",
       "subtasks": [
         {
           "id": 1,
           "title": "Implement HTTP/HTTPS Download Logic",
           "description": "Develop the core functionality to download files over HTTP and HTTPS, handling protocol-specific requirements.",
           "dependencies": [],
-          "details": "Ensure support for both HTTP and HTTPS protocols, manage request/response cycles, and handle partial content retrieval if needed.",
-          "status": "pending"
+          "details": "Ensure support for both HTTP and HTTPS protocols, manage request/response cycles, and handle partial content retrieval if needed.\n<info added on 2025-10-09T14:28:03.292Z>\n# HTTP/HTTPS Downloader Implementation - Completed\n\n## Implementation Summary\n- Created HTTPDownloader class in src/downloader/http_downloader.py\n- Implemented streaming downloads with configurable chunk size (8192 bytes)\n- Added automatic retry logic with exponential backoff (3 retries default)\n- Configured retry strategy for transient failures (429, 500, 502, 503, 504)\n- Implemented URL scheme validation for HTTP/HTTPS protocols\n- Added file size validation with HEAD requests\n- Created context manager for automatic session cleanup\n\n## Key Features\n- Memory-efficient streaming download\n- File size validation before and during download\n- Configurable timeout (60 seconds default)\n- HTTP redirect support\n- Custom headers support for authentication\n- Progress tracking via callback function\n- Temporary file management with automatic cleanup\n- File extension detection from URLs\n\n## Error Handling\n- Custom exception hierarchy for different error types\n- Automatic cleanup of partial files on failure\n- Comprehensive error messages\n- Retry logic for network failures\n- Timeout protection against hanging downloads\n\n## Security Features\n- Protocol validation (HTTP/HTTPS only)\n- File size limits (100MB default, configurable)\n- Timeout protection\n- Partial file cleanup on errors\n- Custom User-Agent header\n\n## Testing & Documentation\n- 30+ comprehensive tests in tests/test_http_downloader.py\n- Complete documentation in docs/task-3.1-http-downloader.md\n\n## Files Created\n- src/downloader/__init__.py\n- src/downloader/http_downloader.py\n- tests/test_http_downloader.py\n- docs/task-3.1-http-downloader.md\n</info added on 2025-10-09T14:28:03.292Z>",
+          "status": "done"
         },
         {
           "id": 2,

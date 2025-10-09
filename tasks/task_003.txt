@@ -1,6 +1,6 @@
 # Task ID: 3
 # Title: Implement HTTP URL Audio Downloader
-# Status: pending
+# Status: in-progress
 # Dependencies: 1
 # Priority: high
 # Description: Create a module to download audio files from HTTP/HTTPS URLs with validation and error handling.
@@ -69,11 +69,57 @@ def download_audio_from_url(url, headers=None, max_size_mb=100):
 8. Validate handling of redirects
 
 # Subtasks:
-## 1. Implement HTTP/HTTPS Download Logic [pending]
+## 1. Implement HTTP/HTTPS Download Logic [done]
 ### Dependencies: None
 ### Description: Develop the core functionality to download files over HTTP and HTTPS, handling protocol-specific requirements.
 ### Details:
 Ensure support for both HTTP and HTTPS protocols, manage request/response cycles, and handle partial content retrieval if needed.
+<info added on 2025-10-09T14:28:03.292Z>
+# HTTP/HTTPS Downloader Implementation - Completed
+
+## Implementation Summary
+- Created HTTPDownloader class in src/downloader/http_downloader.py
+- Implemented streaming downloads with configurable chunk size (8192 bytes)
+- Added automatic retry logic with exponential backoff (3 retries default)
+- Configured retry strategy for transient failures (429, 500, 502, 503, 504)
+- Implemented URL scheme validation for HTTP/HTTPS protocols
+- Added file size validation with HEAD requests
+- Created context manager for automatic session cleanup
+
+## Key Features
+- Memory-efficient streaming download
+- File size validation before and during download
+- Configurable timeout (60 seconds default)
+- HTTP redirect support
+- Custom headers support for authentication
+- Progress tracking via callback function
+- Temporary file management with automatic cleanup
+- File extension detection from URLs
+
+## Error Handling
+- Custom exception hierarchy for different error types
+- Automatic cleanup of partial files on failure
+- Comprehensive error messages
+- Retry logic for network failures
+- Timeout protection against hanging downloads
+
+## Security Features
+- Protocol validation (HTTP/HTTPS only)
+- File size limits (100MB default, configurable)
+- Timeout protection
+- Partial file cleanup on errors
+- Custom User-Agent header
+
+## Testing & Documentation
+- 30+ comprehensive tests in tests/test_http_downloader.py
+- Complete documentation in docs/task-3.1-http-downloader.md
+
+## Files Created
+- src/downloader/__init__.py
+- src/downloader/http_downloader.py
+- tests/test_http_downloader.py
+- docs/task-3.1-http-downloader.md
+</info added on 2025-10-09T14:28:03.292Z>
 
 ## 2. Validate URL Scheme [pending]
 ### Dependencies: 3.1
