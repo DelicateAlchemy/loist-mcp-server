@@ -1,0 +1,148 @@
+# Task ID: 11
+# Title: Implement oEmbed and Open Graph Integration
+# Status: pending
+# Dependencies: 10
+# Priority: medium
+# Description: Create oEmbed endpoint and Open Graph tags for social sharing and platform embedding.
+# Details:
+1. Implement oEmbed JSON endpoint
+2. Add Open Graph meta tags to embed page
+3. Add Twitter Card meta tags
+4. Test with various platforms (Notion, Slack, Discord)
+5. Implement proper content negotiation
+
+```python
+from flask import jsonify, request, url_for
+import os
+
+@app.route('/oembed')
+def oembed_endpoint():
+    """oEmbed endpoint for platform embedding."""
+    # Get URL parameter
+    url = request.args.get('url')
+    if not url or not url.startswith('https://loist.io/embed/'):
+        return jsonify({
+            "error": "Invalid URL parameter"
+        }), 400
+    
+    # Extract UUID from URL
+    uuid = url.split('/')[-1]
+    
+    # Get metadata from database
+    metadata = get_audio_metadata(uuid)
+    if not metadata:
+        return jsonify({
+            "error": "Audio not found"
+        }), 404
+    
+    # Get optional width/height parameters
+    max_width = request.args.get('maxwidth', 500, type=int)
+    max_height = request.args.get('maxheight', 200, type=int)
+    
+    # Adjust dimensions to respect maxwidth/maxheight
+    width = min(500, max_width)
+    height = min(200, max_height)
+    
+    # Generate thumbnail URL
+    thumbnail_url = None
+    if metadata.get("thumbnail_path"):
+        _, thumbnail_bucket_blob = metadata["thumbnail_path"].split("gs://", 1)
+        thumbnail_bucket_name, thumbnail_blob_name = thumbnail_bucket_blob.split("/", 1)
+        thumbnail_url = generate_signed_url(thumbnail_bucket_name, thumbnail_blob_name)
+    
+    # Format oEmbed response
+    response = {
+        "version": "1.0",
+        "type": "rich",
+        "title": metadata.get("title", "Untitled"),
+        "author_name": metadata.get("artist", ""),
+        "provider_name": "Loist",
+        "provider_url": "https://loist.io",
+        "html": f'<iframe src="https://loist.io/embed/{uuid}" width="{width}" height="{height}" frameborder="0"></iframe>',
+        "width": width,
+        "height": height
+    }
+    
+    # Add thumbnail if available
+    if thumbnail_url:
+        response["thumbnail_url"] = thumbnail_url
+        response["thumbnail_width"] = 600
+        response["thumbnail_height"] = 600
+    
+    return jsonify(response)
+
+# Add route for discovery
+@app.route('/.well-known/oembed.json')
+def oembed_discovery():
+    """oEmbed discovery endpoint."""
+    return jsonify({
+        "provider_name": "Loist Music Library",
+        "provider_url": "https://loist.io",
+        "endpoints": [
+            {
+                "url": "https://loist.io/oembed",
+                "formats": ["json"],
+                "discovery": True
+            }
+        ]
+    })
+```
+
+```html
+<!-- Additional Open Graph tags for embed.html template -->
+<meta property="og:site_name" content="Loist Music Library" />
+<meta property="og:description" content="Listen to {{ metadata.title }} by {{ metadata.artist }}{% if metadata.album %} from the album {{ metadata.album }}{% endif %}" />
+
+<!-- Additional Twitter Card tags -->
+<meta name="twitter:title" content="{{ metadata.title }}" />
+<meta name="twitter:description" content="{{ metadata.artist }}{% if metadata.album %} - {{ metadata.album }}{% endif %}" />
+<meta name="twitter:image" content="{{ signed_thumbnail_url }}" />
+```
+
+# Test Strategy:
+1. Test oEmbed endpoint with valid and invalid URLs
+2. Verify oEmbed response format is correct
+3. Test with various maxwidth/maxheight parameters
+4. Validate Open Graph tags are correctly rendered
+5. Test Twitter Card tags are correctly rendered
+6. Test embedding in Notion, Slack, and Discord
+7. Verify discovery endpoint works correctly
+8. Test with and without thumbnail images
+
+# Subtasks:
+## 1. Implement oEmbed Endpoint [pending]
+### Dependencies: None
+### Description: Develop and expose an oEmbed API endpoint that returns embeddable representations of resources according to the oEmbed specification.
+### Details:
+Ensure the endpoint supports required parameters (e.g., url, format) and returns valid JSON or XML responses. Follow standards for provider configuration and response structure.
+
+## 2. Add Open Graph Meta Tags [pending]
+### Dependencies: None
+### Description: Integrate Open Graph meta tags into resource pages to improve link previews and sharing across platforms.
+### Details:
+Include essential tags such as og:title, og:description, og:image, and og:url. Validate tag values for accuracy and completeness.
+
+## 3. Add Twitter Card Tags [pending]
+### Dependencies: None
+### Description: Implement Twitter Card meta tags to enable rich content previews when links are shared on Twitter.
+### Details:
+Support card types like summary and summary_large_image. Ensure tags like twitter:card, twitter:title, twitter:description, and twitter:image are present and correct.
+
+## 4. Implement Content Negotiation [pending]
+### Dependencies: 11.1
+### Description: Enable the oEmbed endpoint to respond with different formats (JSON or XML) based on request parameters or HTTP headers.
+### Details:
+Support the 'format' query parameter and/or Accept headers. Ensure responses conform to the requested format and handle invalid requests gracefully.
+
+## 5. Implement Discovery Endpoint [pending]
+### Dependencies: 11.1
+### Description: Expose a discovery mechanism for consumers to locate the oEmbed endpoint for supported resources.
+### Details:
+Add <link rel="alternate" type="application/json+oembed"> and <link rel="alternate" type="text/xml+oembed"> tags to resource pages, pointing to the oEmbed endpoint.
+
+## 6. Test Integration on Platforms (Notion, Slack, Discord) [pending]
+### Dependencies: 11.1, 11.2, 11.3, 11.4, 11.5
+### Description: Verify that embedding and link previews work correctly on major platforms using the implemented standards.
+### Details:
+Share resource URLs on Notion, Slack, and Discord to confirm correct rendering of embeds and previews. Document any platform-specific issues and resolve them.
+

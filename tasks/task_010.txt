@@ -1,0 +1,396 @@
+# Task ID: 10
+# Title: Implement HTML5 Audio Player and Embed Page
+# Status: pending
+# Dependencies: 9
+# Priority: high
+# Description: Create a simple HTML5 audio player and embed page with metadata display and basic controls.
+# Details:
+1. Create HTML5 audio player with custom styling
+2. Implement embed page at /embed/{uuid}
+3. Add metadata display (artwork, title, artist, duration)
+4. Implement playback controls (play/pause, seek, volume)
+5. Add responsive layout for different screen sizes
+6. Implement keyboard shortcuts for accessibility
+
+```html
+<!-- embed.html template -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ metadata.title }} by {{ metadata.artist }}</title>
+    
+    <!-- oEmbed Discovery -->
+    <link rel="alternate" type="application/json+oembed" 
+          href="https://loist.io/oembed?url=https://loist.io/embed/{{ audio_id }}" 
+          title="{{ metadata.title }}" />
+    
+    <!-- Open Graph -->
+    <meta property="og:type" content="music.song" />
+    <meta property="og:title" content="{{ metadata.title }}" />
+    <meta property="og:audio" content="{{ signed_audio_url }}" />
+    <meta property="og:audio:type" content="audio/{{ metadata.format|lower }}" />
+    <meta property="og:image" content="{{ signed_thumbnail_url }}" />
+    <meta property="og:url" content="https://loist.io/embed/{{ audio_id }}" />
+    
+    <!-- Twitter Cards -->
+    <meta name="twitter:card" content="player" />
+    <meta name="twitter:player" content="https://loist.io/embed/{{ audio_id }}" />
+    <meta name="twitter:player:width" content="500" />
+    <meta name="twitter:player:height" content="200" />
+    
+    <!-- Styles -->
+    <style>
+        :root {
+            --primary-color: #4A90E2;
+            --background-color: #FFFFFF;
+            --text-color: #333333;
+            --border-color: #E0E0E0;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--background-color);
+            color: var(--text-color);
+        }
+        
+        .player-container {
+            max-width: 500px;
+            margin: 0 auto;
+            padding: 16px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            background-color: var(--background-color);
+        }
+        
+        .player-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        
+        .artwork {
+            width: 80px;
+            height: 80px;
+            border-radius: 4px;
+            background-color: var(--border-color);
+            margin-right: 16px;
+            background-size: cover;
+            background-position: center;
+        }
+        
+        .metadata {
+            flex: 1;
+        }
+        
+        .title {
+            font-size: 18px;
+            font-weight: 600;
+            margin: 0 0 4px 0;
+        }
+        
+        .artist {
+            font-size: 14px;
+            color: #666;
+            margin: 0;
+        }
+        
+        .album {
+            font-size: 12px;
+            color: #888;
+            margin: 4px 0 0 0;
+        }
+        
+        .audio-element {
+            width: 100%;
+            margin-bottom: 8px;
+        }
+        
+        .time-display {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: #666;
+        }
+        
+        /* Custom audio controls */
+        .custom-controls {
+            display: flex;
+            align-items: center;
+            margin-top: 16px;
+        }
+        
+        .play-button {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            margin-right: 16px;
+        }
+        
+        .progress-container {
+            flex: 1;
+            height: 6px;
+            background-color: var(--border-color);
+            border-radius: 3px;
+            position: relative;
+            cursor: pointer;
+        }
+        
+        .progress-bar {
+            height: 100%;
+            background-color: var(--primary-color);
+            border-radius: 3px;
+            width: 0%;
+        }
+        
+        .volume-container {
+            display: flex;
+            align-items: center;
+            margin-left: 16px;
+        }
+        
+        .volume-icon {
+            margin-right: 8px;
+            color: #666;
+        }
+        
+        .volume-slider {
+            width: 80px;
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 480px) {
+            .player-container {
+                padding: 12px;
+                box-shadow: none;
+            }
+            
+            .artwork {
+                width: 60px;
+                height: 60px;
+            }
+            
+            .volume-container {
+                display: none; /* Hide volume on mobile */
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="player-container">
+        <div class="player-header">
+            <div class="artwork" style="background-image: url('{{ signed_thumbnail_url }}');"></div>
+            <div class="metadata">
+                <h1 class="title">{{ metadata.title }}</h1>
+                <p class="artist">{{ metadata.artist }}</p>
+                {% if metadata.album %}
+                <p class="album">{{ metadata.album }}</p>
+                {% endif %}
+            </div>
+        </div>
+        
+        <audio id="audio-player" class="audio-element" preload="metadata">
+            <source src="{{ signed_audio_url }}" type="audio/{{ metadata.format|lower }}">
+            Your browser does not support the audio element.
+        </audio>
+        
+        <div class="time-display">
+            <span id="current-time">0:00</span>
+            <span id="duration">{{ metadata.duration_formatted }}</span>
+        </div>
+        
+        <div class="custom-controls">
+            <button id="play-button" class="play-button">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M8 5v14l11-7z"/>
+                </svg>
+            </button>
+            
+            <div id="progress-container" class="progress-container">
+                <div id="progress-bar" class="progress-bar"></div>
+            </div>
+            
+            <div class="volume-container">
+                <div class="volume-icon">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+                    </svg>
+                </div>
+                <input id="volume-slider" class="volume-slider" type="range" min="0" max="1" step="0.1" value="1">
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const audioPlayer = document.getElementById('audio-player');
+            const playButton = document.getElementById('play-button');
+            const progressBar = document.getElementById('progress-bar');
+            const progressContainer = document.getElementById('progress-container');
+            const currentTimeDisplay = document.getElementById('current-time');
+            const volumeSlider = document.getElementById('volume-slider');
+            
+            // Play/pause functionality
+            playButton.addEventListener('click', function() {
+                if (audioPlayer.paused) {
+                    audioPlayer.play();
+                    playButton.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>';
+                } else {
+                    audioPlayer.pause();
+                    playButton.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+                }
+            });
+            
+            // Update progress bar
+            audioPlayer.addEventListener('timeupdate', function() {
+                const progress = (audioPlayer.currentTime / audioPlayer.duration) * 100;
+                progressBar.style.width = progress + '%';
+                
+                // Update current time display
+                const minutes = Math.floor(audioPlayer.currentTime / 60);
+                const seconds = Math.floor(audioPlayer.currentTime % 60).toString().padStart(2, '0');
+                currentTimeDisplay.textContent = `${minutes}:${seconds}`;
+            });
+            
+            // Seek functionality
+            progressContainer.addEventListener('click', function(e) {
+                const rect = progressContainer.getBoundingClientRect();
+                const pos = (e.clientX - rect.left) / rect.width;
+                audioPlayer.currentTime = pos * audioPlayer.duration;
+            });
+            
+            // Volume control
+            volumeSlider.addEventListener('input', function() {
+                audioPlayer.volume = volumeSlider.value;
+            });
+            
+            // Keyboard shortcuts
+            document.addEventListener('keydown', function(e) {
+                if (e.code === 'Space') {
+                    // Prevent page scroll on space
+                    e.preventDefault();
+                    playButton.click();
+                } else if (e.code === 'ArrowLeft') {
+                    audioPlayer.currentTime = Math.max(0, audioPlayer.currentTime - 5);
+                } else if (e.code === 'ArrowRight') {
+                    audioPlayer.currentTime = Math.min(audioPlayer.duration, audioPlayer.currentTime + 5);
+                }
+            });
+            
+            // Handle audio ended
+            audioPlayer.addEventListener('ended', function() {
+                playButton.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+            });
+        });
+    </script>
+</body>
+</html>
+```
+
+```python
+# Flask route for embed page
+from flask import render_template, request
+import os
+
+@app.route('/embed/<uuid>')
+def embed_page(uuid):
+    # Get metadata from database
+    metadata = get_audio_metadata(uuid)
+    if not metadata:
+        return "Audio not found", 404
+    
+    # Generate signed URLs
+    audio_path = metadata.get("audio_path")
+    thumbnail_path = metadata.get("thumbnail_path")
+    
+    # Parse bucket and blob name from gs:// URL
+    _, audio_bucket_blob = audio_path.split("gs://", 1)
+    audio_bucket_name, audio_blob_name = audio_bucket_blob.split("/", 1)
+    
+    # Generate signed URL for audio
+    signed_audio_url = generate_signed_url(audio_bucket_name, audio_blob_name)
+    
+    # Generate signed URL for thumbnail if available
+    signed_thumbnail_url = None
+    if thumbnail_path:
+        _, thumbnail_bucket_blob = thumbnail_path.split("gs://", 1)
+        thumbnail_bucket_name, thumbnail_blob_name = thumbnail_bucket_blob.split("/", 1)
+        signed_thumbnail_url = generate_signed_url(thumbnail_bucket_name, thumbnail_blob_name)
+    
+    # Format duration for display
+    duration_seconds = metadata.get("duration", 0)
+    minutes = int(duration_seconds // 60)
+    seconds = int(duration_seconds % 60)
+    metadata["duration_formatted"] = f"{minutes}:{seconds:02d}"
+    
+    # Render template
+    return render_template('embed.html', 
+                          audio_id=uuid,
+                          metadata=metadata,
+                          signed_audio_url=signed_audio_url,
+                          signed_thumbnail_url=signed_thumbnail_url)
+```
+
+# Test Strategy:
+1. Test player with various audio formats (MP3, AAC, FLAC, WAV)
+2. Verify playback controls work correctly (play/pause, seek, volume)
+3. Test responsive layout on different screen sizes
+4. Validate keyboard shortcuts work as expected
+5. Test with and without album artwork
+6. Verify metadata display is correct
+7. Test time display and progress bar updates
+8. Validate embed page loads correctly with valid and invalid UUIDs
+
+# Subtasks:
+## 1. HTML5 Audio Player UI Design [pending]
+### Dependencies: None
+### Description: Design and implement a visually appealing, custom HTML5 audio player interface that matches the site's design language, including play/pause, seek, volume, and mute controls.
+### Details:
+Apply CSS for styling, ensure visual hierarchy, use appropriate icons, and maintain consistency with the overall website design. Support responsive layouts for different devices[1][2][3].
+
+## 2. Embed Page Routing [pending]
+### Dependencies: None
+### Description: Implement client-side routing to allow embedding the audio player on different pages or views without full page reloads.
+### Details:
+Use a frontend routing library (e.g., React Router, Vue Router) to manage navigation between pages/views containing the audio player, ensuring the player state persists during navigation.
+
+## 3. Metadata Display [pending]
+### Dependencies: 10.1
+### Description: Display track metadata (title, artist, album, cover art) dynamically within the player UI.
+### Details:
+Fetch and render metadata from the backend or audio file, update the UI in real-time as tracks change, and ensure the display is visually integrated with the player design[1].
+
+## 4. Playback Controls Implementation [pending]
+### Dependencies: 10.1
+### Description: Develop functional playback controls (play, pause, seek, volume, mute) using the HTML5 Audio API and custom UI elements.
+### Details:
+Use JavaScript to interface with the <audio> element, handle user interactions, and synchronize the custom UI with the native audio API[1][2][3].
+
+## 5. Responsive Layout [pending]
+### Dependencies: 10.1
+### Description: Ensure the audio player UI adapts seamlessly to various screen sizes and devices.
+### Details:
+Implement responsive CSS (media queries, flexible layouts) so the player is usable and visually consistent on mobile, tablet, and desktop[1].
+
+## 6. Keyboard Accessibility [pending]
+### Dependencies: 10.1, 10.4
+### Description: Make all player controls fully accessible via keyboard, supporting screen readers and users who rely on keyboard navigation.
+### Details:
+Implement keyboard event handlers for all controls, ensure focus management, and provide ARIA attributes for screen reader compatibility[1][5].
+
+## 7. Signed URL Integration [pending]
+### Dependencies: None
+### Description: Integrate backend-signed URLs for secure audio file access, ensuring that only authorized users can stream protected content.
+### Details:
+Develop logic to request and handle signed URLs from the backend, manage token expiration, and seamlessly integrate with the audio element's src attribute.
+

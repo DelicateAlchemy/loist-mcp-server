@@ -1,0 +1,246 @@
+# Task ID: 9
+# Title: Implement MCP Resources for Audio and Metadata
+# Status: pending
+# Dependencies: 2, 6, 7
+# Priority: medium
+# Description: Create MCP resources for accessing audio streams, metadata, and thumbnails with proper authentication and caching.
+# Details:
+1. Implement resource handler for audio streams with signed URLs
+2. Implement resource handler for metadata retrieval
+3. Implement resource handler for thumbnails
+4. Add in-memory caching for signed URLs
+5. Configure proper CORS and content-type headers
+
+```python
+from fastmcp import FastMCP, Resource
+import os
+import time
+from functools import lru_cache
+
+# Import modules
+from .database import get_audio_metadata
+from .storage import generate_signed_url
+
+# Simple in-memory cache for signed URLs
+URL_CACHE = {}
+URL_CACHE_EXPIRY = {}
+
+def get_cached_signed_url(bucket_name, blob_name, expiration=15):
+    """Get a signed URL with caching to reduce GCS operations."""
+    cache_key = f"{bucket_name}:{blob_name}"
+    current_time = time.time()
+    
+    # Check if URL is in cache and not expired
+    if cache_key in URL_CACHE and URL_CACHE_EXPIRY.get(cache_key, 0) > current_time:
+        return URL_CACHE[cache_key]
+    
+    # Generate new signed URL
+    url = generate_signed_url(bucket_name, blob_name, expiration)
+    
+    # Cache the URL with expiration (slightly shorter than the actual URL expiry)
+    URL_CACHE[cache_key] = url
+    URL_CACHE_EXPIRY[cache_key] = current_time + (expiration * 60 * 0.9)  # 90% of expiration time
+    
+    return url
+
+# Register audio stream resource
+@app.resource(
+    path="music-library://audio/{uuid}/stream",
+    description="Stream audio file with signed URL"
+)
+def get_audio_stream(uuid):
+    """Get a signed URL for streaming audio."""
+    # Get metadata from database
+    metadata = get_audio_metadata(uuid)
+    if not metadata:
+        return {
+            "status": 404,
+            "body": {"error": "Audio not found"}
+        }
+    
+    # Extract GCS path from metadata
+    audio_path = metadata.get("audio_path")
+    if not audio_path or not audio_path.startswith("gs://"):
+        return {
+            "status": 404,
+            "body": {"error": "Audio file not found"}
+        }
+    
+    # Parse bucket and blob name from gs:// URL
+    _, bucket_blob = audio_path.split("gs://", 1)
+    bucket_name, blob_name = bucket_blob.split("/", 1)
+    
+    # Generate signed URL with caching
+    signed_url = get_cached_signed_url(bucket_name, blob_name)
+    
+    # Redirect to signed URL
+    return {
+        "status": 302,
+        "headers": {"Location": signed_url}
+    }
+
+# Register metadata resource
+@app.resource(
+    path="music-library://audio/{uuid}/metadata",
+    description="Get audio metadata"
+)
+def get_audio_metadata_resource(uuid):
+    """Get metadata for an audio file."""
+    # Get metadata from database
+    metadata = get_audio_metadata(uuid)
+    if not metadata:
+        return {
+            "status": 404,
+            "body": {"error": "Audio not found"}
+        }
+    
+    # Format response
+    response = {
+        "id": metadata.get("id"),
+        "artist": metadata.get("artist"),
+        "title": metadata.get("title"),
+        "album": metadata.get("album"),
+        "genre": metadata.get("genre"),
+        "year": metadata.get("year"),
+        "duration": metadata.get("duration"),
+        "channels": metadata.get("channels"),
+        "sampleRate": metadata.get("sample_rate"),
+        "bitrate": metadata.get("bitrate"),
+        "format": metadata.get("format"),
+        "embedUrl": f"https://loist.io/embed/{uuid}"
+    }
+    
+    return {
+        "status": 200,
+        "headers": {"Content-Type": "application/json"},
+        "body": response
+    }
+
+# Register thumbnail resource
+@app.resource(
+    path="music-library://audio/{uuid}/thumbnail",
+    description="Get audio thumbnail/album artwork"
+)
+def get_audio_thumbnail(uuid):
+    """Get thumbnail for an audio file."""
+    # Get metadata from database
+    metadata = get_audio_metadata(uuid)
+    if not metadata:
+        return {
+            "status": 404,
+            "body": {"error": "Audio not found"}
+        }
+    
+    # Check if thumbnail exists
+    thumbnail_path = metadata.get("thumbnail_path")
+    if not thumbnail_path or not thumbnail_path.startswith("gs://"):
+        return {
+            "status": 404,
+            "body": {"error": "Thumbnail not found"}
+        }
+    
+    # Parse bucket and blob name from gs:// URL
+    _, bucket_blob = thumbnail_path.split("gs://", 1)
+    bucket_name, blob_name = bucket_blob.split("/", 1)
+    
+    # Generate signed URL with caching
+    signed_url = get_cached_signed_url(bucket_name, blob_name)
+    
+    # Redirect to signed URL
+    return {
+        "status": 302,
+        "headers": {"Location": signed_url}
+    }
+
+# Register library search resource
+@app.resource(
+    path="music-library://library/search",
+    description="Search audio library"
+)
+def search_library_resource(request):
+    """Search audio library via resource endpoint."""
+    # Get query parameter
+    query = request.query.get("q", "")
+    if not query:
+        return {
+            "status": 400,
+            "body": {"error": "Query parameter 'q' is required"}
+        }
+    
+    # Use the search_audio function from database module
+    results = search_audio(query)
+    
+    # Format results
+    formatted_results = []
+    for result in results:
+        formatted_results.append({
+            "id": result["id"],
+            "artist": result.get("artist"),
+            "title": result.get("title"),
+            "album": result.get("album"),
+            "score": float(result["score"])
+        })
+    
+    return {
+        "status": 200,
+        "headers": {"Content-Type": "application/json"},
+        "body": {
+            "results": formatted_results,
+            "total": len(formatted_results)
+        }
+    }
+```
+
+# Test Strategy:
+1. Test audio stream resource with valid and invalid UUIDs
+2. Verify signed URL generation and caching works correctly
+3. Test metadata resource returns correct data
+4. Validate thumbnail resource works with and without artwork
+5. Test search resource with various queries
+6. Verify CORS headers are properly set
+7. Test caching effectiveness under load
+8. Validate content-type headers are correct
+
+# Subtasks:
+## 1. Implement Audio Stream Resource Handler [pending]
+### Dependencies: None
+### Description: Develop an endpoint to securely serve audio streams, ensuring proper authentication, signed URL validation, and efficient delivery.
+### Details:
+This handler should validate incoming requests, check signed URL authenticity, and stream audio content with appropriate headers for performance and security.
+
+## 2. Implement Metadata Resource Handler [pending]
+### Dependencies: None
+### Description: Create an endpoint to provide metadata for audio resources, ensuring accurate and secure data retrieval.
+### Details:
+The handler should fetch and return metadata (e.g., title, artist, duration) for requested audio resources, enforcing access controls as needed.
+
+## 3. Implement Thumbnail Resource Handler [pending]
+### Dependencies: None
+### Description: Develop an endpoint to serve thumbnail images associated with audio resources, handling signed URLs and caching.
+### Details:
+This handler should validate signed URLs, serve image content efficiently, and support browser or CDN caching strategies.
+
+## 4. Design and Implement Signed URL Caching Mechanism [pending]
+### Dependencies: 9.1, 9.3
+### Description: Establish a caching strategy for signed URLs to optimize performance and reduce redundant resource fetches.
+### Details:
+Implement content-based caching (e.g., using ETag or object path) to ensure cache hits even when signed URLs change, and manage cache expiration and eviction policies.
+
+## 5. Configure CORS and Content-Type Headers [pending]
+### Dependencies: 9.1, 9.2, 9.3
+### Description: Set up proper CORS and content-type headers for all resource endpoints to ensure secure and correct cross-origin access.
+### Details:
+Define and apply CORS policies and ensure accurate content-type headers for audio, metadata, and image responses.
+
+## 6. Implement Robust Error Handling [pending]
+### Dependencies: 9.1, 9.2, 9.3, 9.4, 9.5
+### Description: Develop comprehensive error handling for all resource handlers to ensure reliability and clear client feedback.
+### Details:
+Handle common errors such as invalid signatures, expired URLs, missing resources, and internal server errors, returning appropriate HTTP status codes and messages.
+
+## 7. Develop Search Resource Endpoint [pending]
+### Dependencies: 9.2, 9.5, 9.6
+### Description: Create an endpoint to search for audio resources and their metadata, supporting secure, performant, and reliable queries.
+### Details:
+Implement search logic, input validation, pagination, and ensure that search results respect access controls and return correct metadata and resource links.
+

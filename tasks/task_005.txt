@@ -1,0 +1,108 @@
+# Task ID: 5
+# Title: Implement Audio Storage and Management
+# Status: pending
+# Dependencies: 2, 4
+# Priority: medium
+# Description: Create a module to store processed audio files in Google Cloud Storage and manage their lifecycle.
+# Details:
+1. Upload processed audio files to Google Cloud Storage
+2. Upload extracted thumbnails (album artwork) to GCS
+3. Generate unique filenames based on UUID
+4. Implement file organization structure in GCS
+5. Handle cleanup of temporary local files
+6. Implement retry logic for failed uploads
+
+```python
+import uuid
+import os
+from google.cloud import storage
+
+def upload_to_gcs(local_file_path, destination_blob_name, bucket_name):
+    """Upload a file to Google Cloud Storage bucket."""
+    storage_client = storage.Client()
+    bucket = storage_client.bucket(bucket_name)
+    blob = bucket.blob(destination_blob_name)
+    
+    blob.upload_from_filename(local_file_path)
+    
+    return f"gs://{bucket_name}/{destination_blob_name}"
+
+def store_audio_file(local_audio_path, local_thumbnail_path=None):
+    """Store audio file and thumbnail in GCS with proper organization."""
+    # Generate a unique ID for this audio file
+    audio_id = str(uuid.uuid4())
+    
+    # Define GCS paths
+    audio_blob_name = f"audio/{audio_id}/audio{os.path.splitext(local_audio_path)[1]}"
+    thumbnail_blob_name = f"audio/{audio_id}/thumbnail.jpg" if local_thumbnail_path else None
+    
+    # Upload audio file
+    bucket_name = os.getenv("GCS_BUCKET_NAME")
+    audio_gcs_path = upload_to_gcs(local_audio_path, audio_blob_name, bucket_name)
+    
+    # Upload thumbnail if available
+    thumbnail_gcs_path = None
+    if local_thumbnail_path:
+        thumbnail_gcs_path = upload_to_gcs(local_thumbnail_path, thumbnail_blob_name, bucket_name)
+    
+    # Clean up local temporary files
+    try:
+        os.unlink(local_audio_path)
+        if local_thumbnail_path:
+            os.unlink(local_thumbnail_path)
+    except Exception as e:
+        print(f"Error cleaning up temporary files: {e}")
+    
+    return {
+        "audio_id": audio_id,
+        "audio_path": audio_gcs_path,
+        "thumbnail_path": thumbnail_gcs_path
+    }
+```
+
+# Test Strategy:
+1. Test uploading various audio formats to GCS
+2. Verify thumbnail uploads work correctly
+3. Test unique ID generation and file organization
+4. Validate cleanup of temporary files
+5. Test retry logic for failed uploads
+6. Verify GCS paths are correctly formatted
+7. Test with large files to ensure proper handling
+
+# Subtasks:
+## 1. Generate Unique Filenames for Uploads [pending]
+### Dependencies: None
+### Description: Create a mechanism to generate unique filenames for both audio and thumbnail files to prevent naming collisions in GCS.
+### Details:
+Implement a function that combines elements such as UUIDs, timestamps, or user identifiers to ensure each uploaded file has a unique name.
+
+## 2. Define GCS Organization Structure [pending]
+### Dependencies: 5.1
+### Description: Design and document the folder and naming conventions for storing audio and thumbnail files in Google Cloud Storage.
+### Details:
+Establish a logical directory structure (e.g., by user, date, or file type) and ensure the unique filenames are incorporated into this structure.
+
+## 3. Implement Audio File Upload to GCS [pending]
+### Dependencies: 5.2
+### Description: Develop the logic to upload audio files to the designated GCS bucket and path using the unique filename and organization structure.
+### Details:
+Use server-side code to securely upload audio files, handle errors, and confirm successful uploads.
+
+## 4. Implement Thumbnail Upload to GCS [pending]
+### Dependencies: 5.2
+### Description: Develop the logic to upload thumbnail images to the appropriate GCS location using the same naming and organization conventions.
+### Details:
+Ensure thumbnail uploads follow the same security and reliability standards as audio file uploads.
+
+## 5. Implement Upload Retry Logic [pending]
+### Dependencies: 5.3, 5.4
+### Description: Add robust retry mechanisms to both audio and thumbnail upload processes to handle transient failures and improve reliability.
+### Details:
+Incorporate exponential backoff or similar strategies to automatically retry failed uploads, logging errors as needed.
+
+## 6. Temporary File Cleanup [pending]
+### Dependencies: 5.3, 5.4, 5.5
+### Description: Ensure any temporary files created during the upload process are deleted after successful upload or upon failure.
+### Details:
+Implement cleanup routines to remove temporary files from the server or local environment to prevent resource leaks.
+

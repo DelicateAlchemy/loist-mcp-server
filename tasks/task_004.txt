@@ -1,0 +1,142 @@
+# Task ID: 4
+# Title: Implement Audio Metadata Extraction
+# Status: pending
+# Dependencies: 3
+# Priority: high
+# Description: Create a module to extract ID3 tags and technical audio specifications from downloaded audio files.
+# Details:
+1. Use mutagen library to extract ID3 tags (artist, title, album, genre, year)
+2. Use pydub/ffmpeg to analyze audio characteristics (duration, channels, sample rate, bitrate)
+3. Extract embedded album artwork if available
+4. Implement format validation for supported formats (MP3, AAC, FLAC, WAV)
+5. Handle missing or incomplete metadata gracefully
+
+```python
+from mutagen import File as MutagenFile
+from mutagen.id3 import ID3
+from pydub import AudioSegment
+import os
+import tempfile
+
+def extract_metadata(file_path):
+    """Extract metadata from audio file using mutagen."""
+    # Basic file validation
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"File not found: {file_path}")
+    
+    # Extract ID3 tags
+    audio_file = MutagenFile(file_path)
+    if audio_file is None:
+        raise ValueError(f"Unsupported audio format or corrupted file: {file_path}")
+    
+    # Initialize metadata dict
+    metadata = {
+        "artist": None,
+        "title": None,
+        "album": None,
+        "genre": None,
+        "year": None,
+        "duration": None,
+        "channels": None,
+        "sample_rate": None,
+        "bitrate": None,
+        "format": None
+    }
+    
+    # Extract ID3 tags (format-specific handling)
+    if hasattr(audio_file, 'tags') and audio_file.tags:
+        tags = audio_file.tags
+        # Extract common tags (implementation varies by format)
+        if 'TPE1' in tags:  # Artist
+            metadata['artist'] = str(tags['TPE1'])
+        if 'TIT2' in tags:  # Title
+            metadata['title'] = str(tags['TIT2'])
+        if 'TALB' in tags:  # Album
+            metadata['album'] = str(tags['TALB'])
+        if 'TCON' in tags:  # Genre
+            metadata['genre'] = str(tags['TCON'])
+        if 'TDRC' in tags:  # Year
+            try:
+                metadata['year'] = int(str(tags['TDRC']).split('-')[0])
+            except (ValueError, IndexError):
+                pass
+    
+    # Extract technical specs using pydub
+    try:
+        audio = AudioSegment.from_file(file_path)
+        metadata['duration'] = len(audio) / 1000.0  # Convert ms to seconds
+        metadata['channels'] = audio.channels
+        metadata['sample_rate'] = audio.frame_rate
+        metadata['bitrate'] = audio.frame_width * 8 * audio.frame_rate
+        
+        # Determine format from file extension
+        _, ext = os.path.splitext(file_path)
+        metadata['format'] = ext.lstrip('.').upper()
+    except Exception as e:
+        print(f"Error extracting audio specs: {e}")
+    
+    return metadata
+
+def extract_artwork(file_path):
+    """Extract album artwork from ID3 tags if available."""
+    try:
+        tags = ID3(file_path)
+        for tag in tags.values():
+            if tag.FrameID == 'APIC':
+                artwork_data = tag.data
+                # Save artwork to temporary file
+                with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as temp_file:
+                    temp_file.write(artwork_data)
+                    return temp_file.name
+    except Exception as e:
+        print(f"Error extracting artwork: {e}")
+    
+    return None
+```
+
+# Test Strategy:
+1. Test with various audio formats (MP3, AAC, FLAC, WAV)
+2. Verify ID3 tag extraction accuracy
+3. Test with files having incomplete or missing metadata
+4. Validate technical specs extraction (duration, channels, sample rate, bitrate)
+5. Test artwork extraction from different ID3 tag versions
+6. Verify format detection works correctly
+7. Test with corrupted or invalid audio files
+
+# Subtasks:
+## 1. ID3 Tag Extraction [pending]
+### Dependencies: None
+### Description: Extract ID3 tags from audio files to retrieve embedded metadata such as title, artist, and album.
+### Details:
+Use libraries like Mutagen or TagLib to parse ID3 tags from MP3 files. Ensure support for different tag versions and handle format-specific parsing.
+
+## 2. Technical Specification Extraction [pending]
+### Dependencies: None
+### Description: Extract technical metadata including duration, sample rate, bit depth, and channel count from audio files.
+### Details:
+Utilize tools such as FFmpeg, Libsndfile, or pydub to access technical properties. Ensure compatibility with multiple audio formats and validate extracted data.
+
+## 3. Artwork Extraction [pending]
+### Dependencies: None
+### Description: Extract embedded artwork (album cover images) from audio files where available.
+### Details:
+Use metadata libraries capable of reading image data from audio file tags (e.g., Mutagen for MP3, Vorbis comments for FLAC/Ogg). Handle image format conversion if necessary.
+
+## 4. Format Validation [pending]
+### Dependencies: None
+### Description: Validate the audio file format and ensure it meets expected standards for metadata extraction.
+### Details:
+Check file headers and structure using format-specific libraries. Confirm support for target formats (MP3, FLAC, WAV, Ogg, etc.) and reject unsupported or malformed files.
+
+## 5. Error Handling for Missing or Corrupt Metadata [pending]
+### Dependencies: 4.1, 4.2, 4.3, 4.4
+### Description: Implement robust error handling for cases where metadata is missing, incomplete, or corrupt.
+### Details:
+Detect and log missing or corrupt metadata fields. Provide fallback mechanisms or user notifications. Ensure extraction processes do not fail silently.
+
+## 6. Support for Multiple Audio Formats [pending]
+### Dependencies: 4.1, 4.2, 4.3, 4.4, 4.5
+### Description: Ensure the extraction and validation processes work across a range of audio formats.
+### Details:
+Integrate format-specific extraction logic and libraries. Test with MP3, FLAC, WAV, Ogg, and others. Maintain extensibility for future format support.
+

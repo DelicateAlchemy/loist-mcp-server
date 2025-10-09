@@ -1,0 +1,87 @@
+# Task ID: 1
+# Title: Setup FastMCP Server Framework
+# Status: pending
+# Dependencies: None
+# Priority: high
+# Description: Initialize the MCP server with FastMCP framework and configure the basic server structure with authentication.
+# Details:
+1. Create a new Python project with FastMCP framework
+2. Configure server settings and environment variables
+3. Implement simple bearer token authentication (hardcoded token for MVP)
+4. Setup basic error handling and logging
+5. Create the server entry point and routing structure
+6. Configure CORS for cross-origin requests
+7. Implement health check endpoint
+8. Setup Docker configuration for local development
+
+Code structure:
+```python
+from fastmcp import FastMCP, BearerAuth
+import os
+
+# Initialize FastMCP server
+app = FastMCP(
+    title="Music Library MCP",
+    description="MCP server for audio ingestion and embedding",
+    auth=BearerAuth(token=os.getenv("BEARER_TOKEN"))
+)
+
+# Register tools and resources
+# (to be implemented in subsequent tasks)
+
+# Start server
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8080)
+```
+
+# Test Strategy:
+1. Verify server starts without errors
+2. Test health check endpoint returns 200 OK
+3. Verify authentication rejects requests without valid bearer token
+4. Test CORS headers are properly set for cross-origin requests
+5. Validate Docker container builds and runs correctly
+6. Ensure logging is properly configured and captures relevant information
+
+# Subtasks:
+## 1. Project Initialization [pending]
+### Dependencies: None
+### Description: Set up the Python project environment, including virtual environment creation and dependency installation.
+### Details:
+Create a virtual environment, install FastMCP (and optionally WebSocket support), and verify installation. Initialize a new project directory with a basic structure (e.g., my_server.py).
+
+## 2. FastMCP Server Instantiation [pending]
+### Dependencies: 1.1
+### Description: Create and configure the core FastMCP server instance.
+### Details:
+Instantiate the FastMCP class, optionally providing a name, instructions, and initial settings. This forms the foundation for adding tools, resources, and further configuration.
+
+## 3. Authentication Setup [pending]
+### Dependencies: 1.2
+### Description: Implement authentication and authorization mechanisms for the server.
+### Details:
+Integrate authentication middleware or decorators to secure endpoints. Define user roles and permissions as needed. This step may involve environment variables for secrets.
+
+## 4. Server Configuration (Settings/Env) [pending]
+### Dependencies: 1.2
+### Description: Configure server behavior using settings, environment variables, and .env files.
+### Details:
+Set host, port, log level, duplicate component policies, and other settings via constructor arguments, environment variables (FASTMCP_SERVER_*), or .env files. Access and validate settings as needed.
+
+## 5. Error Handling & Logging [pending]
+### Dependencies: 1.2, 1.4
+### Description: Implement centralized error handling and logging for the server.
+### Details:
+Add exception handlers, customize error responses, and configure logging levels and outputs. Ensure errors are logged appropriately for debugging and monitoring.
+
+## 6. Entry Point, Routing, CORS, and Health Check [pending]
+### Dependencies: 1.2, 1.4
+### Description: Define the server entry point, route declarations, CORS configuration, and a health check endpoint.
+### Details:
+Specify the main entry script (if __name__ == '__main__': mcp.run()). Add route decorators for tools and resources. Configure CORS if serving web clients. Implement a /health endpoint for monitoring.
+
+## 7. Docker Setup [pending]
+### Dependencies: 1.1, 1.2, 1.4
+### Description: Containerize the FastMCP server for deployment using Docker.
+### Details:
+Create a Dockerfile to build a container image, specifying the base Python image, copying project files, installing dependencies, and defining the container entry point. Optionally, use docker-compose for local development.
+

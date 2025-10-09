@@ -1,0 +1,230 @@
+# Task ID: 8
+# Title: Implement MCP Tools: get_audio_metadata and search_library
+# Status: pending
+# Dependencies: 6, 7
+# Priority: medium
+# Description: Create the secondary MCP tools for retrieving metadata and searching the audio library.
+# Details:
+1. Implement the get_audio_metadata MCP tool
+2. Implement the search_library MCP tool
+3. Create structured response formats according to API contract
+4. Integrate with database operations module
+5. Add error handling and validation
+
+```python
+from fastmcp import FastMCP, Tool, Schema
+
+# Import database operations
+from .database import get_audio_metadata as db_get_metadata
+from .database import search_audio
+from .storage import generate_signed_url
+import os
+
+# Define get_audio_metadata input schema
+get_metadata_input_schema = {
+    "type": "object",
+    "properties": {
+        "audioId": {"type": "string"}
+    },
+    "required": ["audioId"]
+}
+
+# Define search_library input schema
+search_library_input_schema = {
+    "type": "object",
+    "properties": {
+        "query": {"type": "string"},
+        "filters": {
+            "type": "object",
+            "properties": {
+                "genre": {"type": "array", "items": {"type": "string"}},
+                "year": {
+                    "type": "object",
+                    "properties": {
+                        "min": {"type": "number"},
+                        "max": {"type": "number"}
+                    }
+                },
+                "duration": {
+                    "type": "object",
+                    "properties": {
+                        "min": {"type": "number"},
+                        "max": {"type": "number"}
+                    }
+                },
+                "format": {"type": "array", "items": {"type": "string"}}
+            }
+        },
+        "limit": {"type": "number", "default": 20}
+    },
+    "required": ["query"]
+}
+
+# Helper function to format metadata response
+def format_metadata_response(db_metadata):
+    """Format database metadata into API response format."""
+    if not db_metadata:
+        return None
+    
+    # Generate embed URL
+    embed_url = f"https://loist.io/embed/{db_metadata['id']}"
+    
+    # Format response according to API contract
+    return {
+        "Product": {
+            "Artist": db_metadata.get("artist", ""),
+            "Title": db_metadata.get("title", "Untitled"),
+            "Album": db_metadata.get("album", ""),
+            "MBID": None,  # Null for MVP
+            "Genre": [db_metadata.get("genre", "")] if db_metadata.get("genre") else [],
+            "Year": db_metadata.get("year")
+        },
+        "Format": {
+            "Duration": db_metadata.get("duration", 0),
+            "Channels": db_metadata.get("channels", 0),
+            "Sample rate": db_metadata.get("sample_rate", 0),
+            "Bitrate": db_metadata.get("bitrate", 0),
+            "Format": db_metadata.get("format", "")
+        },
+        "urlEmbedLink": embed_url
+    }
+
+# Register get_audio_metadata tool
+@app.tool(
+    name="get_audio_metadata",
+    description="Retrieve metadata for previously processed audio",
+    input_schema=Schema(get_metadata_input_schema),
+    output_schema=Schema(process_audio_output_schema)  # Reuse the output schema from process_audio_complete
+)
+def get_audio_metadata(input_data):
+    """Retrieve metadata for previously processed audio."""
+    audio_id = input_data["audioId"]
+    
+    # Get metadata from database
+    db_metadata = db_get_metadata(audio_id)
+    if not db_metadata:
+        return {
+            "success": False,
+            "error": "RESOURCE_NOT_FOUND",
+            "message": f"Audio with ID {audio_id} not found"
+        }
+    
+    # Format response
+    metadata_response = format_metadata_response(db_metadata)
+    
+    # Generate resource URIs
+    resources = {
+        "audio": f"music-library://audio/{audio_id}/stream",
+        "thumbnail": f"music-library://audio/{audio_id}/thumbnail" if db_metadata.get("thumbnail_path") else None,
+        "waveform": None  # Null for MVP
+    }
+    
+    return {
+        "success": True,
+        "audioId": audio_id,
+        "metadata": metadata_response,
+        "resources": resources,
+        "processingTime": 0  # Not applicable for retrieval
+    }
+
+# Define search_library output schema
+search_library_output_schema = {
+    "type": "object",
+    "properties": {
+        "results": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "audioId": {"type": "string"},
+                    "metadata": {"type": "object"},  # Same structure as metadata response
+                    "score": {"type": "number"}
+                }
+            }
+        },
+        "total": {"type": "number"}
+    },
+    "required": ["results", "total"]
+}
+
+# Register search_library tool
+@app.tool(
+    name="search_library",
+    description="Search across all processed audio in the library",
+    input_schema=Schema(search_library_input_schema),
+    output_schema=Schema(search_library_output_schema)
+)
+def search_library(input_data):
+    """Search across all processed audio in the library."""
+    query = input_data["query"]
+    limit = input_data.get("limit", 20)
+    
+    # For MVP, we ignore filters and just do text search
+    search_results = search_audio(query, limit=limit)
+    
+    # Format results
+    formatted_results = []
+    for result in search_results:
+        # Get full metadata for each result
+        db_metadata = db_get_metadata(result["id"])
+        metadata_response = format_metadata_response(db_metadata)
+        
+        formatted_results.append({
+            "audioId": result["id"],
+            "metadata": metadata_response,
+            "score": float(result["score"])  # Convert Decimal to float
+        })
+    
+    return {
+        "results": formatted_results,
+        "total": len(search_results)
+    }
+```
+
+# Test Strategy:
+1. Test get_audio_metadata with valid and invalid IDs
+2. Test search_library with various search queries
+3. Verify response formats match API contract
+4. Test search relevance and ranking
+5. Validate error handling for edge cases
+6. Test with empty search results
+7. Verify metadata formatting is consistent
+8. Test performance with large result sets
+
+# Subtasks:
+## 1. Implement get_audio_metadata Tool [pending]
+### Dependencies: None
+### Description: Build a tool to extract comprehensive metadata from audio files including technical specs (sample rate, bit depth, duration, channels) and embedded tags (title, artist, album, genre). Support multiple formats (MP3, WAV, FLAC, OGG) using libraries like Mutagen, pydub, or FFprobe.
+### Details:
+Use Mutagen for parsing ID3 tags in MP3 files and Vorbis comments in FLAC/OGG. Implement FFprobe integration for technical metadata extraction. Handle format-specific parsing (WAV INFO chunks, BWF extensions). Return structured data with standardized field names across formats. Include content-based metadata extraction capabilities using Librosa for tempo, key, and spectral features if needed.
+
+## 2. Implement search_library Tool [pending]
+### Dependencies: 8.1
+### Description: Create a tool to query and search the audio library database with flexible filtering options by metadata fields (artist, album, genre, duration range, format). Support complex queries with multiple conditions and return paginated results.
+### Details:
+Design query interface supporting exact match, partial match, and range queries. Implement filters for technical specs (sample rate, bit rate) and tag-based metadata. Include sorting options by various fields. Handle case-insensitive searches and wildcard patterns. Return results with full metadata and file paths.
+
+## 3. Design Response Formatting Layer [pending]
+### Dependencies: 8.1, 8.2
+### Description: Create a unified response formatting system that standardizes output across all tools. Ensure consistent JSON structure, field naming conventions, and error message formats for API consumers.
+### Details:
+Define response schemas for success and error cases. Standardize metadata field names (e.g., TALB vs ALBUM) to consistent naming convention. Include pagination metadata for search results. Add response validation to ensure output consistency. Implement formatting helpers for different data types (durations, file sizes, sample rates).
+
+## 4. Integrate Database Layer [pending]
+### Dependencies: 8.1
+### Description: Build database integration for storing and retrieving audio file metadata. Design schema for efficient querying, implement connection pooling, and create data access layer with CRUD operations for audio metadata.
+### Details:
+Design database schema with tables for audio files, metadata tags, and technical specs. Implement indexing strategy for frequently queried fields. Create data access objects (DAOs) for metadata operations. Add transaction handling for batch operations. Include metadata caching strategy to reduce database queries. Support both relational (PostgreSQL/MySQL) and document databases (MongoDB) as options.
+
+## 5. Implement Comprehensive Error Handling [pending]
+### Dependencies: 8.1, 8.2, 8.4
+### Description: Build robust error handling system covering file access failures, unsupported formats, corrupted files, database connection issues, and malformed queries. Provide meaningful error messages and implement graceful degradation.
+### Details:
+Define error categories (FileNotFound, UnsupportedFormat, CorruptedFile, DatabaseError, QueryError). Implement try-catch blocks with specific exception handling. Add logging for debugging and monitoring. Create fallback mechanisms for partial metadata extraction when full extraction fails. Include retry logic for transient database failures. Return user-friendly error messages with actionable guidance.
+
+## 6. Implement Input Validation [pending]
+### Dependencies: 8.1, 8.2
+### Description: Create validation layer for all tool inputs including file paths, query parameters, metadata fields, and configuration options. Prevent injection attacks and ensure data integrity before processing.
+### Details:
+Validate file paths for existence, accessibility, and allowed extensions. Sanitize search query parameters to prevent SQL/NoSQL injection. Implement schema validation for metadata updates. Add type checking and range validation for numeric inputs. Create allowlists for permitted metadata field names. Validate pagination parameters (page size limits, offset ranges). Include rate limiting considerations for API usage.
+

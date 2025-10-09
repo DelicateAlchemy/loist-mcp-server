@@ -1,0 +1,181 @@
+# Task ID: 6
+# Title: Implement Database Operations for Audio Metadata
+# Status: pending
+# Dependencies: 2, 4
+# Priority: medium
+# Description: Create a module to store and retrieve audio metadata in PostgreSQL with full-text search capabilities.
+# Details:
+1. Implement functions to save metadata to PostgreSQL
+2. Create functions for retrieving metadata by ID
+3. Implement full-text search across metadata fields
+4. Add functions to update processing status
+5. Implement error handling and transaction management
+
+```python
+import psycopg2
+import psycopg2.extras
+import os
+from contextlib import contextmanager
+
+# Database connection pool
+from psycopg2.pool import SimpleConnectionPool
+
+# Initialize connection pool
+db_pool = SimpleConnectionPool(
+    minconn=1,
+    maxconn=10,
+    dbname=os.getenv("DB_NAME"),
+    user=os.getenv("DB_USER"),
+    password=os.getenv("DB_PASSWORD"),
+    host=os.getenv("DB_HOST"),
+    port=os.getenv("DB_PORT")
+)
+
+@contextmanager
+def get_db_connection():
+    """Context manager for database connections from the pool."""
+    conn = db_pool.getconn()
+    try:
+        conn.autocommit = False
+        yield conn
+    finally:
+        db_pool.putconn(conn)
+
+def save_audio_metadata(audio_id, metadata, audio_path, thumbnail_path=None):
+    """Save audio metadata to PostgreSQL."""
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            try:
+                # Insert metadata into database
+                cur.execute("""
+                    INSERT INTO audio_tracks (
+                        id, status, artist, title, album, genre, year,
+                        duration, channels, sample_rate, bitrate, format,
+                        audio_path, thumbnail_path
+                    ) VALUES (
+                        %s, 'COMPLETED', %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s,
+                        %s, %s
+                    )
+                """, (
+                    audio_id,
+                    metadata.get('artist'),
+                    metadata.get('title', 'Untitled'),
+                    metadata.get('album'),
+                    metadata.get('genre'),
+                    metadata.get('year'),
+                    metadata.get('duration'),
+                    metadata.get('channels'),
+                    metadata.get('sample_rate'),
+                    metadata.get('bitrate'),
+                    metadata.get('format'),
+                    audio_path,
+                    thumbnail_path
+                ))
+                conn.commit()
+                return True
+            except Exception as e:
+                conn.rollback()
+                print(f"Error saving metadata: {e}")
+                return False
+
+def get_audio_metadata(audio_id):
+    """Retrieve audio metadata by ID."""
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+            cur.execute("""
+                SELECT id, status, artist, title, album, genre, year,
+                       duration, channels, sample_rate, bitrate, format,
+                       audio_path, thumbnail_path,
+                       created_at, updated_at
+                FROM audio_tracks
+                WHERE id = %s
+            """, (audio_id,))
+            result = cur.fetchone()
+            return dict(result) if result else None
+
+def search_audio(query, limit=20, offset=0):
+    """Search audio tracks using full-text search."""
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+            # Convert query to tsquery format
+            tsquery = ' & '.join(query.split())
+            
+            cur.execute("""
+                SELECT id, artist, title, album, genre, year,
+                       duration, format,
+                       ts_rank(search_vector, to_tsquery(%s)) as score
+                FROM audio_tracks
+                WHERE search_vector @@ to_tsquery(%s)
+                ORDER BY score DESC
+                LIMIT %s OFFSET %s
+            """, (tsquery, tsquery, limit, offset))
+            
+            results = cur.fetchall()
+            return [dict(row) for row in results]
+
+def update_processing_status(audio_id, status):
+    """Update processing status for an audio track."""
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            try:
+                cur.execute("""
+                    UPDATE audio_tracks
+                    SET status = %s, updated_at = NOW()
+                    WHERE id = %s
+                """, (status, audio_id))
+                conn.commit()
+                return True
+            except Exception as e:
+                conn.rollback()
+                print(f"Error updating status: {e}")
+                return False
+```
+
+# Test Strategy:
+1. Test saving metadata with various field combinations
+2. Verify retrieval by ID returns correct data
+3. Test full-text search with different queries
+4. Validate status updates work correctly
+5. Test error handling and transaction rollback
+6. Verify connection pooling works under load
+7. Test with special characters and edge cases in metadata
+8. Validate search ranking and relevance
+
+# Subtasks:
+## 1. Implement Save Metadata Function [pending]
+### Dependencies: None
+### Description: Develop a function to persist metadata records into the database, ensuring schema validation and transactional integrity.
+### Details:
+Define the metadata schema, validate input, and use database transactions to guarantee atomicity. Handle potential errors during the save operation and ensure rollback on failure.
+
+## 2. Implement Retrieve Metadata by ID [pending]
+### Dependencies: 6.1
+### Description: Create a function to fetch metadata records from the database using a unique identifier.
+### Details:
+Ensure efficient querying by ID, handle cases where the record does not exist, and return appropriate error messages or null responses.
+
+## 3. Implement Full-Text Search for Metadata [pending]
+### Dependencies: 6.1
+### Description: Develop a full-text search capability to allow users to search metadata records based on keywords or phrases.
+### Details:
+Leverage database indexing and search features to enable performant and accurate full-text search across relevant metadata fields.
+
+## 4. Develop Status Update Logic [pending]
+### Dependencies: 6.2
+### Description: Implement logic to update the status field of metadata records, ensuring changes are tracked and validated.
+### Details:
+Support status transitions, validate allowed status changes, and ensure updates are atomic and logged for auditability.
+
+## 5. Implement Error and Transaction Management [pending]
+### Dependencies: 6.1, 6.2, 6.3, 6.4
+### Description: Design robust error handling and transaction management for all metadata operations to ensure data consistency and reliability.
+### Details:
+Use try/catch blocks, database transactions, and standardized error responses. Ensure rollback on failure and log errors for monitoring.
+
+## 6. Configure Database Connection Pooling [pending]
+### Dependencies: 6.1, 6.2, 6.3, 6.4, 6.5
+### Description: Set up and tune database connection pooling to optimize performance and resource utilization for metadata operations.
+### Details:
+Choose an appropriate connection pool library, configure pool size and timeout settings, and monitor pool health under load.
+

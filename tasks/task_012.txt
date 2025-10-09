@@ -1,0 +1,260 @@
+# Task ID: 12
+# Title: Setup Cloud Run Deployment
+# Status: pending
+# Dependencies: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11
+# Priority: high
+# Description: Configure Docker and Google Cloud Run for production deployment with proper environment variables and security settings.
+# Details:
+1. Create Dockerfile for production deployment
+2. Configure Google Cloud Run service
+3. Setup environment variables and secrets
+4. Configure HTTPS and domain mapping
+5. Setup Cloud SQL connection
+6. Configure GCS bucket permissions
+7. Implement health checks and monitoring
+
+```dockerfile
+# Dockerfile
+FROM python:3.9-slim
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    libpq-dev \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements first for better caching
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY . .
+
+# Set environment variables
+ENV PORT=8080
+ENV PYTHONUNBUFFERED=1
+
+# Run the application
+CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 0 main:app
+```
+
+```yaml
+# cloudbuild.yaml for CI/CD
+steps:
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/mcp-music-library:$COMMIT_SHA', '.']
+  
+  # Push the container image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/mcp-music-library:$COMMIT_SHA']
+  
+  # Deploy container image to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'mcp-music-library'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/mcp-music-library:$COMMIT_SHA'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--memory'
+      - '2Gi'
+      - '--timeout'
+      - '600s'
+      - '--set-env-vars'
+      - 'GCS_BUCKET_NAME=${_GCS_BUCKET_NAME}'
+      - '--set-secrets'
+      - 'BEARER_TOKEN=mcp-bearer-token:latest'
+      - '--set-secrets'
+      - 'DB_USER=db-user:latest,DB_PASSWORD=db-password:latest,DB_NAME=db-name:latest,DB_HOST=db-host:latest,DB_PORT=db-port:latest'
+
+images:
+  - 'gcr.io/$PROJECT_ID/mcp-music-library:$COMMIT_SHA'
+```
+
+```bash
+#!/bin/bash
+# setup-cloud-resources.sh
+
+# Set project ID
+PROJECT_ID="your-project-id"
+gcloud config set project $PROJECT_ID
+
+# Create GCS bucket
+BUCKET_NAME="mcp-music-library-$PROJECT_ID"
+gcloud storage buckets create gs://$BUCKET_NAME --location=us-central1
+
+# Set lifecycle policy for temporary files
+cat > lifecycle.json << EOL
+{
+  "rule": [
+    {
+      "action": {"type": "Delete"},
+      "condition": {
+        "age": 1,
+        "matchesPrefix": ["temp/"]
+      }
+    }
+  ]
+}
+EOL
+
+gcloud storage buckets update gs://$BUCKET_NAME --lifecycle-file=lifecycle.json
+
+# Create Cloud SQL instance (PostgreSQL)
+gcloud sql instances create mcp-music-library-db \
+    --database-version=POSTGRES_13 \
+    --tier=db-f1-micro \
+    --region=us-central1 \
+    --storage-size=10GB \
+    --storage-type=SSD \
+    --backup-start-time=23:00 \
+    --availability-type=zonal
+
+# Create database
+gcloud sql databases create music_library --instance=mcp-music-library-db
+
+# Create user
+DB_PASSWORD=$(openssl rand -base64 16)
+gcloud sql users create music_library_user \
+    --instance=mcp-music-library-db \
+    --password=$DB_PASSWORD
+
+# Store secrets in Secret Manager
+gcloud secrets create mcp-bearer-token --data-file=- <<< "$(openssl rand -base64 32)"
+gcloud secrets create db-user --data-file=- <<< "music_library_user"
+gcloud secrets create db-password --data-file=- <<< "$DB_PASSWORD"
+gcloud secrets create db-name --data-file=- <<< "music_library"
+gcloud secrets create db-host --data-file=- <<< "127.0.0.1"
+gcloud secrets create db-port --data-file=- <<< "5432"
+
+# Create service account for Cloud Run
+gcloud iam service-accounts create mcp-music-library-sa \
+    --display-name="MCP Music Library Service Account"
+
+# Grant permissions
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member="serviceAccount:mcp-music-library-sa@$PROJECT_ID.iam.gserviceaccount.com" \
+    --role="roles/storage.objectAdmin"
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member="serviceAccount:mcp-music-library-sa@$PROJECT_ID.iam.gserviceaccount.com" \
+    --role="roles/secretmanager.secretAccessor"
+
+# Grant access to secrets
+gcloud secrets add-iam-policy-binding mcp-bearer-token \
+    --member="serviceAccount:mcp-music-library-sa@$PROJECT_ID.iam.gserviceaccount.com" \
+    --role="roles/secretmanager.secretAccessor"
+
+gcloud secrets add-iam-policy-binding db-user \
+    --member="serviceAccount:mcp-music-library-sa@$PROJECT_ID.iam.gserviceaccount.com" \
+    --role="roles/secretmanager.secretAccessor"
+
+gcloud secrets add-iam-policy-binding db-password \
+    --member="serviceAccount:mcp-music-library-sa@$PROJECT_ID.iam.gserviceaccount.com" \
+    --role="roles/secretmanager.secretAccessor"
+
+gcloud secrets add-iam-policy-binding db-name \
+    --member="serviceAccount:mcp-music-library-sa@$PROJECT_ID.iam.gserviceaccount.com" \
+    --role="roles/secretmanager.secretAccessor"
+
+gcloud secrets add-iam-policy-binding db-host \
+    --member="serviceAccount:mcp-music-library-sa@$PROJECT_ID.iam.gserviceaccount.com" \
+    --role="roles/secretmanager.secretAccessor"
+
+gcloud secrets add-iam-policy-binding db-port \
+    --member="serviceAccount:mcp-music-library-sa@$PROJECT_ID.iam.gserviceaccount.com" \
+    --role="roles/secretmanager.secretAccessor"
+
+echo "Setup complete!"
+echo "GCS Bucket: $BUCKET_NAME"
+echo "Cloud SQL Instance: mcp-music-library-db"
+echo "Database: music_library"
+echo "User: music_library_user"
+echo "Password: $DB_PASSWORD (also stored in Secret Manager)"
+echo "Bearer Token: stored in Secret Manager as 'mcp-bearer-token'"
+```
+
+# Test Strategy:
+1. Verify Docker container builds successfully
+2. Test Cloud Run deployment with minimal configuration
+3. Validate environment variables and secrets are correctly set
+4. Test HTTPS and domain mapping
+5. Verify Cloud SQL connection works in production
+6. Test GCS bucket permissions
+7. Validate health checks and monitoring
+8. Test cold start performance
+9. Verify timeout configuration works for long-running processes
+10. Test end-to-end functionality in production environment
+
+# Subtasks:
+## 1. Dockerfile Creation and Optimization [pending]
+### Dependencies: None
+### Description: Create a production-ready Dockerfile following best practices including multi-stage builds, minimal base images, proper layer caching, and security considerations
+### Details:
+Develop Dockerfile with optimized build instructions, use appropriate base image (Alpine or distroless), implement multi-stage builds to reduce image size, define environment variables with ENV, create .dockerignore file to exclude sensitive data and unnecessary files, ensure reproducible builds by specifying exact package versions, and validate the container runs stateless and ephemeral
+
+## 2. Container Build and Registry Push [pending]
+### Dependencies: 12.1
+### Description: Build the Docker container image using Cloud Build and push to Artifact Registry for deployment
+### Details:
+Set up Artifact Registry repository, navigate to project directory with Dockerfile, execute 'gcloud builds submit --tag IMAGE_URL' to build on Google Cloud, verify image is pushed to registry with proper tagging convention (LOCATION-docker.pkg.dev/PROJECT_ID/REPO_NAME/PATH:TAG), implement image vulnerability scanning in CI/CD pipeline using security tools, and optimize build performance by leveraging cache
+
+## 3. Environment Variable Configuration [pending]
+### Dependencies: 12.1
+### Description: Set up environment variables for the Cloud Run service to configure application runtime behavior
+### Details:
+Define all non-sensitive configuration variables needed by the application, create environment variable definitions for Cloud Run service (database connection strings without credentials, feature flags, API endpoints, logging levels), use ENV instructions in Dockerfile for default values, and document all environment variables with descriptions for team reference
+
+## 4. Secret Management Implementation [pending]
+### Dependencies: 12.3
+### Description: Configure secure secret management using Google Cloud Secret Manager for sensitive credentials and API keys
+### Details:
+Create secrets in Google Cloud Secret Manager for database passwords, API keys, and other sensitive data, configure IAM permissions to allow Cloud Run service account to access specific secrets, set up secret mounting or environment variable injection for Cloud Run, ensure secrets are never exposed in Dockerfile or version control, implement secret rotation policies, and validate secret access from running containers
+
+## 5. Cloud Run Service Configuration [pending]
+### Dependencies: 12.2, 12.4
+### Description: Deploy and configure the Cloud Run service with proper resource limits, scaling parameters, and networking settings
+### Details:
+Deploy container image to Cloud Run, declare resource requirements (CPU, memory limits and requests) to prevent infinite resource utilization and control costs, configure autoscaling parameters (min/max instances, concurrency), set request timeout and startup timeout values, configure service account with least-privilege IAM permissions, enable VPC connector if needed for private resources, and set up traffic splitting for blue-green deployments if required
+
+## 6. Cloud SQL Connection Setup [pending]
+### Dependencies: 12.5
+### Description: Configure secure connection between Cloud Run service and Cloud SQL database instance
+### Details:
+Enable Cloud SQL Admin API, configure Cloud SQL connection using Unix socket (recommended) or TCP with Cloud SQL Proxy, add Cloud SQL connection string to Cloud Run service configuration, grant Cloud SQL Client IAM role to Cloud Run service account, configure connection pooling parameters, implement connection retry logic in application code, and test database connectivity from deployed service
+
+## 7. GCS Permissions and Storage Configuration [pending]
+### Dependencies: 12.5
+### Description: Set up Google Cloud Storage bucket access with proper IAM permissions for the Cloud Run service
+### Details:
+Create or identify GCS buckets needed by the application, grant appropriate IAM roles to Cloud Run service account (Storage Object Viewer, Creator, or Admin based on requirements), configure bucket-level or object-level permissions, implement signed URLs for secure temporary access if needed, set up lifecycle policies for data retention, and validate read/write operations from the deployed service
+
+## 8. HTTPS and Custom Domain Mapping [pending]
+### Dependencies: 12.5
+### Description: Configure custom domain mapping with automatic HTTPS certificate provisioning for the Cloud Run service
+### Details:
+Verify domain ownership in Google Cloud Console, map custom domain to Cloud Run service, configure DNS records (A or CNAME) to point to Cloud Run endpoints, enable automatic SSL/TLS certificate provisioning through Google-managed certificates, verify HTTPS is enforced and HTTP redirects properly, set up domain verification for additional domains if needed, and test domain resolution and certificate validity
+
+## 9. Health Checks and Monitoring Setup [pending]
+### Dependencies: 12.5
+### Description: Implement application health checks and configure comprehensive monitoring with Cloud Monitoring and logging
+### Details:
+Implement /health or /readiness endpoint in application code, configure Cloud Run startup and liveness probes, set up Cloud Monitoring dashboards for key metrics (request latency, error rates, instance count, CPU/memory usage), configure log aggregation in Cloud Logging with appropriate filters, create alerting policies for critical thresholds (error rate spikes, high latency, resource exhaustion), enable Cloud Trace for request tracing, and set up uptime checks for availability monitoring
+
+## 10. End-to-End Deployment Validation [pending]
+### Dependencies: 12.6, 12.7, 12.8, 12.9
+### Description: Perform comprehensive testing and validation of the entire production deployment to ensure all components work together correctly
+### Details:
+Execute smoke tests against deployed service endpoints, validate HTTPS access through custom domain, test database operations (read/write to Cloud SQL), verify GCS file operations (upload/download), confirm environment variables and secrets are properly injected, simulate load testing to validate autoscaling behavior, review monitoring dashboards and verify metrics collection, test health check endpoints respond correctly, validate logging output and error tracking, perform security audit of IAM permissions, and document deployment procedure and rollback steps
+

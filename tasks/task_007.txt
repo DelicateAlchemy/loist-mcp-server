@@ -1,0 +1,270 @@
+# Task ID: 7
+# Title: Implement MCP Tool: process_audio_complete
+# Status: pending
+# Dependencies: 1, 3, 4, 5, 6
+# Priority: high
+# Description: Create the primary MCP tool for processing audio from HTTP URLs and returning complete metadata.
+# Details:
+1. Implement the process_audio_complete MCP tool
+2. Integrate HTTP downloader, metadata extraction, and storage modules
+3. Create structured response format according to API contract
+4. Add error handling and validation
+5. Implement processing pipeline with proper status tracking
+
+```python
+from fastmcp import FastMCP, Tool, Schema
+import time
+import os
+
+# Import modules from previous tasks
+from .downloader import download_audio_from_url
+from .metadata import extract_metadata, extract_artwork
+from .storage import store_audio_file
+from .database import save_audio_metadata, update_processing_status
+
+# Define input schema
+process_audio_input_schema = {
+    "type": "object",
+    "properties": {
+        "source": {
+            "type": "object",
+            "properties": {
+                "type": {"type": "string", "enum": ["http_url"]},
+                "url": {"type": "string", "format": "uri"},
+                "headers": {"type": "object"},
+                "filename": {"type": "string"},
+                "mimeType": {"type": "string"}
+            },
+            "required": ["type", "url"]
+        },
+        "options": {
+            "type": "object",
+            "properties": {
+                "maxSizeMB": {"type": "number", "default": 100}
+            }
+        }
+    },
+    "required": ["source"]
+}
+
+# Define output schema
+process_audio_output_schema = {
+    "type": "object",
+    "properties": {
+        "success": {"type": "boolean"},
+        "audioId": {"type": "string"},
+        "metadata": {
+            "type": "object",
+            "properties": {
+                "Product": {
+                    "type": "object",
+                    "properties": {
+                        "Artist": {"type": "string"},
+                        "Title": {"type": "string"},
+                        "Album": {"type": "string"},
+                        "MBID": {"type": ["string", "null"]},
+                        "Genre": {"type": "array", "items": {"type": "string"}},
+                        "Year": {"type": ["number", "null"]}
+                    }
+                },
+                "Format": {
+                    "type": "object",
+                    "properties": {
+                        "Duration": {"type": "number"},
+                        "Channels": {"type": "number"},
+                        "Sample rate": {"type": "number"},
+                        "Bitrate": {"type": "number"},
+                        "Format": {"type": "string"}
+                    }
+                },
+                "urlEmbedLink": {"type": "string"}
+            }
+        },
+        "resources": {
+            "type": "object",
+            "properties": {
+                "audio": {"type": "string"},
+                "thumbnail": {"type": ["string", "null"]},
+                "waveform": {"type": ["string", "null"]}
+            }
+        },
+        "processingTime": {"type": "number"}
+    },
+    "required": ["success"]
+}
+
+# Define error schema
+process_audio_error_schema = {
+    "type": "object",
+    "properties": {
+        "success": {"type": "boolean"},
+        "error": {"type": "string", "enum": ["SIZE_EXCEEDED", "INVALID_FORMAT", "FETCH_FAILED", "TIMEOUT"]},
+        "message": {"type": "string"},
+        "details": {"type": "object"}
+    },
+    "required": ["success", "error", "message"]
+}
+
+# Register the tool with FastMCP
+@app.tool(
+    name="process_audio_complete",
+    description="Process audio from HTTP URL and return complete metadata",
+    input_schema=Schema(process_audio_input_schema),
+    output_schema=Schema(process_audio_output_schema),
+    error_schema=Schema(process_audio_error_schema)
+)
+def process_audio_complete(input_data):
+    """Process audio from HTTP URL and return complete metadata."""
+    start_time = time.time()
+    
+    try:
+        # Extract input parameters
+        source = input_data["source"]
+        options = input_data.get("options", {})
+        max_size_mb = options.get("maxSizeMB", 100)
+        
+        # Validate source type
+        if source["type"] != "http_url":
+            return {
+                "success": False,
+                "error": "INVALID_FORMAT",
+                "message": "Only http_url source type is supported in MVP"
+            }
+        
+        # Download audio file from URL
+        try:
+            local_file_path = download_audio_from_url(
+                url=source["url"],
+                headers=source.get("headers"),
+                max_size_mb=max_size_mb
+            )
+        except ValueError as e:
+            return {
+                "success": False,
+                "error": "SIZE_EXCEEDED" if "size exceeds" in str(e) else "INVALID_FORMAT",
+                "message": str(e)
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": "FETCH_FAILED",
+                "message": f"Failed to download audio: {str(e)}"
+            }
+        
+        # Extract metadata
+        try:
+            metadata = extract_metadata(local_file_path)
+            thumbnail_path = extract_artwork(local_file_path)
+        except Exception as e:
+            return {
+                "success": False,
+                "error": "INVALID_FORMAT",
+                "message": f"Failed to extract metadata: {str(e)}"
+            }
+        
+        # Store files in GCS
+        storage_result = store_audio_file(local_file_path, thumbnail_path)
+        audio_id = storage_result["audio_id"]
+        audio_path = storage_result["audio_path"]
+        thumbnail_path = storage_result["thumbnail_path"]
+        
+        # Save metadata to database
+        save_audio_metadata(audio_id, metadata, audio_path, thumbnail_path)
+        
+        # Generate embed URL
+        embed_url = f"https://loist.io/embed/{audio_id}"
+        
+        # Format response according to API contract
+        response = {
+            "success": True,
+            "audioId": audio_id,
+            "metadata": {
+                "Product": {
+                    "Artist": metadata.get("artist", ""),
+                    "Title": metadata.get("title", "Untitled"),
+                    "Album": metadata.get("album", ""),
+                    "MBID": None,  # Null for MVP
+                    "Genre": [metadata.get("genre", "")] if metadata.get("genre") else [],
+                    "Year": metadata.get("year")
+                },
+                "Format": {
+                    "Duration": metadata.get("duration", 0),
+                    "Channels": metadata.get("channels", 0),
+                    "Sample rate": metadata.get("sample_rate", 0),
+                    "Bitrate": metadata.get("bitrate", 0),
+                    "Format": metadata.get("format", "")
+                },
+                "urlEmbedLink": embed_url
+            },
+            "resources": {
+                "audio": f"music-library://audio/{audio_id}/stream",
+                "thumbnail": f"music-library://audio/{audio_id}/thumbnail" if thumbnail_path else None,
+                "waveform": None  # Null for MVP
+            },
+            "processingTime": time.time() - start_time
+        }
+        
+        return response
+        
+    except Exception as e:
+        # Catch-all error handler
+        return {
+            "success": False,
+            "error": "TIMEOUT" if "timeout" in str(e).lower() else "FETCH_FAILED",
+            "message": f"Unexpected error: {str(e)}"
+        }
+```
+
+# Test Strategy:
+1. Test with various HTTP URLs to audio files
+2. Verify complete processing pipeline works end-to-end
+3. Test error handling for various failure scenarios
+4. Validate response format matches API contract
+5. Test with different audio formats and metadata combinations
+6. Verify processing time is accurately measured
+7. Test with large files to ensure proper handling
+8. Validate resource URIs are correctly generated
+
+# Subtasks:
+## 1. Define Tool Input/Output Schema [pending]
+### Dependencies: None
+### Description: Specify and document the input and output data structures for the orchestration tool, ensuring contract adherence between modules.
+### Details:
+Establish clear, versioned schemas (e.g., using JSON Schema or Avro) that all modules must follow. Include validation rules for required fields, types, and constraints.
+
+## 2. Integrate Downloader Module [pending]
+### Dependencies: 7.1
+### Description: Implement and connect the downloader component to fetch raw data according to the defined input schema.
+### Details:
+Ensure the downloader adheres to the input schema, handles various data sources, and provides consistent output for downstream processing.
+
+## 3. Integrate Metadata Extraction Module [pending]
+### Dependencies: 7.2
+### Description: Incorporate the metadata extraction logic to process downloaded data and extract relevant metadata fields.
+### Details:
+Map extracted metadata to the output schema, validate field presence, and handle edge cases such as missing or malformed data.
+
+## 4. Integrate Storage Module [pending]
+### Dependencies: 7.3
+### Description: Connect the storage system to persist both raw data and extracted metadata as per the output schema.
+### Details:
+Support scalable storage backends (e.g., object storage, file systems), ensure data integrity, and manage storage lifecycle.
+
+## 5. Update Database with Processed Metadata [pending]
+### Dependencies: 7.4
+### Description: Implement logic to update the database with new or updated metadata records after successful storage.
+### Details:
+Ensure atomicity of updates, handle upserts, and maintain referential integrity between stored data and database records.
+
+## 6. Implement Error Handling and Propagation [pending]
+### Dependencies: 7.2, 7.3, 7.4, 7.5
+### Description: Design and integrate robust error handling mechanisms across all modules, ensuring errors are captured, logged, and propagated appropriately.
+### Details:
+Include retry logic, error categorization, and escalation paths. Ensure errors are mapped to the response schema and do not cause silent failures.
+
+## 7. Format and Return Response [pending]
+### Dependencies: 7.5, 7.6
+### Description: Assemble and format the final response, including success or error information, adhering to the defined output schema.
+### Details:
+Ensure the response is consistent, includes all required metadata, and provides actionable error messages if failures occurred.
+

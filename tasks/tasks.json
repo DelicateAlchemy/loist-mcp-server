@@ -1,0 +1,1023 @@
+{
+  "tasks": [
+    {
+      "id": 1,
+      "title": "Setup FastMCP Server Framework",
+      "description": "Initialize the MCP server with FastMCP framework and configure the basic server structure with authentication.",
+      "details": "1. Create a new Python project with FastMCP framework\n2. Configure server settings and environment variables\n3. Implement simple bearer token authentication (hardcoded token for MVP)\n4. Setup basic error handling and logging\n5. Create the server entry point and routing structure\n6. Configure CORS for cross-origin requests\n7. Implement health check endpoint\n8. Setup Docker configuration for local development\n\nCode structure:\n```python\nfrom fastmcp import FastMCP, BearerAuth\nimport os\n\n# Initialize FastMCP server\napp = FastMCP(\n    title=\"Music Library MCP\",\n    description=\"MCP server for audio ingestion and embedding\",\n    auth=BearerAuth(token=os.getenv(\"BEARER_TOKEN\"))\n)\n\n# Register tools and resources\n# (to be implemented in subsequent tasks)\n\n# Start server\nif __name__ == \"__main__\":\n    app.run(host=\"0.0.0.0\", port=8080)\n```",
+      "testStrategy": "1. Verify server starts without errors\n2. Test health check endpoint returns 200 OK\n3. Verify authentication rejects requests without valid bearer token\n4. Test CORS headers are properly set for cross-origin requests\n5. Validate Docker container builds and runs correctly\n6. Ensure logging is properly configured and captures relevant information",
+      "priority": "high",
+      "dependencies": [],
+      "status": "pending",
+      "subtasks": [
+        {
+          "id": 1,
+          "title": "Project Initialization",
+          "description": "Set up the Python project environment, including virtual environment creation and dependency installation.",
+          "dependencies": [],
+          "details": "Create a virtual environment, install FastMCP (and optionally WebSocket support), and verify installation. Initialize a new project directory with a basic structure (e.g., my_server.py).",
+          "status": "pending"
+        },
+        {
+          "id": 2,
+          "title": "FastMCP Server Instantiation",
+          "description": "Create and configure the core FastMCP server instance.",
+          "dependencies": [
+            1
+          ],
+          "details": "Instantiate the FastMCP class, optionally providing a name, instructions, and initial settings. This forms the foundation for adding tools, resources, and further configuration.",
+          "status": "pending"
+        },
+        {
+          "id": 3,
+          "title": "Authentication Setup",
+          "description": "Implement authentication and authorization mechanisms for the server.",
+          "dependencies": [
+            2
+          ],
+          "details": "Integrate authentication middleware or decorators to secure endpoints. Define user roles and permissions as needed. This step may involve environment variables for secrets.",
+          "status": "pending"
+        },
+        {
+          "id": 4,
+          "title": "Server Configuration (Settings/Env)",
+          "description": "Configure server behavior using settings, environment variables, and .env files.",
+          "dependencies": [
+            2
+          ],
+          "details": "Set host, port, log level, duplicate component policies, and other settings via constructor arguments, environment variables (FASTMCP_SERVER_*), or .env files. Access and validate settings as needed.",
+          "status": "pending"
+        },
+        {
+          "id": 5,
+          "title": "Error Handling & Logging",
+          "description": "Implement centralized error handling and logging for the server.",
+          "dependencies": [
+            2,
+            4
+          ],
+          "details": "Add exception handlers, customize error responses, and configure logging levels and outputs. Ensure errors are logged appropriately for debugging and monitoring.",
+          "status": "pending"
+        },
+        {
+          "id": 6,
+          "title": "Entry Point, Routing, CORS, and Health Check",
+          "description": "Define the server entry point, route declarations, CORS configuration, and a health check endpoint.",
+          "dependencies": [
+            2,
+            4
+          ],
+          "details": "Specify the main entry script (if __name__ == '__main__': mcp.run()). Add route decorators for tools and resources. Configure CORS if serving web clients. Implement a /health endpoint for monitoring.",
+          "status": "pending"
+        },
+        {
+          "id": 7,
+          "title": "Docker Setup",
+          "description": "Containerize the FastMCP server for deployment using Docker.",
+          "dependencies": [
+            1,
+            2,
+            4
+          ],
+          "details": "Create a Dockerfile to build a container image, specifying the base Python image, copying project files, installing dependencies, and defining the container entry point. Optionally, use docker-compose for local development.",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Setup Database and Storage Infrastructure",
+      "description": "Configure PostgreSQL for metadata storage and Google Cloud Storage for audio files with appropriate schemas and access controls.",
+      "details": "1. Create PostgreSQL database schema for audio metadata\n2. Setup Google Cloud Storage bucket for audio files\n3. Configure GCS authentication and access controls\n4. Implement database connection pool\n5. Create database migration scripts\n6. Setup GCS lifecycle policies for temporary files (24-hour deletion)\n7. Configure signed URL generation for secure streaming\n\nPostgreSQL Schema:\n```sql\nCREATE TABLE audio_tracks (\n  id UUID PRIMARY KEY,\n  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),\n  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),\n  status VARCHAR(20) NOT NULL DEFAULT 'PENDING', -- PENDING, PROCESSING, COMPLETED, FAILED\n  \n  -- Metadata from ID3 tags\n  artist VARCHAR(255),\n  title VARCHAR(255) NOT NULL,\n  album VARCHAR(255),\n  genre VARCHAR(255),\n  year INTEGER,\n  \n  -- Technical specs\n  duration FLOAT,\n  channels INTEGER,\n  sample_rate INTEGER,\n  bitrate INTEGER,\n  format VARCHAR(20),\n  \n  -- Storage paths\n  audio_path TEXT NOT NULL,\n  thumbnail_path TEXT,\n  \n  -- Search vector\n  search_vector TSVECTOR\n);\n\n-- Create GIN index for full-text search\nCREATE INDEX idx_audio_tracks_search ON audio_tracks USING GIN(search_vector);\n\n-- Function to update search vector\nCREATE FUNCTION audio_tracks_search_update() RETURNS trigger AS $$\nBEGIN\n  NEW.search_vector := \n    setweight(to_tsvector('english', COALESCE(NEW.artist, '')), 'A') ||\n    setweight(to_tsvector('english', COALESCE(NEW.title, '')), 'A') ||\n    setweight(to_tsvector('english', COALESCE(NEW.album, '')), 'B') ||\n    setweight(to_tsvector('english', COALESCE(NEW.genre, '')), 'C');\n  RETURN NEW;\nEND\n$$ LANGUAGE plpgsql;\n\n-- Trigger to update search vector\nCREATE TRIGGER audio_tracks_search_update_trigger\nBEFORE INSERT OR UPDATE ON audio_tracks\nFOR EACH ROW EXECUTE PROCEDURE audio_tracks_search_update();\n```\n\nGCS Configuration:\n```python\nfrom google.cloud import storage\nimport datetime\n\ndef create_gcs_client():\n    return storage.Client()\n\ndef generate_signed_url(bucket_name, blob_name, expiration=15):\n    \"\"\"Generate a signed URL for a blob that expires in 'expiration' minutes.\"\"\"\n    storage_client = create_gcs_client()\n    bucket = storage_client.bucket(bucket_name)\n    blob = bucket.blob(blob_name)\n    \n    url = blob.generate_signed_url(\n        version=\"v4\",\n        expiration=datetime.timedelta(minutes=expiration),\n        method=\"GET\"\n    )\n    \n    return url\n```",
+      "testStrategy": "1. Verify database connection and schema creation\n2. Test GCS bucket creation and access\n3. Validate signed URL generation and expiration\n4. Test database queries and full-text search functionality\n5. Verify GCS lifecycle policies are correctly applied\n6. Test database migration scripts\n7. Validate connection pooling under load",
+      "priority": "high",
+      "dependencies": [
+        1
+      ],
+      "status": "pending",
+      "subtasks": [
+        {
+          "id": 1,
+          "title": "Design PostgreSQL Database Schema",
+          "description": "Design normalized database schema following best practices including table structures, relationships, indexes, and constraints to ensure optimal query performance and data integrity.",
+          "dependencies": [],
+          "details": "Create entity-relationship diagrams, define tables using at least third normal form, establish naming conventions, design for append-only patterns where applicable, implement constraints for data validation, and plan index strategy for common query patterns. Consider using multiple named schemas instead of multiple databases for better cross-schema access.",
+          "status": "pending"
+        },
+        {
+          "id": 2,
+          "title": "Provision PostgreSQL Database Instance",
+          "description": "Set up and configure PostgreSQL database server with appropriate sizing, performance tuning parameters, and security settings.",
+          "dependencies": [
+            1
+          ],
+          "details": "Select appropriate database size based on workload requirements, configure key performance parameters (shared_buffers, work_mem, maintenance_work_mem), set up proper authentication methods, configure pg_hba.conf for access control, and establish backup strategy. Remove public schema CREATE privileges for security.",
+          "status": "pending"
+        },
+        {
+          "id": 3,
+          "title": "Create GCS Bucket and Configure Settings",
+          "description": "Provision Google Cloud Storage bucket with appropriate storage class, location, and versioning settings for application data storage.",
+          "dependencies": [],
+          "details": "Create GCS bucket with appropriate naming convention, select storage class (Standard, Nearline, Coldline) based on access patterns, configure region/multi-region settings, enable versioning if needed, set up uniform or fine-grained access control, and configure CORS if required for browser access.",
+          "status": "pending"
+        },
+        {
+          "id": 4,
+          "title": "Implement GCS Authentication and Access Control",
+          "description": "Configure service accounts, IAM roles, and access policies to secure GCS bucket access for different application components and users.",
+          "dependencies": [
+            3
+          ],
+          "details": "Create service accounts for application services, assign appropriate IAM roles (Storage Object Admin, Storage Object Viewer, Storage Object Creator), configure bucket-level and object-level permissions, set up workload identity for GKE if applicable, implement least-privilege access principles, and document credential management procedures.",
+          "status": "pending"
+        },
+        {
+          "id": 5,
+          "title": "Configure Database Connection Pooling",
+          "description": "Set up connection pooling mechanism to efficiently manage database connections and optimize resource utilization under load.",
+          "dependencies": [
+            2
+          ],
+          "details": "Implement connection pooler (PgBouncer or Pgpool-II), configure pool size based on max_connections and expected concurrent users, set pool mode (session, transaction, or statement), configure timeouts and connection lifecycle parameters, implement health checks, and integrate with application connection strings.",
+          "status": "pending"
+        },
+        {
+          "id": 6,
+          "title": "Develop Database Migration Scripts",
+          "description": "Create versioned migration scripts to implement schema design, including DDL statements, initial data population, and rollback procedures.",
+          "dependencies": [
+            1,
+            2
+          ],
+          "details": "Set up migration framework (Flyway, Liquibase, or Alembic), write CREATE TABLE statements with all constraints and indexes, implement foreign key relationships, create database functions and triggers if needed, develop rollback scripts, test migrations in non-production environment, and document migration execution order.",
+          "status": "pending"
+        },
+        {
+          "id": 7,
+          "title": "Configure GCS Lifecycle Policies",
+          "description": "Define and implement object lifecycle management rules to automatically transition or delete objects based on age and access patterns for cost optimization.",
+          "dependencies": [
+            3
+          ],
+          "details": "Define lifecycle rules for object deletion after specified days, configure automatic transition to cheaper storage classes (Nearline, Coldline, Archive) based on age, set up rules for versioned object cleanup, implement conditional policies based on object metadata or creation date, test policy effectiveness, and monitor storage costs.",
+          "status": "pending"
+        },
+        {
+          "id": 8,
+          "title": "Implement Signed URL Generation System",
+          "description": "Build mechanism to generate time-limited signed URLs for secure temporary access to GCS objects without exposing credentials.",
+          "dependencies": [
+            4
+          ],
+          "details": "Implement signed URL generation using service account credentials with signBlob permissions, configure appropriate expiration times based on use case, add optional content-type and response-disposition parameters, implement URL generation API endpoint or library function, add validation and error handling, test with various object types, and document usage patterns for application developers.",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Implement HTTP URL Audio Downloader",
+      "description": "Create a module to download audio files from HTTP/HTTPS URLs with validation and error handling.",
+      "details": "1. Implement HTTP/HTTPS URL downloader with requests library\n2. Add validation for file size (HEAD request before download)\n3. Implement timeout handling and retry logic\n4. Add SSRF protection (block private IP ranges)\n5. Validate URL schemes against allowlist\n6. Implement temporary file storage during download\n7. Add progress tracking for large files\n\n```python\nimport requests\nimport os\nimport tempfile\nimport ipaddress\nfrom urllib.parse import urlparse\n\ndef is_private_ip(url):\n    \"\"\"Check if URL points to a private IP address (SSRF protection).\"\"\"\n    hostname = urlparse(url).hostname\n    try:\n        ip = ipaddress.ip_address(hostname)\n        return ip.is_private\n    except ValueError:\n        # Not an IP address, need to resolve hostname\n        return False  # For MVP, we'll trust DNS resolution\n\ndef download_audio_from_url(url, headers=None, max_size_mb=100):\n    \"\"\"Download audio file from URL with validation.\"\"\"\n    # Validate URL scheme\n    if not url.startswith(('http://', 'https://')):\n        raise ValueError(\"Only HTTP and HTTPS URLs are supported\")\n    \n    # SSRF protection\n    if is_private_ip(url):\n        raise ValueError(\"URLs pointing to private IP addresses are not allowed\")\n    \n    # Check file size before downloading\n    resp = requests.head(url, headers=headers, timeout=10)\n    resp.raise_for_status()\n    \n    content_length = int(resp.headers.get('Content-Length', 0))\n    if content_length > max_size_mb * 1024 * 1024:\n        raise ValueError(f\"File size exceeds maximum allowed size of {max_size_mb}MB\")\n    \n    # Download file to temporary location\n    with tempfile.NamedTemporaryFile(delete=False) as temp_file:\n        with requests.get(url, headers=headers, stream=True, timeout=60) as resp:\n            resp.raise_for_status()\n            for chunk in resp.iter_content(chunk_size=8192):\n                temp_file.write(chunk)\n        \n        return temp_file.name\n```",
+      "testStrategy": "1. Test downloading files of various sizes and formats\n2. Verify size validation works correctly\n3. Test timeout handling and retry logic\n4. Validate SSRF protection blocks private IP addresses\n5. Test URL scheme validation\n6. Verify temporary file creation and cleanup\n7. Test with various HTTP status codes and error conditions\n8. Validate handling of redirects",
+      "priority": "high",
+      "dependencies": [
+        1
+      ],
+      "status": "pending",
+      "subtasks": [
+        {
+          "id": 1,
+          "title": "Implement HTTP/HTTPS Download Logic",
+          "description": "Develop the core functionality to download files over HTTP and HTTPS, handling protocol-specific requirements.",
+          "dependencies": [],
+          "details": "Ensure support for both HTTP and HTTPS protocols, manage request/response cycles, and handle partial content retrieval if needed.",
+          "status": "pending"
+        },
+        {
+          "id": 2,
+          "title": "Validate URL Scheme",
+          "description": "Check and validate the URL scheme to ensure only allowed protocols (HTTP/HTTPS) are processed.",
+          "dependencies": [
+            1
+          ],
+          "details": "Reject URLs with unsupported or potentially dangerous schemes (e.g., file://, ftp://) before initiating download.",
+          "status": "pending"
+        },
+        {
+          "id": 3,
+          "title": "Apply SSRF Protection",
+          "description": "Implement safeguards against Server-Side Request Forgery (SSRF) attacks during URL processing and download.",
+          "dependencies": [
+            2
+          ],
+          "details": "Validate URLs to prevent access to internal IP ranges, localhost, or other restricted resources.",
+          "status": "pending"
+        },
+        {
+          "id": 4,
+          "title": "Handle File Size Validation",
+          "description": "Check the file size before and during download to enforce limits and prevent resource exhaustion.",
+          "dependencies": [
+            3
+          ],
+          "details": "Use HTTP HEAD requests or Content-Length headers to validate file size prior to download; abort if size exceeds limits.",
+          "status": "pending"
+        },
+        {
+          "id": 5,
+          "title": "Manage Timeout and Retry Logic",
+          "description": "Implement timeout settings and retry mechanisms to handle network errors and ensure robust downloads.",
+          "dependencies": [
+            4
+          ],
+          "details": "Set reasonable timeouts for connections and data transfer; define retry policies for transient failures.",
+          "status": "pending"
+        },
+        {
+          "id": 6,
+          "title": "Temporary File Management",
+          "description": "Safely store downloaded data in temporary files, ensuring cleanup and atomic operations.",
+          "dependencies": [
+            5
+          ],
+          "details": "Write to temporary files during download, handle interruptions, and securely move files upon completion.",
+          "status": "pending"
+        },
+        {
+          "id": 7,
+          "title": "Implement Progress Tracking",
+          "description": "Track and report download progress to the user or calling system.",
+          "dependencies": [
+            6
+          ],
+          "details": "Monitor bytes downloaded, update progress indicators, and handle partial downloads if supported.",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Implement Audio Metadata Extraction",
+      "description": "Create a module to extract ID3 tags and technical audio specifications from downloaded audio files.",
+      "details": "1. Use mutagen library to extract ID3 tags (artist, title, album, genre, year)\n2. Use pydub/ffmpeg to analyze audio characteristics (duration, channels, sample rate, bitrate)\n3. Extract embedded album artwork if available\n4. Implement format validation for supported formats (MP3, AAC, FLAC, WAV)\n5. Handle missing or incomplete metadata gracefully\n\n```python\nfrom mutagen import File as MutagenFile\nfrom mutagen.id3 import ID3\nfrom pydub import AudioSegment\nimport os\nimport tempfile\n\ndef extract_metadata(file_path):\n    \"\"\"Extract metadata from audio file using mutagen.\"\"\"\n    # Basic file validation\n    if not os.path.exists(file_path):\n        raise FileNotFoundError(f\"File not found: {file_path}\")\n    \n    # Extract ID3 tags\n    audio_file = MutagenFile(file_path)\n    if audio_file is None:\n        raise ValueError(f\"Unsupported audio format or corrupted file: {file_path}\")\n    \n    # Initialize metadata dict\n    metadata = {\n        \"artist\": None,\n        \"title\": None,\n        \"album\": None,\n        \"genre\": None,\n        \"year\": None,\n        \"duration\": None,\n        \"channels\": None,\n        \"sample_rate\": None,\n        \"bitrate\": None,\n        \"format\": None\n    }\n    \n    # Extract ID3 tags (format-specific handling)\n    if hasattr(audio_file, 'tags') and audio_file.tags:\n        tags = audio_file.tags\n        # Extract common tags (implementation varies by format)\n        if 'TPE1' in tags:  # Artist\n            metadata['artist'] = str(tags['TPE1'])\n        if 'TIT2' in tags:  # Title\n            metadata['title'] = str(tags['TIT2'])\n        if 'TALB' in tags:  # Album\n            metadata['album'] = str(tags['TALB'])\n        if 'TCON' in tags:  # Genre\n            metadata['genre'] = str(tags['TCON'])\n        if 'TDRC' in tags:  # Year\n            try:\n                metadata['year'] = int(str(tags['TDRC']).split('-')[0])\n            except (ValueError, IndexError):\n                pass\n    \n    # Extract technical specs using pydub\n    try:\n        audio = AudioSegment.from_file(file_path)\n        metadata['duration'] = len(audio) / 1000.0  # Convert ms to seconds\n        metadata['channels'] = audio.channels\n        metadata['sample_rate'] = audio.frame_rate\n        metadata['bitrate'] = audio.frame_width * 8 * audio.frame_rate\n        \n        # Determine format from file extension\n        _, ext = os.path.splitext(file_path)\n        metadata['format'] = ext.lstrip('.').upper()\n    except Exception as e:\n        print(f\"Error extracting audio specs: {e}\")\n    \n    return metadata\n\ndef extract_artwork(file_path):\n    \"\"\"Extract album artwork from ID3 tags if available.\"\"\"\n    try:\n        tags = ID3(file_path)\n        for tag in tags.values():\n            if tag.FrameID == 'APIC':\n                artwork_data = tag.data\n                # Save artwork to temporary file\n                with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as temp_file:\n                    temp_file.write(artwork_data)\n                    return temp_file.name\n    except Exception as e:\n        print(f\"Error extracting artwork: {e}\")\n    \n    return None\n```",
+      "testStrategy": "1. Test with various audio formats (MP3, AAC, FLAC, WAV)\n2. Verify ID3 tag extraction accuracy\n3. Test with files having incomplete or missing metadata\n4. Validate technical specs extraction (duration, channels, sample rate, bitrate)\n5. Test artwork extraction from different ID3 tag versions\n6. Verify format detection works correctly\n7. Test with corrupted or invalid audio files",
+      "priority": "high",
+      "dependencies": [
+        3
+      ],
+      "status": "pending",
+      "subtasks": [
+        {
+          "id": 1,
+          "title": "ID3 Tag Extraction",
+          "description": "Extract ID3 tags from audio files to retrieve embedded metadata such as title, artist, and album.",
+          "dependencies": [],
+          "details": "Use libraries like Mutagen or TagLib to parse ID3 tags from MP3 files. Ensure support for different tag versions and handle format-specific parsing.",
+          "status": "pending"
+        },
+        {
+          "id": 2,
+          "title": "Technical Specification Extraction",
+          "description": "Extract technical metadata including duration, sample rate, bit depth, and channel count from audio files.",
+          "dependencies": [],
+          "details": "Utilize tools such as FFmpeg, Libsndfile, or pydub to access technical properties. Ensure compatibility with multiple audio formats and validate extracted data.",
+          "status": "pending"
+        },
+        {
+          "id": 3,
+          "title": "Artwork Extraction",
+          "description": "Extract embedded artwork (album cover images) from audio files where available.",
+          "dependencies": [],
+          "details": "Use metadata libraries capable of reading image data from audio file tags (e.g., Mutagen for MP3, Vorbis comments for FLAC/Ogg). Handle image format conversion if necessary.",
+          "status": "pending"
+        },
+        {
+          "id": 4,
+          "title": "Format Validation",
+          "description": "Validate the audio file format and ensure it meets expected standards for metadata extraction.",
+          "dependencies": [],
+          "details": "Check file headers and structure using format-specific libraries. Confirm support for target formats (MP3, FLAC, WAV, Ogg, etc.) and reject unsupported or malformed files.",
+          "status": "pending"
+        },
+        {
+          "id": 5,
+          "title": "Error Handling for Missing or Corrupt Metadata",
+          "description": "Implement robust error handling for cases where metadata is missing, incomplete, or corrupt.",
+          "dependencies": [
+            1,
+            2,
+            3,
+            4
+          ],
+          "details": "Detect and log missing or corrupt metadata fields. Provide fallback mechanisms or user notifications. Ensure extraction processes do not fail silently.",
+          "status": "pending"
+        },
+        {
+          "id": 6,
+          "title": "Support for Multiple Audio Formats",
+          "description": "Ensure the extraction and validation processes work across a range of audio formats.",
+          "dependencies": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "details": "Integrate format-specific extraction logic and libraries. Test with MP3, FLAC, WAV, Ogg, and others. Maintain extensibility for future format support.",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Implement Audio Storage and Management",
+      "description": "Create a module to store processed audio files in Google Cloud Storage and manage their lifecycle.",
+      "details": "1. Upload processed audio files to Google Cloud Storage\n2. Upload extracted thumbnails (album artwork) to GCS\n3. Generate unique filenames based on UUID\n4. Implement file organization structure in GCS\n5. Handle cleanup of temporary local files\n6. Implement retry logic for failed uploads\n\n```python\nimport uuid\nimport os\nfrom google.cloud import storage\n\ndef upload_to_gcs(local_file_path, destination_blob_name, bucket_name):\n    \"\"\"Upload a file to Google Cloud Storage bucket.\"\"\"\n    storage_client = storage.Client()\n    bucket = storage_client.bucket(bucket_name)\n    blob = bucket.blob(destination_blob_name)\n    \n    blob.upload_from_filename(local_file_path)\n    \n    return f\"gs://{bucket_name}/{destination_blob_name}\"\n\ndef store_audio_file(local_audio_path, local_thumbnail_path=None):\n    \"\"\"Store audio file and thumbnail in GCS with proper organization.\"\"\"\n    # Generate a unique ID for this audio file\n    audio_id = str(uuid.uuid4())\n    \n    # Define GCS paths\n    audio_blob_name = f\"audio/{audio_id}/audio{os.path.splitext(local_audio_path)[1]}\"\n    thumbnail_blob_name = f\"audio/{audio_id}/thumbnail.jpg\" if local_thumbnail_path else None\n    \n    # Upload audio file\n    bucket_name = os.getenv(\"GCS_BUCKET_NAME\")\n    audio_gcs_path = upload_to_gcs(local_audio_path, audio_blob_name, bucket_name)\n    \n    # Upload thumbnail if available\n    thumbnail_gcs_path = None\n    if local_thumbnail_path:\n        thumbnail_gcs_path = upload_to_gcs(local_thumbnail_path, thumbnail_blob_name, bucket_name)\n    \n    # Clean up local temporary files\n    try:\n        os.unlink(local_audio_path)\n        if local_thumbnail_path:\n            os.unlink(local_thumbnail_path)\n    except Exception as e:\n        print(f\"Error cleaning up temporary files: {e}\")\n    \n    return {\n        \"audio_id\": audio_id,\n        \"audio_path\": audio_gcs_path,\n        \"thumbnail_path\": thumbnail_gcs_path\n    }\n```",
+      "testStrategy": "1. Test uploading various audio formats to GCS\n2. Verify thumbnail uploads work correctly\n3. Test unique ID generation and file organization\n4. Validate cleanup of temporary files\n5. Test retry logic for failed uploads\n6. Verify GCS paths are correctly formatted\n7. Test with large files to ensure proper handling",
+      "priority": "medium",
+      "dependencies": [
+        2,
+        4
+      ],
+      "status": "pending",
+      "subtasks": [
+        {
+          "id": 1,
+          "title": "Generate Unique Filenames for Uploads",
+          "description": "Create a mechanism to generate unique filenames for both audio and thumbnail files to prevent naming collisions in GCS.",
+          "dependencies": [],
+          "details": "Implement a function that combines elements such as UUIDs, timestamps, or user identifiers to ensure each uploaded file has a unique name.",
+          "status": "pending"
+        },
+        {
+          "id": 2,
+          "title": "Define GCS Organization Structure",
+          "description": "Design and document the folder and naming conventions for storing audio and thumbnail files in Google Cloud Storage.",
+          "dependencies": [
+            1
+          ],
+          "details": "Establish a logical directory structure (e.g., by user, date, or file type) and ensure the unique filenames are incorporated into this structure.",
+          "status": "pending"
+        },
+        {
+          "id": 3,
+          "title": "Implement Audio File Upload to GCS",
+          "description": "Develop the logic to upload audio files to the designated GCS bucket and path using the unique filename and organization structure.",
+          "dependencies": [
+            2
+          ],
+          "details": "Use server-side code to securely upload audio files, handle errors, and confirm successful uploads.",
+          "status": "pending"
+        },
+        {
+          "id": 4,
+          "title": "Implement Thumbnail Upload to GCS",
+          "description": "Develop the logic to upload thumbnail images to the appropriate GCS location using the same naming and organization conventions.",
+          "dependencies": [
+            2
+          ],
+          "details": "Ensure thumbnail uploads follow the same security and reliability standards as audio file uploads.",
+          "status": "pending"
+        },
+        {
+          "id": 5,
+          "title": "Implement Upload Retry Logic",
+          "description": "Add robust retry mechanisms to both audio and thumbnail upload processes to handle transient failures and improve reliability.",
+          "dependencies": [
+            3,
+            4
+          ],
+          "details": "Incorporate exponential backoff or similar strategies to automatically retry failed uploads, logging errors as needed.",
+          "status": "pending"
+        },
+        {
+          "id": 6,
+          "title": "Temporary File Cleanup",
+          "description": "Ensure any temporary files created during the upload process are deleted after successful upload or upon failure.",
+          "dependencies": [
+            3,
+            4,
+            5
+          ],
+          "details": "Implement cleanup routines to remove temporary files from the server or local environment to prevent resource leaks.",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Implement Database Operations for Audio Metadata",
+      "description": "Create a module to store and retrieve audio metadata in PostgreSQL with full-text search capabilities.",
+      "details": "1. Implement functions to save metadata to PostgreSQL\n2. Create functions for retrieving metadata by ID\n3. Implement full-text search across metadata fields\n4. Add functions to update processing status\n5. Implement error handling and transaction management\n\n```python\nimport psycopg2\nimport psycopg2.extras\nimport os\nfrom contextlib import contextmanager\n\n# Database connection pool\nfrom psycopg2.pool import SimpleConnectionPool\n\n# Initialize connection pool\ndb_pool = SimpleConnectionPool(\n    minconn=1,\n    maxconn=10,\n    dbname=os.getenv(\"DB_NAME\"),\n    user=os.getenv(\"DB_USER\"),\n    password=os.getenv(\"DB_PASSWORD\"),\n    host=os.getenv(\"DB_HOST\"),\n    port=os.getenv(\"DB_PORT\")\n)\n\n@contextmanager\ndef get_db_connection():\n    \"\"\"Context manager for database connections from the pool.\"\"\"\n    conn = db_pool.getconn()\n    try:\n        conn.autocommit = False\n        yield conn\n    finally:\n        db_pool.putconn(conn)\n\ndef save_audio_metadata(audio_id, metadata, audio_path, thumbnail_path=None):\n    \"\"\"Save audio metadata to PostgreSQL.\"\"\"\n    with get_db_connection() as conn:\n        with conn.cursor() as cur:\n            try:\n                # Insert metadata into database\n                cur.execute(\"\"\"\n                    INSERT INTO audio_tracks (\n                        id, status, artist, title, album, genre, year,\n                        duration, channels, sample_rate, bitrate, format,\n                        audio_path, thumbnail_path\n                    ) VALUES (\n                        %s, 'COMPLETED', %s, %s, %s, %s, %s,\n                        %s, %s, %s, %s, %s,\n                        %s, %s\n                    )\n                \"\"\", (\n                    audio_id,\n                    metadata.get('artist'),\n                    metadata.get('title', 'Untitled'),\n                    metadata.get('album'),\n                    metadata.get('genre'),\n                    metadata.get('year'),\n                    metadata.get('duration'),\n                    metadata.get('channels'),\n                    metadata.get('sample_rate'),\n                    metadata.get('bitrate'),\n                    metadata.get('format'),\n                    audio_path,\n                    thumbnail_path\n                ))\n                conn.commit()\n                return True\n            except Exception as e:\n                conn.rollback()\n                print(f\"Error saving metadata: {e}\")\n                return False\n\ndef get_audio_metadata(audio_id):\n    \"\"\"Retrieve audio metadata by ID.\"\"\"\n    with get_db_connection() as conn:\n        with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:\n            cur.execute(\"\"\"\n                SELECT id, status, artist, title, album, genre, year,\n                       duration, channels, sample_rate, bitrate, format,\n                       audio_path, thumbnail_path,\n                       created_at, updated_at\n                FROM audio_tracks\n                WHERE id = %s\n            \"\"\", (audio_id,))\n            result = cur.fetchone()\n            return dict(result) if result else None\n\ndef search_audio(query, limit=20, offset=0):\n    \"\"\"Search audio tracks using full-text search.\"\"\"\n    with get_db_connection() as conn:\n        with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:\n            # Convert query to tsquery format\n            tsquery = ' & '.join(query.split())\n            \n            cur.execute(\"\"\"\n                SELECT id, artist, title, album, genre, year,\n                       duration, format,\n                       ts_rank(search_vector, to_tsquery(%s)) as score\n                FROM audio_tracks\n                WHERE search_vector @@ to_tsquery(%s)\n                ORDER BY score DESC\n                LIMIT %s OFFSET %s\n            \"\"\", (tsquery, tsquery, limit, offset))\n            \n            results = cur.fetchall()\n            return [dict(row) for row in results]\n\ndef update_processing_status(audio_id, status):\n    \"\"\"Update processing status for an audio track.\"\"\"\n    with get_db_connection() as conn:\n        with conn.cursor() as cur:\n            try:\n                cur.execute(\"\"\"\n                    UPDATE audio_tracks\n                    SET status = %s, updated_at = NOW()\n                    WHERE id = %s\n                \"\"\", (status, audio_id))\n                conn.commit()\n                return True\n            except Exception as e:\n                conn.rollback()\n                print(f\"Error updating status: {e}\")\n                return False\n```",
+      "testStrategy": "1. Test saving metadata with various field combinations\n2. Verify retrieval by ID returns correct data\n3. Test full-text search with different queries\n4. Validate status updates work correctly\n5. Test error handling and transaction rollback\n6. Verify connection pooling works under load\n7. Test with special characters and edge cases in metadata\n8. Validate search ranking and relevance",
+      "priority": "medium",
+      "dependencies": [
+        2,
+        4
+      ],
+      "status": "pending",
+      "subtasks": [
+        {
+          "id": 1,
+          "title": "Implement Save Metadata Function",
+          "description": "Develop a function to persist metadata records into the database, ensuring schema validation and transactional integrity.",
+          "dependencies": [],
+          "details": "Define the metadata schema, validate input, and use database transactions to guarantee atomicity. Handle potential errors during the save operation and ensure rollback on failure.",
+          "status": "pending"
+        },
+        {
+          "id": 2,
+          "title": "Implement Retrieve Metadata by ID",
+          "description": "Create a function to fetch metadata records from the database using a unique identifier.",
+          "dependencies": [
+            1
+          ],
+          "details": "Ensure efficient querying by ID, handle cases where the record does not exist, and return appropriate error messages or null responses.",
+          "status": "pending"
+        },
+        {
+          "id": 3,
+          "title": "Implement Full-Text Search for Metadata",
+          "description": "Develop a full-text search capability to allow users to search metadata records based on keywords or phrases.",
+          "dependencies": [
+            1
+          ],
+          "details": "Leverage database indexing and search features to enable performant and accurate full-text search across relevant metadata fields.",
+          "status": "pending"
+        },
+        {
+          "id": 4,
+          "title": "Develop Status Update Logic",
+          "description": "Implement logic to update the status field of metadata records, ensuring changes are tracked and validated.",
+          "dependencies": [
+            2
+          ],
+          "details": "Support status transitions, validate allowed status changes, and ensure updates are atomic and logged for auditability.",
+          "status": "pending"
+        },
+        {
+          "id": 5,
+          "title": "Implement Error and Transaction Management",
+          "description": "Design robust error handling and transaction management for all metadata operations to ensure data consistency and reliability.",
+          "dependencies": [
+            1,
+            2,
+            3,
+            4
+          ],
+          "details": "Use try/catch blocks, database transactions, and standardized error responses. Ensure rollback on failure and log errors for monitoring.",
+          "status": "pending"
+        },
+        {
+          "id": 6,
+          "title": "Configure Database Connection Pooling",
+          "description": "Set up and tune database connection pooling to optimize performance and resource utilization for metadata operations.",
+          "dependencies": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "details": "Choose an appropriate connection pool library, configure pool size and timeout settings, and monitor pool health under load.",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Implement MCP Tool: process_audio_complete",
+      "description": "Create the primary MCP tool for processing audio from HTTP URLs and returning complete metadata.",
+      "details": "1. Implement the process_audio_complete MCP tool\n2. Integrate HTTP downloader, metadata extraction, and storage modules\n3. Create structured response format according to API contract\n4. Add error handling and validation\n5. Implement processing pipeline with proper status tracking\n\n```python\nfrom fastmcp import FastMCP, Tool, Schema\nimport time\nimport os\n\n# Import modules from previous tasks\nfrom .downloader import download_audio_from_url\nfrom .metadata import extract_metadata, extract_artwork\nfrom .storage import store_audio_file\nfrom .database import save_audio_metadata, update_processing_status\n\n# Define input schema\nprocess_audio_input_schema = {\n    \"type\": \"object\",\n    \"properties\": {\n        \"source\": {\n            \"type\": \"object\",\n            \"properties\": {\n                \"type\": {\"type\": \"string\", \"enum\": [\"http_url\"]},\n                \"url\": {\"type\": \"string\", \"format\": \"uri\"},\n                \"headers\": {\"type\": \"object\"},\n                \"filename\": {\"type\": \"string\"},\n                \"mimeType\": {\"type\": \"string\"}\n            },\n            \"required\": [\"type\", \"url\"]\n        },\n        \"options\": {\n            \"type\": \"object\",\n            \"properties\": {\n                \"maxSizeMB\": {\"type\": \"number\", \"default\": 100}\n            }\n        }\n    },\n    \"required\": [\"source\"]\n}\n\n# Define output schema\nprocess_audio_output_schema = {\n    \"type\": \"object\",\n    \"properties\": {\n        \"success\": {\"type\": \"boolean\"},\n        \"audioId\": {\"type\": \"string\"},\n        \"metadata\": {\n            \"type\": \"object\",\n            \"properties\": {\n                \"Product\": {\n                    \"type\": \"object\",\n                    \"properties\": {\n                        \"Artist\": {\"type\": \"string\"},\n                        \"Title\": {\"type\": \"string\"},\n                        \"Album\": {\"type\": \"string\"},\n                        \"MBID\": {\"type\": [\"string\", \"null\"]},\n                        \"Genre\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}},\n                        \"Year\": {\"type\": [\"number\", \"null\"]}\n                    }\n                },\n                \"Format\": {\n                    \"type\": \"object\",\n                    \"properties\": {\n                        \"Duration\": {\"type\": \"number\"},\n                        \"Channels\": {\"type\": \"number\"},\n                        \"Sample rate\": {\"type\": \"number\"},\n                        \"Bitrate\": {\"type\": \"number\"},\n                        \"Format\": {\"type\": \"string\"}\n                    }\n                },\n                \"urlEmbedLink\": {\"type\": \"string\"}\n            }\n        },\n        \"resources\": {\n            \"type\": \"object\",\n            \"properties\": {\n                \"audio\": {\"type\": \"string\"},\n                \"thumbnail\": {\"type\": [\"string\", \"null\"]},\n                \"waveform\": {\"type\": [\"string\", \"null\"]}\n            }\n        },\n        \"processingTime\": {\"type\": \"number\"}\n    },\n    \"required\": [\"success\"]\n}\n\n# Define error schema\nprocess_audio_error_schema = {\n    \"type\": \"object\",\n    \"properties\": {\n        \"success\": {\"type\": \"boolean\"},\n        \"error\": {\"type\": \"string\", \"enum\": [\"SIZE_EXCEEDED\", \"INVALID_FORMAT\", \"FETCH_FAILED\", \"TIMEOUT\"]},\n        \"message\": {\"type\": \"string\"},\n        \"details\": {\"type\": \"object\"}\n    },\n    \"required\": [\"success\", \"error\", \"message\"]\n}\n\n# Register the tool with FastMCP\n@app.tool(\n    name=\"process_audio_complete\",\n    description=\"Process audio from HTTP URL and return complete metadata\",\n    input_schema=Schema(process_audio_input_schema),\n    output_schema=Schema(process_audio_output_schema),\n    error_schema=Schema(process_audio_error_schema)\n)\ndef process_audio_complete(input_data):\n    \"\"\"Process audio from HTTP URL and return complete metadata.\"\"\"\n    start_time = time.time()\n    \n    try:\n        # Extract input parameters\n        source = input_data[\"source\"]\n        options = input_data.get(\"options\", {})\n        max_size_mb = options.get(\"maxSizeMB\", 100)\n        \n        # Validate source type\n        if source[\"type\"] != \"http_url\":\n            return {\n                \"success\": False,\n                \"error\": \"INVALID_FORMAT\",\n                \"message\": \"Only http_url source type is supported in MVP\"\n            }\n        \n        # Download audio file from URL\n        try:\n            local_file_path = download_audio_from_url(\n                url=source[\"url\"],\n                headers=source.get(\"headers\"),\n                max_size_mb=max_size_mb\n            )\n        except ValueError as e:\n            return {\n                \"success\": False,\n                \"error\": \"SIZE_EXCEEDED\" if \"size exceeds\" in str(e) else \"INVALID_FORMAT\",\n                \"message\": str(e)\n            }\n        except Exception as e:\n            return {\n                \"success\": False,\n                \"error\": \"FETCH_FAILED\",\n                \"message\": f\"Failed to download audio: {str(e)}\"\n            }\n        \n        # Extract metadata\n        try:\n            metadata = extract_metadata(local_file_path)\n            thumbnail_path = extract_artwork(local_file_path)\n        except Exception as e:\n            return {\n                \"success\": False,\n                \"error\": \"INVALID_FORMAT\",\n                \"message\": f\"Failed to extract metadata: {str(e)}\"\n            }\n        \n        # Store files in GCS\n        storage_result = store_audio_file(local_file_path, thumbnail_path)\n        audio_id = storage_result[\"audio_id\"]\n        audio_path = storage_result[\"audio_path\"]\n        thumbnail_path = storage_result[\"thumbnail_path\"]\n        \n        # Save metadata to database\n        save_audio_metadata(audio_id, metadata, audio_path, thumbnail_path)\n        \n        # Generate embed URL\n        embed_url = f\"https://loist.io/embed/{audio_id}\"\n        \n        # Format response according to API contract\n        response = {\n            \"success\": True,\n            \"audioId\": audio_id,\n            \"metadata\": {\n                \"Product\": {\n                    \"Artist\": metadata.get(\"artist\", \"\"),\n                    \"Title\": metadata.get(\"title\", \"Untitled\"),\n                    \"Album\": metadata.get(\"album\", \"\"),\n                    \"MBID\": None,  # Null for MVP\n                    \"Genre\": [metadata.get(\"genre\", \"\")] if metadata.get(\"genre\") else [],\n                    \"Year\": metadata.get(\"year\")\n                },\n                \"Format\": {\n                    \"Duration\": metadata.get(\"duration\", 0),\n                    \"Channels\": metadata.get(\"channels\", 0),\n                    \"Sample rate\": metadata.get(\"sample_rate\", 0),\n                    \"Bitrate\": metadata.get(\"bitrate\", 0),\n                    \"Format\": metadata.get(\"format\", \"\")\n                },\n                \"urlEmbedLink\": embed_url\n            },\n            \"resources\": {\n                \"audio\": f\"music-library://audio/{audio_id}/stream\",\n                \"thumbnail\": f\"music-library://audio/{audio_id}/thumbnail\" if thumbnail_path else None,\n                \"waveform\": None  # Null for MVP\n            },\n            \"processingTime\": time.time() - start_time\n        }\n        \n        return response\n        \n    except Exception as e:\n        # Catch-all error handler\n        return {\n            \"success\": False,\n            \"error\": \"TIMEOUT\" if \"timeout\" in str(e).lower() else \"FETCH_FAILED\",\n            \"message\": f\"Unexpected error: {str(e)}\"\n        }\n```",
+      "testStrategy": "1. Test with various HTTP URLs to audio files\n2. Verify complete processing pipeline works end-to-end\n3. Test error handling for various failure scenarios\n4. Validate response format matches API contract\n5. Test with different audio formats and metadata combinations\n6. Verify processing time is accurately measured\n7. Test with large files to ensure proper handling\n8. Validate resource URIs are correctly generated",
+      "priority": "high",
+      "dependencies": [
+        1,
+        3,
+        4,
+        5,
+        6
+      ],
+      "status": "pending",
+      "subtasks": [
+        {
+          "id": 1,
+          "title": "Define Tool Input/Output Schema",
+          "description": "Specify and document the input and output data structures for the orchestration tool, ensuring contract adherence between modules.",
+          "dependencies": [],
+          "details": "Establish clear, versioned schemas (e.g., using JSON Schema or Avro) that all modules must follow. Include validation rules for required fields, types, and constraints.",
+          "status": "pending"
+        },
+        {
+          "id": 2,
+          "title": "Integrate Downloader Module",
+          "description": "Implement and connect the downloader component to fetch raw data according to the defined input schema.",
+          "dependencies": [
+            1
+          ],
+          "details": "Ensure the downloader adheres to the input schema, handles various data sources, and provides consistent output for downstream processing.",
+          "status": "pending"
+        },
+        {
+          "id": 3,
+          "title": "Integrate Metadata Extraction Module",
+          "description": "Incorporate the metadata extraction logic to process downloaded data and extract relevant metadata fields.",
+          "dependencies": [
+            2
+          ],
+          "details": "Map extracted metadata to the output schema, validate field presence, and handle edge cases such as missing or malformed data.",
+          "status": "pending"
+        },
+        {
+          "id": 4,
+          "title": "Integrate Storage Module",
+          "description": "Connect the storage system to persist both raw data and extracted metadata as per the output schema.",
+          "dependencies": [
+            3
+          ],
+          "details": "Support scalable storage backends (e.g., object storage, file systems), ensure data integrity, and manage storage lifecycle.",
+          "status": "pending"
+        },
+        {
+          "id": 5,
+          "title": "Update Database with Processed Metadata",
+          "description": "Implement logic to update the database with new or updated metadata records after successful storage.",
+          "dependencies": [
+            4
+          ],
+          "details": "Ensure atomicity of updates, handle upserts, and maintain referential integrity between stored data and database records.",
+          "status": "pending"
+        },
+        {
+          "id": 6,
+          "title": "Implement Error Handling and Propagation",
+          "description": "Design and integrate robust error handling mechanisms across all modules, ensuring errors are captured, logged, and propagated appropriately.",
+          "dependencies": [
+            2,
+            3,
+            4,
+            5
+          ],
+          "details": "Include retry logic, error categorization, and escalation paths. Ensure errors are mapped to the response schema and do not cause silent failures.",
+          "status": "pending"
+        },
+        {
+          "id": 7,
+          "title": "Format and Return Response",
+          "description": "Assemble and format the final response, including success or error information, adhering to the defined output schema.",
+          "dependencies": [
+            5,
+            6
+          ],
+          "details": "Ensure the response is consistent, includes all required metadata, and provides actionable error messages if failures occurred.",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Implement MCP Tools: get_audio_metadata and search_library",
+      "description": "Create the secondary MCP tools for retrieving metadata and searching the audio library.",
+      "details": "1. Implement the get_audio_metadata MCP tool\n2. Implement the search_library MCP tool\n3. Create structured response formats according to API contract\n4. Integrate with database operations module\n5. Add error handling and validation\n\n```python\nfrom fastmcp import FastMCP, Tool, Schema\n\n# Import database operations\nfrom .database import get_audio_metadata as db_get_metadata\nfrom .database import search_audio\nfrom .storage import generate_signed_url\nimport os\n\n# Define get_audio_metadata input schema\nget_metadata_input_schema = {\n    \"type\": \"object\",\n    \"properties\": {\n        \"audioId\": {\"type\": \"string\"}\n    },\n    \"required\": [\"audioId\"]\n}\n\n# Define search_library input schema\nsearch_library_input_schema = {\n    \"type\": \"object\",\n    \"properties\": {\n        \"query\": {\"type\": \"string\"},\n        \"filters\": {\n            \"type\": \"object\",\n            \"properties\": {\n                \"genre\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}},\n                \"year\": {\n                    \"type\": \"object\",\n                    \"properties\": {\n                        \"min\": {\"type\": \"number\"},\n                        \"max\": {\"type\": \"number\"}\n                    }\n                },\n                \"duration\": {\n                    \"type\": \"object\",\n                    \"properties\": {\n                        \"min\": {\"type\": \"number\"},\n                        \"max\": {\"type\": \"number\"}\n                    }\n                },\n                \"format\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}}\n            }\n        },\n        \"limit\": {\"type\": \"number\", \"default\": 20}\n    },\n    \"required\": [\"query\"]\n}\n\n# Helper function to format metadata response\ndef format_metadata_response(db_metadata):\n    \"\"\"Format database metadata into API response format.\"\"\"\n    if not db_metadata:\n        return None\n    \n    # Generate embed URL\n    embed_url = f\"https://loist.io/embed/{db_metadata['id']}\"\n    \n    # Format response according to API contract\n    return {\n        \"Product\": {\n            \"Artist\": db_metadata.get(\"artist\", \"\"),\n            \"Title\": db_metadata.get(\"title\", \"Untitled\"),\n            \"Album\": db_metadata.get(\"album\", \"\"),\n            \"MBID\": None,  # Null for MVP\n            \"Genre\": [db_metadata.get(\"genre\", \"\")] if db_metadata.get(\"genre\") else [],\n            \"Year\": db_metadata.get(\"year\")\n        },\n        \"Format\": {\n            \"Duration\": db_metadata.get(\"duration\", 0),\n            \"Channels\": db_metadata.get(\"channels\", 0),\n            \"Sample rate\": db_metadata.get(\"sample_rate\", 0),\n            \"Bitrate\": db_metadata.get(\"bitrate\", 0),\n            \"Format\": db_metadata.get(\"format\", \"\")\n        },\n        \"urlEmbedLink\": embed_url\n    }\n\n# Register get_audio_metadata tool\n@app.tool(\n    name=\"get_audio_metadata\",\n    description=\"Retrieve metadata for previously processed audio\",\n    input_schema=Schema(get_metadata_input_schema),\n    output_schema=Schema(process_audio_output_schema)  # Reuse the output schema from process_audio_complete\n)\ndef get_audio_metadata(input_data):\n    \"\"\"Retrieve metadata for previously processed audio.\"\"\"\n    audio_id = input_data[\"audioId\"]\n    \n    # Get metadata from database\n    db_metadata = db_get_metadata(audio_id)\n    if not db_metadata:\n        return {\n            \"success\": False,\n            \"error\": \"RESOURCE_NOT_FOUND\",\n            \"message\": f\"Audio with ID {audio_id} not found\"\n        }\n    \n    # Format response\n    metadata_response = format_metadata_response(db_metadata)\n    \n    # Generate resource URIs\n    resources = {\n        \"audio\": f\"music-library://audio/{audio_id}/stream\",\n        \"thumbnail\": f\"music-library://audio/{audio_id}/thumbnail\" if db_metadata.get(\"thumbnail_path\") else None,\n        \"waveform\": None  # Null for MVP\n    }\n    \n    return {\n        \"success\": True,\n        \"audioId\": audio_id,\n        \"metadata\": metadata_response,\n        \"resources\": resources,\n        \"processingTime\": 0  # Not applicable for retrieval\n    }\n\n# Define search_library output schema\nsearch_library_output_schema = {\n    \"type\": \"object\",\n    \"properties\": {\n        \"results\": {\n            \"type\": \"array\",\n            \"items\": {\n                \"type\": \"object\",\n                \"properties\": {\n                    \"audioId\": {\"type\": \"string\"},\n                    \"metadata\": {\"type\": \"object\"},  # Same structure as metadata response\n                    \"score\": {\"type\": \"number\"}\n                }\n            }\n        },\n        \"total\": {\"type\": \"number\"}\n    },\n    \"required\": [\"results\", \"total\"]\n}\n\n# Register search_library tool\n@app.tool(\n    name=\"search_library\",\n    description=\"Search across all processed audio in the library\",\n    input_schema=Schema(search_library_input_schema),\n    output_schema=Schema(search_library_output_schema)\n)\ndef search_library(input_data):\n    \"\"\"Search across all processed audio in the library.\"\"\"\n    query = input_data[\"query\"]\n    limit = input_data.get(\"limit\", 20)\n    \n    # For MVP, we ignore filters and just do text search\n    search_results = search_audio(query, limit=limit)\n    \n    # Format results\n    formatted_results = []\n    for result in search_results:\n        # Get full metadata for each result\n        db_metadata = db_get_metadata(result[\"id\"])\n        metadata_response = format_metadata_response(db_metadata)\n        \n        formatted_results.append({\n            \"audioId\": result[\"id\"],\n            \"metadata\": metadata_response,\n            \"score\": float(result[\"score\"])  # Convert Decimal to float\n        })\n    \n    return {\n        \"results\": formatted_results,\n        \"total\": len(search_results)\n    }\n```",
+      "testStrategy": "1. Test get_audio_metadata with valid and invalid IDs\n2. Test search_library with various search queries\n3. Verify response formats match API contract\n4. Test search relevance and ranking\n5. Validate error handling for edge cases\n6. Test with empty search results\n7. Verify metadata formatting is consistent\n8. Test performance with large result sets",
+      "priority": "medium",
+      "dependencies": [
+        6,
+        7
+      ],
+      "status": "pending",
+      "subtasks": [
+        {
+          "id": 1,
+          "title": "Implement get_audio_metadata Tool",
+          "description": "Build a tool to extract comprehensive metadata from audio files including technical specs (sample rate, bit depth, duration, channels) and embedded tags (title, artist, album, genre). Support multiple formats (MP3, WAV, FLAC, OGG) using libraries like Mutagen, pydub, or FFprobe.",
+          "dependencies": [],
+          "details": "Use Mutagen for parsing ID3 tags in MP3 files and Vorbis comments in FLAC/OGG. Implement FFprobe integration for technical metadata extraction. Handle format-specific parsing (WAV INFO chunks, BWF extensions). Return structured data with standardized field names across formats. Include content-based metadata extraction capabilities using Librosa for tempo, key, and spectral features if needed.",
+          "status": "pending"
+        },
+        {
+          "id": 2,
+          "title": "Implement search_library Tool",
+          "description": "Create a tool to query and search the audio library database with flexible filtering options by metadata fields (artist, album, genre, duration range, format). Support complex queries with multiple conditions and return paginated results.",
+          "dependencies": [
+            1
+          ],
+          "details": "Design query interface supporting exact match, partial match, and range queries. Implement filters for technical specs (sample rate, bit rate) and tag-based metadata. Include sorting options by various fields. Handle case-insensitive searches and wildcard patterns. Return results with full metadata and file paths.",
+          "status": "pending"
+        },
+        {
+          "id": 3,
+          "title": "Design Response Formatting Layer",
+          "description": "Create a unified response formatting system that standardizes output across all tools. Ensure consistent JSON structure, field naming conventions, and error message formats for API consumers.",
+          "dependencies": [
+            1,
+            2
+          ],
+          "details": "Define response schemas for success and error cases. Standardize metadata field names (e.g., TALB vs ALBUM) to consistent naming convention. Include pagination metadata for search results. Add response validation to ensure output consistency. Implement formatting helpers for different data types (durations, file sizes, sample rates).",
+          "status": "pending"
+        },
+        {
+          "id": 4,
+          "title": "Integrate Database Layer",
+          "description": "Build database integration for storing and retrieving audio file metadata. Design schema for efficient querying, implement connection pooling, and create data access layer with CRUD operations for audio metadata.",
+          "dependencies": [
+            1
+          ],
+          "details": "Design database schema with tables for audio files, metadata tags, and technical specs. Implement indexing strategy for frequently queried fields. Create data access objects (DAOs) for metadata operations. Add transaction handling for batch operations. Include metadata caching strategy to reduce database queries. Support both relational (PostgreSQL/MySQL) and document databases (MongoDB) as options.",
+          "status": "pending"
+        },
+        {
+          "id": 5,
+          "title": "Implement Comprehensive Error Handling",
+          "description": "Build robust error handling system covering file access failures, unsupported formats, corrupted files, database connection issues, and malformed queries. Provide meaningful error messages and implement graceful degradation.",
+          "dependencies": [
+            1,
+            2,
+            4
+          ],
+          "details": "Define error categories (FileNotFound, UnsupportedFormat, CorruptedFile, DatabaseError, QueryError). Implement try-catch blocks with specific exception handling. Add logging for debugging and monitoring. Create fallback mechanisms for partial metadata extraction when full extraction fails. Include retry logic for transient database failures. Return user-friendly error messages with actionable guidance.",
+          "status": "pending"
+        },
+        {
+          "id": 6,
+          "title": "Implement Input Validation",
+          "description": "Create validation layer for all tool inputs including file paths, query parameters, metadata fields, and configuration options. Prevent injection attacks and ensure data integrity before processing.",
+          "dependencies": [
+            1,
+            2
+          ],
+          "details": "Validate file paths for existence, accessibility, and allowed extensions. Sanitize search query parameters to prevent SQL/NoSQL injection. Implement schema validation for metadata updates. Add type checking and range validation for numeric inputs. Create allowlists for permitted metadata field names. Validate pagination parameters (page size limits, offset ranges). Include rate limiting considerations for API usage.",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Implement MCP Resources for Audio and Metadata",
+      "description": "Create MCP resources for accessing audio streams, metadata, and thumbnails with proper authentication and caching.",
+      "details": "1. Implement resource handler for audio streams with signed URLs\n2. Implement resource handler for metadata retrieval\n3. Implement resource handler for thumbnails\n4. Add in-memory caching for signed URLs\n5. Configure proper CORS and content-type headers\n\n```python\nfrom fastmcp import FastMCP, Resource\nimport os\nimport time\nfrom functools import lru_cache\n\n# Import modules\nfrom .database import get_audio_metadata\nfrom .storage import generate_signed_url\n\n# Simple in-memory cache for signed URLs\nURL_CACHE = {}\nURL_CACHE_EXPIRY = {}\n\ndef get_cached_signed_url(bucket_name, blob_name, expiration=15):\n    \"\"\"Get a signed URL with caching to reduce GCS operations.\"\"\"\n    cache_key = f\"{bucket_name}:{blob_name}\"\n    current_time = time.time()\n    \n    # Check if URL is in cache and not expired\n    if cache_key in URL_CACHE and URL_CACHE_EXPIRY.get(cache_key, 0) > current_time:\n        return URL_CACHE[cache_key]\n    \n    # Generate new signed URL\n    url = generate_signed_url(bucket_name, blob_name, expiration)\n    \n    # Cache the URL with expiration (slightly shorter than the actual URL expiry)\n    URL_CACHE[cache_key] = url\n    URL_CACHE_EXPIRY[cache_key] = current_time + (expiration * 60 * 0.9)  # 90% of expiration time\n    \n    return url\n\n# Register audio stream resource\n@app.resource(\n    path=\"music-library://audio/{uuid}/stream\",\n    description=\"Stream audio file with signed URL\"\n)\ndef get_audio_stream(uuid):\n    \"\"\"Get a signed URL for streaming audio.\"\"\"\n    # Get metadata from database\n    metadata = get_audio_metadata(uuid)\n    if not metadata:\n        return {\n            \"status\": 404,\n            \"body\": {\"error\": \"Audio not found\"}\n        }\n    \n    # Extract GCS path from metadata\n    audio_path = metadata.get(\"audio_path\")\n    if not audio_path or not audio_path.startswith(\"gs://\"):\n        return {\n            \"status\": 404,\n            \"body\": {\"error\": \"Audio file not found\"}\n        }\n    \n    # Parse bucket and blob name from gs:// URL\n    _, bucket_blob = audio_path.split(\"gs://\", 1)\n    bucket_name, blob_name = bucket_blob.split(\"/\", 1)\n    \n    # Generate signed URL with caching\n    signed_url = get_cached_signed_url(bucket_name, blob_name)\n    \n    # Redirect to signed URL\n    return {\n        \"status\": 302,\n        \"headers\": {\"Location\": signed_url}\n    }\n\n# Register metadata resource\n@app.resource(\n    path=\"music-library://audio/{uuid}/metadata\",\n    description=\"Get audio metadata\"\n)\ndef get_audio_metadata_resource(uuid):\n    \"\"\"Get metadata for an audio file.\"\"\"\n    # Get metadata from database\n    metadata = get_audio_metadata(uuid)\n    if not metadata:\n        return {\n            \"status\": 404,\n            \"body\": {\"error\": \"Audio not found\"}\n        }\n    \n    # Format response\n    response = {\n        \"id\": metadata.get(\"id\"),\n        \"artist\": metadata.get(\"artist\"),\n        \"title\": metadata.get(\"title\"),\n        \"album\": metadata.get(\"album\"),\n        \"genre\": metadata.get(\"genre\"),\n        \"year\": metadata.get(\"year\"),\n        \"duration\": metadata.get(\"duration\"),\n        \"channels\": metadata.get(\"channels\"),\n        \"sampleRate\": metadata.get(\"sample_rate\"),\n        \"bitrate\": metadata.get(\"bitrate\"),\n        \"format\": metadata.get(\"format\"),\n        \"embedUrl\": f\"https://loist.io/embed/{uuid}\"\n    }\n    \n    return {\n        \"status\": 200,\n        \"headers\": {\"Content-Type\": \"application/json\"},\n        \"body\": response\n    }\n\n# Register thumbnail resource\n@app.resource(\n    path=\"music-library://audio/{uuid}/thumbnail\",\n    description=\"Get audio thumbnail/album artwork\"\n)\ndef get_audio_thumbnail(uuid):\n    \"\"\"Get thumbnail for an audio file.\"\"\"\n    # Get metadata from database\n    metadata = get_audio_metadata(uuid)\n    if not metadata:\n        return {\n            \"status\": 404,\n            \"body\": {\"error\": \"Audio not found\"}\n        }\n    \n    # Check if thumbnail exists\n    thumbnail_path = metadata.get(\"thumbnail_path\")\n    if not thumbnail_path or not thumbnail_path.startswith(\"gs://\"):\n        return {\n            \"status\": 404,\n            \"body\": {\"error\": \"Thumbnail not found\"}\n        }\n    \n    # Parse bucket and blob name from gs:// URL\n    _, bucket_blob = thumbnail_path.split(\"gs://\", 1)\n    bucket_name, blob_name = bucket_blob.split(\"/\", 1)\n    \n    # Generate signed URL with caching\n    signed_url = get_cached_signed_url(bucket_name, blob_name)\n    \n    # Redirect to signed URL\n    return {\n        \"status\": 302,\n        \"headers\": {\"Location\": signed_url}\n    }\n\n# Register library search resource\n@app.resource(\n    path=\"music-library://library/search\",\n    description=\"Search audio library\"\n)\ndef search_library_resource(request):\n    \"\"\"Search audio library via resource endpoint.\"\"\"\n    # Get query parameter\n    query = request.query.get(\"q\", \"\")\n    if not query:\n        return {\n            \"status\": 400,\n            \"body\": {\"error\": \"Query parameter 'q' is required\"}\n        }\n    \n    # Use the search_audio function from database module\n    results = search_audio(query)\n    \n    # Format results\n    formatted_results = []\n    for result in results:\n        formatted_results.append({\n            \"id\": result[\"id\"],\n            \"artist\": result.get(\"artist\"),\n            \"title\": result.get(\"title\"),\n            \"album\": result.get(\"album\"),\n            \"score\": float(result[\"score\"])\n        })\n    \n    return {\n        \"status\": 200,\n        \"headers\": {\"Content-Type\": \"application/json\"},\n        \"body\": {\n            \"results\": formatted_results,\n            \"total\": len(formatted_results)\n        }\n    }\n```",
+      "testStrategy": "1. Test audio stream resource with valid and invalid UUIDs\n2. Verify signed URL generation and caching works correctly\n3. Test metadata resource returns correct data\n4. Validate thumbnail resource works with and without artwork\n5. Test search resource with various queries\n6. Verify CORS headers are properly set\n7. Test caching effectiveness under load\n8. Validate content-type headers are correct",
+      "priority": "medium",
+      "dependencies": [
+        2,
+        6,
+        7
+      ],
+      "status": "pending",
+      "subtasks": [
+        {
+          "id": 1,
+          "title": "Implement Audio Stream Resource Handler",
+          "description": "Develop an endpoint to securely serve audio streams, ensuring proper authentication, signed URL validation, and efficient delivery.",
+          "dependencies": [],
+          "details": "This handler should validate incoming requests, check signed URL authenticity, and stream audio content with appropriate headers for performance and security.",
+          "status": "pending"
+        },
+        {
+          "id": 2,
+          "title": "Implement Metadata Resource Handler",
+          "description": "Create an endpoint to provide metadata for audio resources, ensuring accurate and secure data retrieval.",
+          "dependencies": [],
+          "details": "The handler should fetch and return metadata (e.g., title, artist, duration) for requested audio resources, enforcing access controls as needed.",
+          "status": "pending"
+        },
+        {
+          "id": 3,
+          "title": "Implement Thumbnail Resource Handler",
+          "description": "Develop an endpoint to serve thumbnail images associated with audio resources, handling signed URLs and caching.",
+          "dependencies": [],
+          "details": "This handler should validate signed URLs, serve image content efficiently, and support browser or CDN caching strategies.",
+          "status": "pending"
+        },
+        {
+          "id": 4,
+          "title": "Design and Implement Signed URL Caching Mechanism",
+          "description": "Establish a caching strategy for signed URLs to optimize performance and reduce redundant resource fetches.",
+          "dependencies": [
+            1,
+            3
+          ],
+          "details": "Implement content-based caching (e.g., using ETag or object path) to ensure cache hits even when signed URLs change, and manage cache expiration and eviction policies.",
+          "status": "pending"
+        },
+        {
+          "id": 5,
+          "title": "Configure CORS and Content-Type Headers",
+          "description": "Set up proper CORS and content-type headers for all resource endpoints to ensure secure and correct cross-origin access.",
+          "dependencies": [
+            1,
+            2,
+            3
+          ],
+          "details": "Define and apply CORS policies and ensure accurate content-type headers for audio, metadata, and image responses.",
+          "status": "pending"
+        },
+        {
+          "id": 6,
+          "title": "Implement Robust Error Handling",
+          "description": "Develop comprehensive error handling for all resource handlers to ensure reliability and clear client feedback.",
+          "dependencies": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "details": "Handle common errors such as invalid signatures, expired URLs, missing resources, and internal server errors, returning appropriate HTTP status codes and messages.",
+          "status": "pending"
+        },
+        {
+          "id": 7,
+          "title": "Develop Search Resource Endpoint",
+          "description": "Create an endpoint to search for audio resources and their metadata, supporting secure, performant, and reliable queries.",
+          "dependencies": [
+            2,
+            5,
+            6
+          ],
+          "details": "Implement search logic, input validation, pagination, and ensure that search results respect access controls and return correct metadata and resource links.",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Implement HTML5 Audio Player and Embed Page",
+      "description": "Create a simple HTML5 audio player and embed page with metadata display and basic controls.",
+      "details": "1. Create HTML5 audio player with custom styling\n2. Implement embed page at /embed/{uuid}\n3. Add metadata display (artwork, title, artist, duration)\n4. Implement playback controls (play/pause, seek, volume)\n5. Add responsive layout for different screen sizes\n6. Implement keyboard shortcuts for accessibility\n\n```html\n<!-- embed.html template -->\n<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <title>{{ metadata.title }} by {{ metadata.artist }}</title>\n    \n    <!-- oEmbed Discovery -->\n    <link rel=\"alternate\" type=\"application/json+oembed\" \n          href=\"https://loist.io/oembed?url=https://loist.io/embed/{{ audio_id }}\" \n          title=\"{{ metadata.title }}\" />\n    \n    <!-- Open Graph -->\n    <meta property=\"og:type\" content=\"music.song\" />\n    <meta property=\"og:title\" content=\"{{ metadata.title }}\" />\n    <meta property=\"og:audio\" content=\"{{ signed_audio_url }}\" />\n    <meta property=\"og:audio:type\" content=\"audio/{{ metadata.format|lower }}\" />\n    <meta property=\"og:image\" content=\"{{ signed_thumbnail_url }}\" />\n    <meta property=\"og:url\" content=\"https://loist.io/embed/{{ audio_id }}\" />\n    \n    <!-- Twitter Cards -->\n    <meta name=\"twitter:card\" content=\"player\" />\n    <meta name=\"twitter:player\" content=\"https://loist.io/embed/{{ audio_id }}\" />\n    <meta name=\"twitter:player:width\" content=\"500\" />\n    <meta name=\"twitter:player:height\" content=\"200\" />\n    \n    <!-- Styles -->\n    <style>\n        :root {\n            --primary-color: #4A90E2;\n            --background-color: #FFFFFF;\n            --text-color: #333333;\n            --border-color: #E0E0E0;\n        }\n        \n        body {\n            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;\n            margin: 0;\n            padding: 0;\n            background-color: var(--background-color);\n            color: var(--text-color);\n        }\n        \n        .player-container {\n            max-width: 500px;\n            margin: 0 auto;\n            padding: 16px;\n            border-radius: 8px;\n            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);\n            background-color: var(--background-color);\n        }\n        \n        .player-header {\n            display: flex;\n            align-items: center;\n            margin-bottom: 16px;\n        }\n        \n        .artwork {\n            width: 80px;\n            height: 80px;\n            border-radius: 4px;\n            background-color: var(--border-color);\n            margin-right: 16px;\n            background-size: cover;\n            background-position: center;\n        }\n        \n        .metadata {\n            flex: 1;\n        }\n        \n        .title {\n            font-size: 18px;\n            font-weight: 600;\n            margin: 0 0 4px 0;\n        }\n        \n        .artist {\n            font-size: 14px;\n            color: #666;\n            margin: 0;\n        }\n        \n        .album {\n            font-size: 12px;\n            color: #888;\n            margin: 4px 0 0 0;\n        }\n        \n        .audio-element {\n            width: 100%;\n            margin-bottom: 8px;\n        }\n        \n        .time-display {\n            display: flex;\n            justify-content: space-between;\n            font-size: 12px;\n            color: #666;\n        }\n        \n        /* Custom audio controls */\n        .custom-controls {\n            display: flex;\n            align-items: center;\n            margin-top: 16px;\n        }\n        \n        .play-button {\n            width: 40px;\n            height: 40px;\n            border-radius: 50%;\n            background-color: var(--primary-color);\n            color: white;\n            border: none;\n            display: flex;\n            align-items: center;\n            justify-content: center;\n            cursor: pointer;\n            margin-right: 16px;\n        }\n        \n        .progress-container {\n            flex: 1;\n            height: 6px;\n            background-color: var(--border-color);\n            border-radius: 3px;\n            position: relative;\n            cursor: pointer;\n        }\n        \n        .progress-bar {\n            height: 100%;\n            background-color: var(--primary-color);\n            border-radius: 3px;\n            width: 0%;\n        }\n        \n        .volume-container {\n            display: flex;\n            align-items: center;\n            margin-left: 16px;\n        }\n        \n        .volume-icon {\n            margin-right: 8px;\n            color: #666;\n        }\n        \n        .volume-slider {\n            width: 80px;\n        }\n        \n        /* Responsive adjustments */\n        @media (max-width: 480px) {\n            .player-container {\n                padding: 12px;\n                box-shadow: none;\n            }\n            \n            .artwork {\n                width: 60px;\n                height: 60px;\n            }\n            \n            .volume-container {\n                display: none; /* Hide volume on mobile */\n            }\n        }\n    </style>\n</head>\n<body>\n    <div class=\"player-container\">\n        <div class=\"player-header\">\n            <div class=\"artwork\" style=\"background-image: url('{{ signed_thumbnail_url }}');\"></div>\n            <div class=\"metadata\">\n                <h1 class=\"title\">{{ metadata.title }}</h1>\n                <p class=\"artist\">{{ metadata.artist }}</p>\n                {% if metadata.album %}\n                <p class=\"album\">{{ metadata.album }}</p>\n                {% endif %}\n            </div>\n        </div>\n        \n        <audio id=\"audio-player\" class=\"audio-element\" preload=\"metadata\">\n            <source src=\"{{ signed_audio_url }}\" type=\"audio/{{ metadata.format|lower }}\">\n            Your browser does not support the audio element.\n        </audio>\n        \n        <div class=\"time-display\">\n            <span id=\"current-time\">0:00</span>\n            <span id=\"duration\">{{ metadata.duration_formatted }}</span>\n        </div>\n        \n        <div class=\"custom-controls\">\n            <button id=\"play-button\" class=\"play-button\">\n                <svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"currentColor\">\n                    <path d=\"M8 5v14l11-7z\"/>\n                </svg>\n            </button>\n            \n            <div id=\"progress-container\" class=\"progress-container\">\n                <div id=\"progress-bar\" class=\"progress-bar\"></div>\n            </div>\n            \n            <div class=\"volume-container\">\n                <div class=\"volume-icon\">\n                    <svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"currentColor\">\n                        <path d=\"M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z\"/>\n                    </svg>\n                </div>\n                <input id=\"volume-slider\" class=\"volume-slider\" type=\"range\" min=\"0\" max=\"1\" step=\"0.1\" value=\"1\">\n            </div>\n        </div>\n    </div>\n    \n    <script>\n        document.addEventListener('DOMContentLoaded', function() {\n            const audioPlayer = document.getElementById('audio-player');\n            const playButton = document.getElementById('play-button');\n            const progressBar = document.getElementById('progress-bar');\n            const progressContainer = document.getElementById('progress-container');\n            const currentTimeDisplay = document.getElementById('current-time');\n            const volumeSlider = document.getElementById('volume-slider');\n            \n            // Play/pause functionality\n            playButton.addEventListener('click', function() {\n                if (audioPlayer.paused) {\n                    audioPlayer.play();\n                    playButton.innerHTML = '<svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M6 19h4V5H6v14zm8-14v14h4V5h-4z\"/></svg>';\n                } else {\n                    audioPlayer.pause();\n                    playButton.innerHTML = '<svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M8 5v14l11-7z\"/></svg>';\n                }\n            });\n            \n            // Update progress bar\n            audioPlayer.addEventListener('timeupdate', function() {\n                const progress = (audioPlayer.currentTime / audioPlayer.duration) * 100;\n                progressBar.style.width = progress + '%';\n                \n                // Update current time display\n                const minutes = Math.floor(audioPlayer.currentTime / 60);\n                const seconds = Math.floor(audioPlayer.currentTime % 60).toString().padStart(2, '0');\n                currentTimeDisplay.textContent = `${minutes}:${seconds}`;\n            });\n            \n            // Seek functionality\n            progressContainer.addEventListener('click', function(e) {\n                const rect = progressContainer.getBoundingClientRect();\n                const pos = (e.clientX - rect.left) / rect.width;\n                audioPlayer.currentTime = pos * audioPlayer.duration;\n            });\n            \n            // Volume control\n            volumeSlider.addEventListener('input', function() {\n                audioPlayer.volume = volumeSlider.value;\n            });\n            \n            // Keyboard shortcuts\n            document.addEventListener('keydown', function(e) {\n                if (e.code === 'Space') {\n                    // Prevent page scroll on space\n                    e.preventDefault();\n                    playButton.click();\n                } else if (e.code === 'ArrowLeft') {\n                    audioPlayer.currentTime = Math.max(0, audioPlayer.currentTime - 5);\n                } else if (e.code === 'ArrowRight') {\n                    audioPlayer.currentTime = Math.min(audioPlayer.duration, audioPlayer.currentTime + 5);\n                }\n            });\n            \n            // Handle audio ended\n            audioPlayer.addEventListener('ended', function() {\n                playButton.innerHTML = '<svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M8 5v14l11-7z\"/></svg>';\n            });\n        });\n    </script>\n</body>\n</html>\n```\n\n```python\n# Flask route for embed page\nfrom flask import render_template, request\nimport os\n\n@app.route('/embed/<uuid>')\ndef embed_page(uuid):\n    # Get metadata from database\n    metadata = get_audio_metadata(uuid)\n    if not metadata:\n        return \"Audio not found\", 404\n    \n    # Generate signed URLs\n    audio_path = metadata.get(\"audio_path\")\n    thumbnail_path = metadata.get(\"thumbnail_path\")\n    \n    # Parse bucket and blob name from gs:// URL\n    _, audio_bucket_blob = audio_path.split(\"gs://\", 1)\n    audio_bucket_name, audio_blob_name = audio_bucket_blob.split(\"/\", 1)\n    \n    # Generate signed URL for audio\n    signed_audio_url = generate_signed_url(audio_bucket_name, audio_blob_name)\n    \n    # Generate signed URL for thumbnail if available\n    signed_thumbnail_url = None\n    if thumbnail_path:\n        _, thumbnail_bucket_blob = thumbnail_path.split(\"gs://\", 1)\n        thumbnail_bucket_name, thumbnail_blob_name = thumbnail_bucket_blob.split(\"/\", 1)\n        signed_thumbnail_url = generate_signed_url(thumbnail_bucket_name, thumbnail_blob_name)\n    \n    # Format duration for display\n    duration_seconds = metadata.get(\"duration\", 0)\n    minutes = int(duration_seconds // 60)\n    seconds = int(duration_seconds % 60)\n    metadata[\"duration_formatted\"] = f\"{minutes}:{seconds:02d}\"\n    \n    # Render template\n    return render_template('embed.html', \n                          audio_id=uuid,\n                          metadata=metadata,\n                          signed_audio_url=signed_audio_url,\n                          signed_thumbnail_url=signed_thumbnail_url)\n```",
+      "testStrategy": "1. Test player with various audio formats (MP3, AAC, FLAC, WAV)\n2. Verify playback controls work correctly (play/pause, seek, volume)\n3. Test responsive layout on different screen sizes\n4. Validate keyboard shortcuts work as expected\n5. Test with and without album artwork\n6. Verify metadata display is correct\n7. Test time display and progress bar updates\n8. Validate embed page loads correctly with valid and invalid UUIDs",
+      "priority": "high",
+      "dependencies": [
+        9
+      ],
+      "status": "pending",
+      "subtasks": [
+        {
+          "id": 1,
+          "title": "HTML5 Audio Player UI Design",
+          "description": "Design and implement a visually appealing, custom HTML5 audio player interface that matches the site's design language, including play/pause, seek, volume, and mute controls.",
+          "dependencies": [],
+          "details": "Apply CSS for styling, ensure visual hierarchy, use appropriate icons, and maintain consistency with the overall website design. Support responsive layouts for different devices[1][2][3].",
+          "status": "pending"
+        },
+        {
+          "id": 2,
+          "title": "Embed Page Routing",
+          "description": "Implement client-side routing to allow embedding the audio player on different pages or views without full page reloads.",
+          "dependencies": [],
+          "details": "Use a frontend routing library (e.g., React Router, Vue Router) to manage navigation between pages/views containing the audio player, ensuring the player state persists during navigation.",
+          "status": "pending"
+        },
+        {
+          "id": 3,
+          "title": "Metadata Display",
+          "description": "Display track metadata (title, artist, album, cover art) dynamically within the player UI.",
+          "dependencies": [
+            1
+          ],
+          "details": "Fetch and render metadata from the backend or audio file, update the UI in real-time as tracks change, and ensure the display is visually integrated with the player design[1].",
+          "status": "pending"
+        },
+        {
+          "id": 4,
+          "title": "Playback Controls Implementation",
+          "description": "Develop functional playback controls (play, pause, seek, volume, mute) using the HTML5 Audio API and custom UI elements.",
+          "dependencies": [
+            1
+          ],
+          "details": "Use JavaScript to interface with the <audio> element, handle user interactions, and synchronize the custom UI with the native audio API[1][2][3].",
+          "status": "pending"
+        },
+        {
+          "id": 5,
+          "title": "Responsive Layout",
+          "description": "Ensure the audio player UI adapts seamlessly to various screen sizes and devices.",
+          "dependencies": [
+            1
+          ],
+          "details": "Implement responsive CSS (media queries, flexible layouts) so the player is usable and visually consistent on mobile, tablet, and desktop[1].",
+          "status": "pending"
+        },
+        {
+          "id": 6,
+          "title": "Keyboard Accessibility",
+          "description": "Make all player controls fully accessible via keyboard, supporting screen readers and users who rely on keyboard navigation.",
+          "dependencies": [
+            1,
+            4
+          ],
+          "details": "Implement keyboard event handlers for all controls, ensure focus management, and provide ARIA attributes for screen reader compatibility[1][5].",
+          "status": "pending"
+        },
+        {
+          "id": 7,
+          "title": "Signed URL Integration",
+          "description": "Integrate backend-signed URLs for secure audio file access, ensuring that only authorized users can stream protected content.",
+          "dependencies": [],
+          "details": "Develop logic to request and handle signed URLs from the backend, manage token expiration, and seamlessly integrate with the audio element's src attribute.",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "title": "Implement oEmbed and Open Graph Integration",
+      "description": "Create oEmbed endpoint and Open Graph tags for social sharing and platform embedding.",
+      "details": "1. Implement oEmbed JSON endpoint\n2. Add Open Graph meta tags to embed page\n3. Add Twitter Card meta tags\n4. Test with various platforms (Notion, Slack, Discord)\n5. Implement proper content negotiation\n\n```python\nfrom flask import jsonify, request, url_for\nimport os\n\n@app.route('/oembed')\ndef oembed_endpoint():\n    \"\"\"oEmbed endpoint for platform embedding.\"\"\"\n    # Get URL parameter\n    url = request.args.get('url')\n    if not url or not url.startswith('https://loist.io/embed/'):\n        return jsonify({\n            \"error\": \"Invalid URL parameter\"\n        }), 400\n    \n    # Extract UUID from URL\n    uuid = url.split('/')[-1]\n    \n    # Get metadata from database\n    metadata = get_audio_metadata(uuid)\n    if not metadata:\n        return jsonify({\n            \"error\": \"Audio not found\"\n        }), 404\n    \n    # Get optional width/height parameters\n    max_width = request.args.get('maxwidth', 500, type=int)\n    max_height = request.args.get('maxheight', 200, type=int)\n    \n    # Adjust dimensions to respect maxwidth/maxheight\n    width = min(500, max_width)\n    height = min(200, max_height)\n    \n    # Generate thumbnail URL\n    thumbnail_url = None\n    if metadata.get(\"thumbnail_path\"):\n        _, thumbnail_bucket_blob = metadata[\"thumbnail_path\"].split(\"gs://\", 1)\n        thumbnail_bucket_name, thumbnail_blob_name = thumbnail_bucket_blob.split(\"/\", 1)\n        thumbnail_url = generate_signed_url(thumbnail_bucket_name, thumbnail_blob_name)\n    \n    # Format oEmbed response\n    response = {\n        \"version\": \"1.0\",\n        \"type\": \"rich\",\n        \"title\": metadata.get(\"title\", \"Untitled\"),\n        \"author_name\": metadata.get(\"artist\", \"\"),\n        \"provider_name\": \"Loist\",\n        \"provider_url\": \"https://loist.io\",\n        \"html\": f'<iframe src=\"https://loist.io/embed/{uuid}\" width=\"{width}\" height=\"{height}\" frameborder=\"0\"></iframe>',\n        \"width\": width,\n        \"height\": height\n    }\n    \n    # Add thumbnail if available\n    if thumbnail_url:\n        response[\"thumbnail_url\"] = thumbnail_url\n        response[\"thumbnail_width\"] = 600\n        response[\"thumbnail_height\"] = 600\n    \n    return jsonify(response)\n\n# Add route for discovery\n@app.route('/.well-known/oembed.json')\ndef oembed_discovery():\n    \"\"\"oEmbed discovery endpoint.\"\"\"\n    return jsonify({\n        \"provider_name\": \"Loist Music Library\",\n        \"provider_url\": \"https://loist.io\",\n        \"endpoints\": [\n            {\n                \"url\": \"https://loist.io/oembed\",\n                \"formats\": [\"json\"],\n                \"discovery\": True\n            }\n        ]\n    })\n```\n\n```html\n<!-- Additional Open Graph tags for embed.html template -->\n<meta property=\"og:site_name\" content=\"Loist Music Library\" />\n<meta property=\"og:description\" content=\"Listen to {{ metadata.title }} by {{ metadata.artist }}{% if metadata.album %} from the album {{ metadata.album }}{% endif %}\" />\n\n<!-- Additional Twitter Card tags -->\n<meta name=\"twitter:title\" content=\"{{ metadata.title }}\" />\n<meta name=\"twitter:description\" content=\"{{ metadata.artist }}{% if metadata.album %} - {{ metadata.album }}{% endif %}\" />\n<meta name=\"twitter:image\" content=\"{{ signed_thumbnail_url }}\" />\n```",
+      "testStrategy": "1. Test oEmbed endpoint with valid and invalid URLs\n2. Verify oEmbed response format is correct\n3. Test with various maxwidth/maxheight parameters\n4. Validate Open Graph tags are correctly rendered\n5. Test Twitter Card tags are correctly rendered\n6. Test embedding in Notion, Slack, and Discord\n7. Verify discovery endpoint works correctly\n8. Test with and without thumbnail images",
+      "priority": "medium",
+      "dependencies": [
+        10
+      ],
+      "status": "pending",
+      "subtasks": [
+        {
+          "id": 1,
+          "title": "Implement oEmbed Endpoint",
+          "description": "Develop and expose an oEmbed API endpoint that returns embeddable representations of resources according to the oEmbed specification.",
+          "dependencies": [],
+          "details": "Ensure the endpoint supports required parameters (e.g., url, format) and returns valid JSON or XML responses. Follow standards for provider configuration and response structure.",
+          "status": "pending"
+        },
+        {
+          "id": 2,
+          "title": "Add Open Graph Meta Tags",
+          "description": "Integrate Open Graph meta tags into resource pages to improve link previews and sharing across platforms.",
+          "dependencies": [],
+          "details": "Include essential tags such as og:title, og:description, og:image, and og:url. Validate tag values for accuracy and completeness.",
+          "status": "pending"
+        },
+        {
+          "id": 3,
+          "title": "Add Twitter Card Tags",
+          "description": "Implement Twitter Card meta tags to enable rich content previews when links are shared on Twitter.",
+          "dependencies": [],
+          "details": "Support card types like summary and summary_large_image. Ensure tags like twitter:card, twitter:title, twitter:description, and twitter:image are present and correct.",
+          "status": "pending"
+        },
+        {
+          "id": 4,
+          "title": "Implement Content Negotiation",
+          "description": "Enable the oEmbed endpoint to respond with different formats (JSON or XML) based on request parameters or HTTP headers.",
+          "dependencies": [
+            1
+          ],
+          "details": "Support the 'format' query parameter and/or Accept headers. Ensure responses conform to the requested format and handle invalid requests gracefully.",
+          "status": "pending"
+        },
+        {
+          "id": 5,
+          "title": "Implement Discovery Endpoint",
+          "description": "Expose a discovery mechanism for consumers to locate the oEmbed endpoint for supported resources.",
+          "dependencies": [
+            1
+          ],
+          "details": "Add <link rel=\"alternate\" type=\"application/json+oembed\"> and <link rel=\"alternate\" type=\"text/xml+oembed\"> tags to resource pages, pointing to the oEmbed endpoint.",
+          "status": "pending"
+        },
+        {
+          "id": 6,
+          "title": "Test Integration on Platforms (Notion, Slack, Discord)",
+          "description": "Verify that embedding and link previews work correctly on major platforms using the implemented standards.",
+          "dependencies": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "details": "Share resource URLs on Notion, Slack, and Discord to confirm correct rendering of embeds and previews. Document any platform-specific issues and resolve them.",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "title": "Setup Cloud Run Deployment",
+      "description": "Configure Docker and Google Cloud Run for production deployment with proper environment variables and security settings.",
+      "details": "1. Create Dockerfile for production deployment\n2. Configure Google Cloud Run service\n3. Setup environment variables and secrets\n4. Configure HTTPS and domain mapping\n5. Setup Cloud SQL connection\n6. Configure GCS bucket permissions\n7. Implement health checks and monitoring\n\n```dockerfile\n# Dockerfile\nFROM python:3.9-slim\n\n# Install system dependencies\nRUN apt-get update && apt-get install -y \\\n    ffmpeg \\\n    libpq-dev \\\n    gcc \\\n    && rm -rf /var/lib/apt/lists/*\n\n# Set working directory\nWORKDIR /app\n\n# Copy requirements first for better caching\nCOPY requirements.txt .\nRUN pip install --no-cache-dir -r requirements.txt\n\n# Copy application code\nCOPY . .\n\n# Set environment variables\nENV PORT=8080\nENV PYTHONUNBUFFERED=1\n\n# Run the application\nCMD exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 0 main:app\n```\n\n```yaml\n# cloudbuild.yaml for CI/CD\nsteps:\n  # Build the container image\n  - name: 'gcr.io/cloud-builders/docker'\n    args: ['build', '-t', 'gcr.io/$PROJECT_ID/mcp-music-library:$COMMIT_SHA', '.']\n  \n  # Push the container image to Container Registry\n  - name: 'gcr.io/cloud-builders/docker'\n    args: ['push', 'gcr.io/$PROJECT_ID/mcp-music-library:$COMMIT_SHA']\n  \n  # Deploy container image to Cloud Run\n  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'\n    entrypoint: gcloud\n    args:\n      - 'run'\n      - 'deploy'\n      - 'mcp-music-library'\n      - '--image'\n      - 'gcr.io/$PROJECT_ID/mcp-music-library:$COMMIT_SHA'\n      - '--region'\n      - 'us-central1'\n      - '--platform'\n      - 'managed'\n      - '--allow-unauthenticated'\n      - '--memory'\n      - '2Gi'\n      - '--timeout'\n      - '600s'\n      - '--set-env-vars'\n      - 'GCS_BUCKET_NAME=${_GCS_BUCKET_NAME}'\n      - '--set-secrets'\n      - 'BEARER_TOKEN=mcp-bearer-token:latest'\n      - '--set-secrets'\n      - 'DB_USER=db-user:latest,DB_PASSWORD=db-password:latest,DB_NAME=db-name:latest,DB_HOST=db-host:latest,DB_PORT=db-port:latest'\n\nimages:\n  - 'gcr.io/$PROJECT_ID/mcp-music-library:$COMMIT_SHA'\n```\n\n```bash\n#!/bin/bash\n# setup-cloud-resources.sh\n\n# Set project ID\nPROJECT_ID=\"your-project-id\"\ngcloud config set project $PROJECT_ID\n\n# Create GCS bucket\nBUCKET_NAME=\"mcp-music-library-$PROJECT_ID\"\ngcloud storage buckets create gs://$BUCKET_NAME --location=us-central1\n\n# Set lifecycle policy for temporary files\ncat > lifecycle.json << EOL\n{\n  \"rule\": [\n    {\n      \"action\": {\"type\": \"Delete\"},\n      \"condition\": {\n        \"age\": 1,\n        \"matchesPrefix\": [\"temp/\"]\n      }\n    }\n  ]\n}\nEOL\n\ngcloud storage buckets update gs://$BUCKET_NAME --lifecycle-file=lifecycle.json\n\n# Create Cloud SQL instance (PostgreSQL)\ngcloud sql instances create mcp-music-library-db \\\n    --database-version=POSTGRES_13 \\\n    --tier=db-f1-micro \\\n    --region=us-central1 \\\n    --storage-size=10GB \\\n    --storage-type=SSD \\\n    --backup-start-time=23:00 \\\n    --availability-type=zonal\n\n# Create database\ngcloud sql databases create music_library --instance=mcp-music-library-db\n\n# Create user\nDB_PASSWORD=$(openssl rand -base64 16)\ngcloud sql users create music_library_user \\\n    --instance=mcp-music-library-db \\\n    --password=$DB_PASSWORD\n\n# Store secrets in Secret Manager\ngcloud secrets create mcp-bearer-token --data-file=- <<< \"$(openssl rand -base64 32)\"\ngcloud secrets create db-user --data-file=- <<< \"music_library_user\"\ngcloud secrets create db-password --data-file=- <<< \"$DB_PASSWORD\"\ngcloud secrets create db-name --data-file=- <<< \"music_library\"\ngcloud secrets create db-host --data-file=- <<< \"127.0.0.1\"\ngcloud secrets create db-port --data-file=- <<< \"5432\"\n\n# Create service account for Cloud Run\ngcloud iam service-accounts create mcp-music-library-sa \\\n    --display-name=\"MCP Music Library Service Account\"\n\n# Grant permissions\ngcloud projects add-iam-policy-binding $PROJECT_ID \\\n    --member=\"serviceAccount:mcp-music-library-sa@$PROJECT_ID.iam.gserviceaccount.com\" \\\n    --role=\"roles/storage.objectAdmin\"\n\ngcloud projects add-iam-policy-binding $PROJECT_ID \\\n    --member=\"serviceAccount:mcp-music-library-sa@$PROJECT_ID.iam.gserviceaccount.com\" \\\n    --role=\"roles/secretmanager.secretAccessor\"\n\n# Grant access to secrets\ngcloud secrets add-iam-policy-binding mcp-bearer-token \\\n    --member=\"serviceAccount:mcp-music-library-sa@$PROJECT_ID.iam.gserviceaccount.com\" \\\n    --role=\"roles/secretmanager.secretAccessor\"\n\ngcloud secrets add-iam-policy-binding db-user \\\n    --member=\"serviceAccount:mcp-music-library-sa@$PROJECT_ID.iam.gserviceaccount.com\" \\\n    --role=\"roles/secretmanager.secretAccessor\"\n\ngcloud secrets add-iam-policy-binding db-password \\\n    --member=\"serviceAccount:mcp-music-library-sa@$PROJECT_ID.iam.gserviceaccount.com\" \\\n    --role=\"roles/secretmanager.secretAccessor\"\n\ngcloud secrets add-iam-policy-binding db-name \\\n    --member=\"serviceAccount:mcp-music-library-sa@$PROJECT_ID.iam.gserviceaccount.com\" \\\n    --role=\"roles/secretmanager.secretAccessor\"\n\ngcloud secrets add-iam-policy-binding db-host \\\n    --member=\"serviceAccount:mcp-music-library-sa@$PROJECT_ID.iam.gserviceaccount.com\" \\\n    --role=\"roles/secretmanager.secretAccessor\"\n\ngcloud secrets add-iam-policy-binding db-port \\\n    --member=\"serviceAccount:mcp-music-library-sa@$PROJECT_ID.iam.gserviceaccount.com\" \\\n    --role=\"roles/secretmanager.secretAccessor\"\n\necho \"Setup complete!\"\necho \"GCS Bucket: $BUCKET_NAME\"\necho \"Cloud SQL Instance: mcp-music-library-db\"\necho \"Database: music_library\"\necho \"User: music_library_user\"\necho \"Password: $DB_PASSWORD (also stored in Secret Manager)\"\necho \"Bearer Token: stored in Secret Manager as 'mcp-bearer-token'\"\n```",
+      "testStrategy": "1. Verify Docker container builds successfully\n2. Test Cloud Run deployment with minimal configuration\n3. Validate environment variables and secrets are correctly set\n4. Test HTTPS and domain mapping\n5. Verify Cloud SQL connection works in production\n6. Test GCS bucket permissions\n7. Validate health checks and monitoring\n8. Test cold start performance\n9. Verify timeout configuration works for long-running processes\n10. Test end-to-end functionality in production environment",
+      "priority": "high",
+      "dependencies": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11
+      ],
+      "status": "pending",
+      "subtasks": [
+        {
+          "id": 1,
+          "title": "Dockerfile Creation and Optimization",
+          "description": "Create a production-ready Dockerfile following best practices including multi-stage builds, minimal base images, proper layer caching, and security considerations",
+          "dependencies": [],
+          "details": "Develop Dockerfile with optimized build instructions, use appropriate base image (Alpine or distroless), implement multi-stage builds to reduce image size, define environment variables with ENV, create .dockerignore file to exclude sensitive data and unnecessary files, ensure reproducible builds by specifying exact package versions, and validate the container runs stateless and ephemeral",
+          "status": "pending"
+        },
+        {
+          "id": 2,
+          "title": "Container Build and Registry Push",
+          "description": "Build the Docker container image using Cloud Build and push to Artifact Registry for deployment",
+          "dependencies": [
+            1
+          ],
+          "details": "Set up Artifact Registry repository, navigate to project directory with Dockerfile, execute 'gcloud builds submit --tag IMAGE_URL' to build on Google Cloud, verify image is pushed to registry with proper tagging convention (LOCATION-docker.pkg.dev/PROJECT_ID/REPO_NAME/PATH:TAG), implement image vulnerability scanning in CI/CD pipeline using security tools, and optimize build performance by leveraging cache",
+          "status": "pending"
+        },
+        {
+          "id": 3,
+          "title": "Environment Variable Configuration",
+          "description": "Set up environment variables for the Cloud Run service to configure application runtime behavior",
+          "dependencies": [
+            1
+          ],
+          "details": "Define all non-sensitive configuration variables needed by the application, create environment variable definitions for Cloud Run service (database connection strings without credentials, feature flags, API endpoints, logging levels), use ENV instructions in Dockerfile for default values, and document all environment variables with descriptions for team reference",
+          "status": "pending"
+        },
+        {
+          "id": 4,
+          "title": "Secret Management Implementation",
+          "description": "Configure secure secret management using Google Cloud Secret Manager for sensitive credentials and API keys",
+          "dependencies": [
+            3
+          ],
+          "details": "Create secrets in Google Cloud Secret Manager for database passwords, API keys, and other sensitive data, configure IAM permissions to allow Cloud Run service account to access specific secrets, set up secret mounting or environment variable injection for Cloud Run, ensure secrets are never exposed in Dockerfile or version control, implement secret rotation policies, and validate secret access from running containers",
+          "status": "pending"
+        },
+        {
+          "id": 5,
+          "title": "Cloud Run Service Configuration",
+          "description": "Deploy and configure the Cloud Run service with proper resource limits, scaling parameters, and networking settings",
+          "dependencies": [
+            2,
+            4
+          ],
+          "details": "Deploy container image to Cloud Run, declare resource requirements (CPU, memory limits and requests) to prevent infinite resource utilization and control costs, configure autoscaling parameters (min/max instances, concurrency), set request timeout and startup timeout values, configure service account with least-privilege IAM permissions, enable VPC connector if needed for private resources, and set up traffic splitting for blue-green deployments if required",
+          "status": "pending"
+        },
+        {
+          "id": 6,
+          "title": "Cloud SQL Connection Setup",
+          "description": "Configure secure connection between Cloud Run service and Cloud SQL database instance",
+          "dependencies": [
+            5
+          ],
+          "details": "Enable Cloud SQL Admin API, configure Cloud SQL connection using Unix socket (recommended) or TCP with Cloud SQL Proxy, add Cloud SQL connection string to Cloud Run service configuration, grant Cloud SQL Client IAM role to Cloud Run service account, configure connection pooling parameters, implement connection retry logic in application code, and test database connectivity from deployed service",
+          "status": "pending"
+        },
+        {
+          "id": 7,
+          "title": "GCS Permissions and Storage Configuration",
+          "description": "Set up Google Cloud Storage bucket access with proper IAM permissions for the Cloud Run service",
+          "dependencies": [
+            5
+          ],
+          "details": "Create or identify GCS buckets needed by the application, grant appropriate IAM roles to Cloud Run service account (Storage Object Viewer, Creator, or Admin based on requirements), configure bucket-level or object-level permissions, implement signed URLs for secure temporary access if needed, set up lifecycle policies for data retention, and validate read/write operations from the deployed service",
+          "status": "pending"
+        },
+        {
+          "id": 8,
+          "title": "HTTPS and Custom Domain Mapping",
+          "description": "Configure custom domain mapping with automatic HTTPS certificate provisioning for the Cloud Run service",
+          "dependencies": [
+            5
+          ],
+          "details": "Verify domain ownership in Google Cloud Console, map custom domain to Cloud Run service, configure DNS records (A or CNAME) to point to Cloud Run endpoints, enable automatic SSL/TLS certificate provisioning through Google-managed certificates, verify HTTPS is enforced and HTTP redirects properly, set up domain verification for additional domains if needed, and test domain resolution and certificate validity",
+          "status": "pending"
+        },
+        {
+          "id": 9,
+          "title": "Health Checks and Monitoring Setup",
+          "description": "Implement application health checks and configure comprehensive monitoring with Cloud Monitoring and logging",
+          "dependencies": [
+            5
+          ],
+          "details": "Implement /health or /readiness endpoint in application code, configure Cloud Run startup and liveness probes, set up Cloud Monitoring dashboards for key metrics (request latency, error rates, instance count, CPU/memory usage), configure log aggregation in Cloud Logging with appropriate filters, create alerting policies for critical thresholds (error rate spikes, high latency, resource exhaustion), enable Cloud Trace for request tracing, and set up uptime checks for availability monitoring",
+          "status": "pending"
+        },
+        {
+          "id": 10,
+          "title": "End-to-End Deployment Validation",
+          "description": "Perform comprehensive testing and validation of the entire production deployment to ensure all components work together correctly",
+          "dependencies": [
+            6,
+            7,
+            8,
+            9
+          ],
+          "details": "Execute smoke tests against deployed service endpoints, validate HTTPS access through custom domain, test database operations (read/write to Cloud SQL), verify GCS file operations (upload/download), confirm environment variables and secrets are properly injected, simulate load testing to validate autoscaling behavior, review monitoring dashboards and verify metrics collection, test health check endpoints respond correctly, validate logging output and error tracking, perform security audit of IAM permissions, and document deployment procedure and rollback steps",
+          "status": "pending"
+        }
+      ]
+    }
+  ]
+}

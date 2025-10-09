@@ -1,0 +1,147 @@
+# Task ID: 2
+# Title: Setup Database and Storage Infrastructure
+# Status: pending
+# Dependencies: 1
+# Priority: high
+# Description: Configure PostgreSQL for metadata storage and Google Cloud Storage for audio files with appropriate schemas and access controls.
+# Details:
+1. Create PostgreSQL database schema for audio metadata
+2. Setup Google Cloud Storage bucket for audio files
+3. Configure GCS authentication and access controls
+4. Implement database connection pool
+5. Create database migration scripts
+6. Setup GCS lifecycle policies for temporary files (24-hour deletion)
+7. Configure signed URL generation for secure streaming
+
+PostgreSQL Schema:
+```sql
+CREATE TABLE audio_tracks (
+  id UUID PRIMARY KEY,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  status VARCHAR(20) NOT NULL DEFAULT 'PENDING', -- PENDING, PROCESSING, COMPLETED, FAILED
+  
+  -- Metadata from ID3 tags
+  artist VARCHAR(255),
+  title VARCHAR(255) NOT NULL,
+  album VARCHAR(255),
+  genre VARCHAR(255),
+  year INTEGER,
+  
+  -- Technical specs
+  duration FLOAT,
+  channels INTEGER,
+  sample_rate INTEGER,
+  bitrate INTEGER,
+  format VARCHAR(20),
+  
+  -- Storage paths
+  audio_path TEXT NOT NULL,
+  thumbnail_path TEXT,
+  
+  -- Search vector
+  search_vector TSVECTOR
+);
+
+-- Create GIN index for full-text search
+CREATE INDEX idx_audio_tracks_search ON audio_tracks USING GIN(search_vector);
+
+-- Function to update search vector
+CREATE FUNCTION audio_tracks_search_update() RETURNS trigger AS $$
+BEGIN
+  NEW.search_vector := 
+    setweight(to_tsvector('english', COALESCE(NEW.artist, '')), 'A') ||
+    setweight(to_tsvector('english', COALESCE(NEW.title, '')), 'A') ||
+    setweight(to_tsvector('english', COALESCE(NEW.album, '')), 'B') ||
+    setweight(to_tsvector('english', COALESCE(NEW.genre, '')), 'C');
+  RETURN NEW;
+END
+$$ LANGUAGE plpgsql;
+
+-- Trigger to update search vector
+CREATE TRIGGER audio_tracks_search_update_trigger
+BEFORE INSERT OR UPDATE ON audio_tracks
+FOR EACH ROW EXECUTE PROCEDURE audio_tracks_search_update();
+```
+
+GCS Configuration:
+```python
+from google.cloud import storage
+import datetime
+
+def create_gcs_client():
+    return storage.Client()
+
+def generate_signed_url(bucket_name, blob_name, expiration=15):
+    """Generate a signed URL for a blob that expires in 'expiration' minutes."""
+    storage_client = create_gcs_client()
+    bucket = storage_client.bucket(bucket_name)
+    blob = bucket.blob(blob_name)
+    
+    url = blob.generate_signed_url(
+        version="v4",
+        expiration=datetime.timedelta(minutes=expiration),
+        method="GET"
+    )
+    
+    return url
+```
+
+# Test Strategy:
+1. Verify database connection and schema creation
+2. Test GCS bucket creation and access
+3. Validate signed URL generation and expiration
+4. Test database queries and full-text search functionality
+5. Verify GCS lifecycle policies are correctly applied
+6. Test database migration scripts
+7. Validate connection pooling under load
+
+# Subtasks:
+## 1. Design PostgreSQL Database Schema [pending]
+### Dependencies: None
+### Description: Design normalized database schema following best practices including table structures, relationships, indexes, and constraints to ensure optimal query performance and data integrity.
+### Details:
+Create entity-relationship diagrams, define tables using at least third normal form, establish naming conventions, design for append-only patterns where applicable, implement constraints for data validation, and plan index strategy for common query patterns. Consider using multiple named schemas instead of multiple databases for better cross-schema access.
+
+## 2. Provision PostgreSQL Database Instance [pending]
+### Dependencies: 2.1
+### Description: Set up and configure PostgreSQL database server with appropriate sizing, performance tuning parameters, and security settings.
+### Details:
+Select appropriate database size based on workload requirements, configure key performance parameters (shared_buffers, work_mem, maintenance_work_mem), set up proper authentication methods, configure pg_hba.conf for access control, and establish backup strategy. Remove public schema CREATE privileges for security.
+
+## 3. Create GCS Bucket and Configure Settings [pending]
+### Dependencies: None
+### Description: Provision Google Cloud Storage bucket with appropriate storage class, location, and versioning settings for application data storage.
+### Details:
+Create GCS bucket with appropriate naming convention, select storage class (Standard, Nearline, Coldline) based on access patterns, configure region/multi-region settings, enable versioning if needed, set up uniform or fine-grained access control, and configure CORS if required for browser access.
+
+## 4. Implement GCS Authentication and Access Control [pending]
+### Dependencies: 2.3
+### Description: Configure service accounts, IAM roles, and access policies to secure GCS bucket access for different application components and users.
+### Details:
+Create service accounts for application services, assign appropriate IAM roles (Storage Object Admin, Storage Object Viewer, Storage Object Creator), configure bucket-level and object-level permissions, set up workload identity for GKE if applicable, implement least-privilege access principles, and document credential management procedures.
+
+## 5. Configure Database Connection Pooling [pending]
+### Dependencies: 2.2
+### Description: Set up connection pooling mechanism to efficiently manage database connections and optimize resource utilization under load.
+### Details:
+Implement connection pooler (PgBouncer or Pgpool-II), configure pool size based on max_connections and expected concurrent users, set pool mode (session, transaction, or statement), configure timeouts and connection lifecycle parameters, implement health checks, and integrate with application connection strings.
+
+## 6. Develop Database Migration Scripts [pending]
+### Dependencies: 2.1, 2.2
+### Description: Create versioned migration scripts to implement schema design, including DDL statements, initial data population, and rollback procedures.
+### Details:
+Set up migration framework (Flyway, Liquibase, or Alembic), write CREATE TABLE statements with all constraints and indexes, implement foreign key relationships, create database functions and triggers if needed, develop rollback scripts, test migrations in non-production environment, and document migration execution order.
+
+## 7. Configure GCS Lifecycle Policies [pending]
+### Dependencies: 2.3
+### Description: Define and implement object lifecycle management rules to automatically transition or delete objects based on age and access patterns for cost optimization.
+### Details:
+Define lifecycle rules for object deletion after specified days, configure automatic transition to cheaper storage classes (Nearline, Coldline, Archive) based on age, set up rules for versioned object cleanup, implement conditional policies based on object metadata or creation date, test policy effectiveness, and monitor storage costs.
+
+## 8. Implement Signed URL Generation System [pending]
+### Dependencies: 2.4
+### Description: Build mechanism to generate time-limited signed URLs for secure temporary access to GCS objects without exposing credentials.
+### Details:
+Implement signed URL generation using service account credentials with signBlob permissions, configure appropriate expiration times based on use case, add optional content-type and response-disposition parameters, implement URL generation API endpoint or library function, add validation and error handling, test with various object types, and document usage patterns for application developers.
+
