@@ -1,0 +1,289 @@
+name: Database Provisioning and Testing
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'database/**'
+      - '.github/workflows/database-provisioning.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'database/**'
+      - '.github/workflows/database-provisioning.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+        - staging
+        - production
+      action:
+        description: 'Action to perform'
+        required: true
+        default: 'provision'
+        type: choice
+        options:
+        - provision
+        - migrate
+        - backup
+        - test
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: us-central1
+  INSTANCE_ID: loist-music-library-db
+  DATABASE_NAME: music_library
+
+jobs:
+  validate-configuration:
+    runs-on: ubuntu-latest
+    outputs:
+      should-provision: ${{ steps.check.outputs.should-provision }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate database configuration
+        run: |
+          echo "Validating database configuration files..."
+          python -m py_compile database/config.py
+          python -m py_compile database/migrate.py
+          echo "Configuration validation passed"
+
+      - name: Check if provisioning is needed
+        id: check
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.action }}" = "provision" ]; then
+            echo "should-provision=true" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "should-provision=true" >> $GITHUB_OUTPUT
+          else
+            echo "should-provision=false" >> $GITHUB_OUTPUT
+          fi
+
+  provision-database:
+    needs: validate-configuration
+    if: needs.validate-configuration.outputs.should-provision == 'true'
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'staging' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Authenticate to Google Cloud
+        run: |
+          gcloud auth activate-service-account --key-file=${{ secrets.GCP_SA_KEY }}
+          gcloud config set project ${{ env.PROJECT_ID }}
+
+      - name: Check if Cloud SQL instance exists
+        id: check-instance
+        run: |
+          if gcloud sql instances describe ${{ env.INSTANCE_ID }} --quiet 2>/dev/null; then
+            echo "instance-exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "instance-exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Cloud SQL instance
+        if: steps.check-instance.outputs.instance-exists == 'false'
+        run: |
+          echo "Creating Cloud SQL PostgreSQL instance..."
+          gcloud sql instances create ${{ env.INSTANCE_ID }} \
+            --database-version=POSTGRES_15 \
+            --tier=db-n1-standard-1 \
+            --region=${{ env.REGION }} \
+            --storage-type=SSD \
+            --storage-size=20GB \
+            --storage-auto-increase \
+            --backup-start-time=03:00 \
+            --enable-bin-log \
+            --maintenance-window-day=SUN \
+            --maintenance-window-hour=04 \
+            --retained-backups-count=7 \
+            --retained-transaction-log-days=7 \
+            --enable-point-in-time-recovery \
+            --deletion-protection
+
+      - name: Set root password
+        if: steps.check-instance.outputs.instance-exists == 'false'
+        run: |
+          echo "Setting root password..."
+          gcloud sql users set-password postgres \
+            --instance=${{ env.INSTANCE_ID }} \
+            --password=${{ secrets.DB_ROOT_PASSWORD }}
+
+      - name: Create database
+        run: |
+          echo "Creating application database..."
+          gcloud sql databases create ${{ env.DATABASE_NAME }} \
+            --instance=${{ env.INSTANCE_ID }}
+
+      - name: Create application user
+        run: |
+          echo "Creating application user..."
+          gcloud sql users create music_library_user \
+            --instance=${{ env.INSTANCE_ID }} \
+            --password=${{ secrets.DB_APP_PASSWORD }}
+
+      - name: Grant permissions
+        run: |
+          echo "Granting permissions to application user..."
+          gcloud sql databases patch ${{ env.DATABASE_NAME }} \
+            --instance=${{ env.INSTANCE_ID }} \
+            --database-flags=log_statement=all,log_min_duration_statement=1000
+
+  run-migrations:
+    needs: provision-database
+    if: always() && (needs.provision-database.result == 'success' || needs.validate-configuration.outputs.should-provision == 'false')
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'staging' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Setup Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Authenticate to Google Cloud
+        run: |
+          gcloud auth activate-service-account --key-file=${{ secrets.GCP_SA_KEY }}
+          gcloud config set project ${{ env.PROJECT_ID }}
+
+      - name: Get Cloud SQL instance connection name
+        id: get-connection
+        run: |
+          CONNECTION_NAME=$(gcloud sql instances describe ${{ env.INSTANCE_ID }} --format="value(connectionName)")
+          echo "connection-name=$CONNECTION_NAME" >> $GITHUB_OUTPUT
+
+      - name: Run database migrations
+        env:
+          DB_HOST: ${{ steps.get-connection.outputs.connection-name }}
+          DB_NAME: ${{ env.DATABASE_NAME }}
+          DB_USER: music_library_user
+          DB_PASSWORD: ${{ secrets.DB_APP_PASSWORD }}
+          DB_USE_CLOUD_SQL_PROXY: true
+        run: |
+          echo "Running database migrations..."
+          python database/migrate.py up
+
+  test-database:
+    needs: run-migrations
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'staging' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Setup Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Authenticate to Google Cloud
+        run: |
+          gcloud auth activate-service-account --key-file=${{ secrets.GCP_SA_KEY }}
+          gcloud config set project ${{ env.PROJECT_ID }}
+
+      - name: Get Cloud SQL instance connection name
+        id: get-connection
+        run: |
+          CONNECTION_NAME=$(gcloud sql instances describe ${{ env.INSTANCE_ID }} --format="value(connectionName)")
+          echo "connection-name=$CONNECTION_NAME" >> $GITHUB_OUTPUT
+
+      - name: Run database tests
+        env:
+          DB_HOST: ${{ steps.get-connection.outputs.connection-name }}
+          DB_NAME: ${{ env.DATABASE_NAME }}
+          DB_USER: music_library_user
+          DB_PASSWORD: ${{ secrets.DB_APP_PASSWORD }}
+          DB_USE_CLOUD_SQL_PROXY: true
+        run: |
+          echo "Running database tests..."
+          python -m pytest tests/test_database_connection.py -v
+
+      - name: Run performance tests
+        env:
+          DB_HOST: ${{ steps.get-connection.outputs.connection-name }}
+          DB_NAME: ${{ env.DATABASE_NAME }}
+          DB_USER: music_library_user
+          DB_PASSWORD: ${{ secrets.DB_APP_PASSWORD }}
+          DB_USE_CLOUD_SQL_PROXY: true
+        run: |
+          echo "Running performance tests..."
+          python database/test_queries.sql
+
+  create-backup:
+    if: github.event.inputs.action == 'backup'
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'staging' }}
+    steps:
+      - name: Setup Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Authenticate to Google Cloud
+        run: |
+          gcloud auth activate-service-account --key-file=${{ secrets.GCP_SA_KEY }}
+          gcloud config set project ${{ env.PROJECT_ID }}
+
+      - name: Create manual backup
+        run: |
+          echo "Creating manual backup..."
+          BACKUP_ID="backup-$(date +%Y%m%d-%H%M%S)"
+          gcloud sql backups create \
+            --instance=${{ env.INSTANCE_ID }} \
+            --description="Manual backup created by GitHub Actions" \
+            --backup-id=$BACKUP_ID
+          echo "Backup created with ID: $BACKUP_ID"
+
+  notify-completion:
+    needs: [provision-database, run-migrations, test-database]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify completion
+        run: |
+          if [ "${{ needs.provision-database.result }}" = "success" ] && [ "${{ needs.run-migrations.result }}" = "success" ] && [ "${{ needs.test-database.result }}" = "success" ]; then
+            echo "✅ Database provisioning completed successfully"
+          else
+            echo "❌ Database provisioning failed"
+            echo "Provision: ${{ needs.provision-database.result }}"
+            echo "Migrations: ${{ needs.run-migrations.result }}"
+            echo "Tests: ${{ needs.test-database.result }}"
+          fi

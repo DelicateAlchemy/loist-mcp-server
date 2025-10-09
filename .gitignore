@@ -62,3 +62,5 @@ env/
 # Task files
 # tasks.json
 # tasks/ 
+service-account-key.json
+.env.database
