@@ -68,7 +68,10 @@ uv pip install fastmcp
 loist-mcp-server/
 ├── src/
 │   ├── server.py          # Main FastMCP server implementation
-│   └── config.py          # Configuration management
+│   ├── config.py          # Configuration management
+│   └── auth/              # Authentication module
+│       ├── __init__.py
+│       └── bearer.py      # Bearer token authentication
 ├── tests/                  # Test files
 ├── docs/                   # Documentation
 ├── scripts/                # Utility scripts
@@ -102,6 +105,7 @@ python src/server.py
 - ✅ FastMCP server initialization (v2.12.4, MCP v1.16.0)
 - ✅ Advanced configuration management with Pydantic
 - ✅ Lifespan hooks (startup/shutdown)
+- ✅ Bearer token authentication (SimpleBearerAuth)
 - ✅ Health check tool with extended status
 - ✅ Structured logging (JSON/text formats)
 - ✅ Duplicate handling policies
@@ -110,7 +114,8 @@ python src/server.py
 
 ### Planned Features
 
-- 🔄 Bearer token authentication
+- 🔄 Advanced OAuth providers (GitHub, Google, etc.)
+- 🔄 JWT token support
 - 🔄 Audio file ingestion
 - 🔄 Embedding generation
 - 🔄 CORS configuration
@@ -197,6 +202,57 @@ ENABLE_HEALTHCHECK=true
 - **Sensible Defaults**: Server works out-of-the-box without configuration
 - **Type Safety**: Pydantic validates all configuration values
 - **Lifespan Management**: Startup and shutdown hooks for resource management
+
+## Authentication
+
+The server implements bearer token authentication for secure access control.
+
+### Enabling Authentication
+
+Set these environment variables in your `.env` file:
+
+```env
+AUTH_ENABLED=true
+BEARER_TOKEN=your-secret-token-here
+```
+
+**Important Security Notes:**
+- 🔒 **Never commit bearer tokens to version control**
+- 🔑 Use strong, randomly generated tokens (minimum 32 characters)
+- 🔄 Rotate tokens regularly in production
+- 📝 Store tokens securely (e.g., using a secrets manager)
+
+### Development Mode (No Authentication)
+
+For local development, authentication can be disabled:
+
+```env
+AUTH_ENABLED=false
+```
+
+The server will run without authentication and log a warning.
+
+### Using the Server with Authentication
+
+When authentication is enabled, all MCP protocol requests must include a valid bearer token in the Authorization header:
+
+```
+Authorization: Bearer your-secret-token-here
+```
+
+### Authentication Implementation
+
+- **SimpleBearerAuth**: MVP implementation in `src/auth/bearer.py`
+- **Token Verification**: Validates bearer tokens against configured value
+- **Access Control**: Returns `AccessToken` with client_id and scopes
+- **Logging**: Tracks authentication attempts and failures
+
+### Future Authentication Plans
+
+- JWT token support with expiration
+- OAuth providers (GitHub, Google, Microsoft)
+- API key management system
+- Role-based access control (RBAC)
 
 ## API Documentation
 

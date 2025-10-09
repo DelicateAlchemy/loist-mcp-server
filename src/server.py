@@ -4,8 +4,10 @@ FastMCP-based server for audio ingestion and embedding
 """
 import logging
 from contextlib import asynccontextmanager
+from typing import Optional
 from fastmcp import FastMCP
 from config import config
+from auth import SimpleBearerAuth
 
 # Configure logging
 config.configure_logging()
@@ -21,6 +23,7 @@ async def lifespan(app):
     logger.info(f"🚀 Starting {config.server_name} v{config.server_version}")
     logger.info(f"📡 Transport: {config.server_transport}")
     logger.info(f"🔧 Log Level: {config.log_level}")
+    logger.info(f"🔐 Authentication: {'enabled' if config.auth_enabled else 'disabled'}")
     logger.info(f"✅ Health check enabled: {config.enable_healthcheck}")
     
     yield
@@ -29,11 +32,23 @@ async def lifespan(app):
     logger.info(f"🛑 Shutting down {config.server_name}")
 
 
+# Initialize authentication if enabled
+auth: Optional[SimpleBearerAuth] = None
+if config.auth_enabled and config.bearer_token:
+    auth = SimpleBearerAuth(token=config.bearer_token, enabled=True)
+    logger.info("🔒 Bearer token authentication configured")
+elif config.auth_enabled:
+    logger.warning("⚠️  Authentication enabled but no bearer token configured!")
+else:
+    logger.info("🔓 Running without authentication (development mode)")
+
+
 # Initialize FastMCP server with advanced configuration
 mcp = FastMCP(
     name=config.server_name,
     instructions=config.server_instructions,
     lifespan=lifespan,
+    auth=auth,
     on_duplicate_tools=config.on_duplicate_tools,
     on_duplicate_resources=config.on_duplicate_resources,
     on_duplicate_prompts=config.on_duplicate_prompts,
