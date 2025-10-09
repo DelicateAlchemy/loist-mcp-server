@@ -267,15 +267,15 @@
       "dependencies": [
         3
       ],
-      "status": "pending",
+      "status": "in-progress",
       "subtasks": [
         {
           "id": 1,
           "title": "ID3 Tag Extraction",
           "description": "Extract ID3 tags from audio files to retrieve embedded metadata such as title, artist, and album.",
           "dependencies": [],
-          "details": "Use libraries like Mutagen or TagLib to parse ID3 tags from MP3 files. Ensure support for different tag versions and handle format-specific parsing.",
-          "status": "pending"
+          "details": "Use libraries like Mutagen or TagLib to parse ID3 tags from MP3 files. Ensure support for different tag versions and handle format-specific parsing.\n<info added on 2025-10-09T14:50:26.394Z>\n**ID3 Tag Extraction Implementation Summary:**\n\nThe MetadataExtractor class has been successfully implemented in src/metadata/extractor.py with the following capabilities:\n- Extracts metadata from multiple audio formats: MP3 (ID3v1, ID3v2.3, ID3v2.4), FLAC/OGG (Vorbis comments), M4A/AAC (MP4 tags), and WAV (RIFF INFO)\n- Extracts comprehensive metadata fields including artist, title, album, genre, year, duration, channels, sample rate, bitrate, and format\n- Implements robust error handling for file not found, unsupported formats, missing tags, invalid formats, and corrupted files\n- Provides fallback mechanisms between tag versions and uses filename as fallback title when tag is missing\n\nComplete documentation is available in docs/task-4.1-id3-tag-extraction.md, including supported formats reference, tag mapping, usage examples, and best practices. A comprehensive test suite with 20+ tests has been created in tests/test_metadata_extraction.py.\n</info added on 2025-10-09T14:50:26.394Z>",
+          "status": "done"
         },
         {
           "id": 2,
