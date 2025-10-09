@@ -9,9 +9,11 @@ Provides extraction of ID3 tags and audio metadata from various formats:
 - WAV (RIFF INFO)
 """
 
+from __future__ import annotations
+
 import logging
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Union
 from mutagen import File as MutagenFile
 from mutagen.id3 import ID3, ID3NoHeaderError, APIC
 from mutagen.mp3 import MP3

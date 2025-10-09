@@ -479,7 +479,7 @@ class TestTechnicalSpecExtraction:
 class TestArtworkExtraction:
     """Test artwork extraction from audio files."""
     
-    @patch('mutagen.mp3.MP3')
+    @patch('src.metadata.extractor.MP3')
     def test_extract_artwork_mp3(self, mock_mp3):
         """Test artwork extraction from MP3."""
         from src.metadata import extract_artwork
@@ -491,11 +491,11 @@ class TestArtworkExtraction:
         mock_apic.mime = 'image/jpeg'
         mock_apic.data = b'fake_jpeg_data'
         
+        mock_tags = Mock()
+        mock_tags.values = Mock(return_value=[mock_apic])
+        
         mock_audio = Mock()
-        mock_audio.tags = {
-            'APIC:': mock_apic
-        }
-        mock_audio.tags.values = Mock(return_value=[mock_apic])
+        mock_audio.tags = mock_tags
         mock_mp3.return_value = mock_audio
         
         with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as f:
@@ -514,7 +514,7 @@ class TestArtworkExtraction:
         finally:
             temp_path.unlink()
     
-    @patch('mutagen.flac.FLAC')
+    @patch('src.metadata.extractor.FLAC')
     def test_extract_artwork_flac(self, mock_flac):
         """Test artwork extraction from FLAC."""
         from src.metadata import extract_artwork
@@ -545,7 +545,7 @@ class TestArtworkExtraction:
         finally:
             temp_path.unlink()
     
-    @patch('mutagen.mp4.MP4')
+    @patch('src.metadata.extractor.MP4')
     def test_extract_artwork_mp4(self, mock_mp4):
         """Test artwork extraction from M4A."""
         from src.metadata import extract_artwork
@@ -573,7 +573,7 @@ class TestArtworkExtraction:
         finally:
             temp_path.unlink()
     
-    @patch('mutagen.mp4.MP4')
+    @patch('src.metadata.extractor.MP4')
     def test_extract_artwork_mp4_png(self, mock_mp4):
         """Test PNG artwork extraction from M4A."""
         from src.metadata import extract_artwork
@@ -600,15 +600,17 @@ class TestArtworkExtraction:
         finally:
             temp_path.unlink()
     
-    @patch('mutagen.mp3.MP3')
+    @patch('src.metadata.extractor.MP3')
     def test_extract_artwork_no_artwork(self, mock_mp3):
         """Test handling when no artwork is present."""
         from src.metadata import extract_artwork
         
         # Mock MP3 with no APIC frames
+        mock_tags = Mock()
+        mock_tags.values = Mock(return_value=[])
+        
         mock_audio = Mock()
-        mock_audio.tags = {}
-        mock_audio.tags.values = Mock(return_value=[])
+        mock_audio.tags = mock_tags
         mock_mp3.return_value = mock_audio
         
         with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as f:
@@ -623,7 +625,7 @@ class TestArtworkExtraction:
         finally:
             temp_path.unlink()
     
-    @patch('mutagen.mp3.MP3')
+    @patch('src.metadata.extractor.MP3')
     def test_extract_artwork_with_destination(self, mock_mp3):
         """Test artwork extraction to specific destination."""
         from src.metadata import extract_artwork
@@ -635,9 +637,11 @@ class TestArtworkExtraction:
         mock_apic.mime = 'image/jpeg'
         mock_apic.data = b'fake_jpeg'
         
+        mock_tags = Mock()
+        mock_tags.values = Mock(return_value=[mock_apic])
+        
         mock_audio = Mock()
-        mock_audio.tags = {'APIC:': mock_apic}
-        mock_audio.tags.values = Mock(return_value=[mock_apic])
+        mock_audio.tags = mock_tags
         mock_mp3.return_value = mock_audio
         
         with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as f:
@@ -655,7 +659,7 @@ class TestArtworkExtraction:
             finally:
                 temp_path.unlink()
     
-    @patch('mutagen.mp3.MP3')
+    @patch('src.metadata.extractor.MP3')
     def test_extract_artwork_priority_front_cover(self, mock_mp3):
         """Test that front cover is prioritized."""
         from src.metadata import extract_artwork
@@ -672,9 +676,11 @@ class TestArtworkExtraction:
         mock_apic_front.mime = 'image/jpeg'
         mock_apic_front.data = b'front_cover'
         
+        mock_tags = Mock()
+        mock_tags.values = Mock(return_value=[mock_apic_back, mock_apic_front])
+        
         mock_audio = Mock()
-        mock_audio.tags = Mock()
-        mock_audio.tags.values = Mock(return_value=[mock_apic_back, mock_apic_front])
+        mock_audio.tags = mock_tags
         mock_mp3.return_value = mock_audio
         
         with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as f:
