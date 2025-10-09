@@ -31,6 +31,19 @@ import psycopg2
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 from psycopg2 import sql
 
+# Try to import application config and pool
+try:
+    from src.config import config as app_config
+    HAS_APP_CONFIG = True
+except ImportError:
+    HAS_APP_CONFIG = False
+
+try:
+    from database.pool import get_connection
+    HAS_POOL = True
+except ImportError:
+    HAS_POOL = False
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -41,9 +54,20 @@ logger = logging.getLogger(__name__)
 class DatabaseMigrator:
     """Handles database migrations with rollback support."""
     
-    def __init__(self, database_url: str):
-        self.database_url = database_url
+    def __init__(self, database_url: Optional[str] = None):
+        # Get database URL from parameter, config, or environment
+        if database_url:
+            self.database_url = database_url
+        elif HAS_APP_CONFIG and app_config.database_url:
+            self.database_url = app_config.database_url
+        else:
+            self.database_url = os.getenv("DATABASE_URL")
+        
+        if not self.database_url:
+            raise ValueError("Database URL must be provided via parameter, config, or DATABASE_URL env var")
+        
         self.migrations_dir = Path(__file__).parent / "migrations"
+        self.use_pool = False  # Use direct connection for migrations by default
         
     def get_connection(self):
         """Get database connection with proper error handling."""
