@@ -24,6 +24,13 @@ from .validators import (
     validate_url,
 )
 
+from .ssrf_protection import (
+    SSRFProtector,
+    SSRFProtectionError,
+    validate_ssrf,
+    is_private_ip,
+)
+
 __all__ = [
     "HTTPDownloader",
     "download_from_url",
@@ -33,5 +40,9 @@ __all__ = [
     "URLSchemeValidator",
     "URLValidationError",
     "validate_url",
+    "SSRFProtector",
+    "SSRFProtectionError",
+    "validate_ssrf",
+    "is_private_ip",
 ]
 

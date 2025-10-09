@@ -140,11 +140,25 @@ Implemented comprehensive URL scheme validation to prevent security vulnerabilit
 - Established first line of defense in the security pipeline: URL Scheme Validation → SSRF Protection → Download
 </info added on 2025-10-09T14:35:07.526Z>
 
-## 3. Apply SSRF Protection [pending]
+## 3. Apply SSRF Protection [done]
 ### Dependencies: 3.2
 ### Description: Implement safeguards against Server-Side Request Forgery (SSRF) attacks during URL processing and download.
 ### Details:
 Validate URLs to prevent access to internal IP ranges, localhost, or other restricted resources.
+<info added on 2025-10-09T14:40:37.668Z>
+SSRF Protection Implementation:
+- Created comprehensive SSRFProtector class in src/downloader/ssrf_protection.py
+- Implemented blocking for 15+ private and reserved IP ranges including RFC 1918 Private (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16), Loopback (127.0.0.0/8, ::1/128), Link-local, Multicast, and other Reserved ranges
+- Added cloud metadata endpoint protection for AWS, GCP, and Azure
+- Implemented DNS resolution validation to prevent DNS rebinding attacks
+- Integrated protection into HTTPDownloader download flow
+
+Security features include private IP range detection, cloud metadata endpoint detection, DNS resolution with validation, hostname to IP resolution, multi-IP validation, and DNS resolution timeout.
+
+The implementation prevents multiple attack scenarios including internal service access, cloud credential theft, localhost port scanning, DNS rebinding attacks, IPv6 private network access, and link-local address exploitation.
+
+Created comprehensive test suite with 40+ tests and detailed documentation in docs/task-3.3-ssrf-protection.md covering SSRF attacks, protection mechanisms, implementation details, and best practices.
+</info added on 2025-10-09T14:40:37.668Z>
 
 ## 4. Handle File Size Validation [pending]
 ### Dependencies: 3.3

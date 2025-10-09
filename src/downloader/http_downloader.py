@@ -21,6 +21,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 from .validators import URLSchemeValidator, URLValidationError
+from .ssrf_protection import SSRFProtector, SSRFProtectionError
 
 logger = logging.getLogger(__name__)
 
@@ -205,6 +206,9 @@ class HTTPDownloader:
         """
         # Validate and normalize URL
         url = self.validate_url_scheme(url)
+        
+        # SSRF protection
+        SSRFProtector.validate_url(url, check_dns=True)
         
         # Check file size
         try:
