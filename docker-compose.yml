@@ -33,6 +33,14 @@ services:
       # Feature Flags
       - ENABLE_HEALTHCHECK=true
       
+      # Database Configuration
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=loist_mvp
+      - DB_USER=loist_user
+      - DB_PASSWORD=dev_password
+      - DATABASE_URL=postgresql://loist_user:dev_password@postgres:5432/loist_mvp
+      
       # Python
       - PYTHONUNBUFFERED=1
       - PYTHONDONTWRITEBYTECODE=1
@@ -40,6 +48,8 @@ services:
     volumes:
       # Mount source code for live development (hot reload)
       - ./src:/app/src:ro
+      # Mount database migrations and config
+      - ./database:/app/database:ro
       # Mount for local storage (when implementing file features)
       - ./storage:/app/storage
     
@@ -55,20 +65,20 @@ services:
     networks:
       - mcp-network
 
-  # Future: PostgreSQL for metadata storage
-  # postgres:
-  #   image: postgres:16-alpine
-  #   container_name: music-library-db
-  #   environment:
-  #     - POSTGRES_DB=music_library
-  #     - POSTGRES_USER=mcp_user
-  #     - POSTGRES_PASSWORD=dev_password
-  #   ports:
-  #     - "5432:5432"
-  #   volumes:
-  #     - postgres_data:/var/lib/postgresql/data
-  #   networks:
-  #     - mcp-network
+  # PostgreSQL for metadata storage
+  postgres:
+    image: postgres:16-alpine
+    container_name: music-library-db
+    environment:
+      - POSTGRES_DB=loist_mvp
+      - POSTGRES_USER=loist_user
+      - POSTGRES_PASSWORD=dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - mcp-network
 
 networks:
   mcp-network:
