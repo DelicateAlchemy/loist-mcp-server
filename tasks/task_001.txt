@@ -171,11 +171,18 @@ Comprehensive testing has verified functionality for valid tokens, invalid token
 The authentication system is now production-ready for MVP with a clear upgrade path to more advanced authentication methods.
 </info added on 2025-10-09T10:41:00.353Z>
 
-## 4. Server Configuration (Settings/Env) [pending]
+## 4. Server Configuration (Settings/Env) [done]
 ### Dependencies: 1.2
 ### Description: Configure server behavior using settings, environment variables, and .env files.
 ### Details:
 Set host, port, log level, duplicate component policies, and other settings via constructor arguments, environment variables (FASTMCP_SERVER_*), or .env files. Access and validate settings as needed.
+<info added on 2025-10-09T10:48:53.141Z>
+The server configuration system has been implemented using Pydantic Settings in `src/config.py`, providing type-safe configuration with validation, environment variable support via .env files, and sensible defaults. The system configures server runtime settings (host, port, transport), logging options, duplicate component policies (tools, resources, prompts), authentication settings, MCP protocol configuration, performance parameters, and feature flags. 
+
+Our implementation is compatible with FastMCP's environment variable approach but uses a cleaner naming convention (SERVER_HOST vs FASTMCP_SERVER_HOST). The configuration is centralized, supports environment variable overrides, includes type validation, and works with sensible defaults out-of-the-box.
+
+Settings are accessible via a global config instance (`from config import config`), used throughout the server and authentication modules, and validated at startup with clear error messages. Comprehensive documentation has been added to README.md, including a complete Configuration section with all environment variables, examples, features list, and default values.
+</info added on 2025-10-09T10:48:53.141Z>
 
 ## 5. Error Handling & Logging [pending]
 ### Dependencies: 1.2, 1.4
