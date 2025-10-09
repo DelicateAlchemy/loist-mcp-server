@@ -67,13 +67,15 @@ uv pip install fastmcp
 ```
 loist-mcp-server/
 ├── src/
-│   └── server.py          # Main FastMCP server implementation
+│   ├── server.py          # Main FastMCP server implementation
+│   └── config.py          # Configuration management
 ├── tests/                  # Test files
 ├── docs/                   # Documentation
 ├── scripts/                # Utility scripts
 ├── tasks/                  # Task management files
 ├── requirements.txt        # Python dependencies
 ├── pyproject.toml         # Project configuration
+├── .env.example           # Example environment variables
 └── README.md              # This file
 ```
 
@@ -97,9 +99,13 @@ python src/server.py
 
 ### Current Implementation
 
-- ✅ FastMCP server initialization
-- ✅ Health check endpoint
-- ✅ Basic project structure
+- ✅ FastMCP server initialization (v2.12.4, MCP v1.16.0)
+- ✅ Advanced configuration management with Pydantic
+- ✅ Lifespan hooks (startup/shutdown)
+- ✅ Health check tool with extended status
+- ✅ Structured logging (JSON/text formats)
+- ✅ Duplicate handling policies
+- ✅ Environment variable support
 - ✅ Python 3.11+ support
 
 ### Planned Features
@@ -109,7 +115,7 @@ python src/server.py
 - 🔄 Embedding generation
 - 🔄 CORS configuration
 - 🔄 Docker containerization
-- 🔄 Comprehensive error handling
+- 🔄 HTTP/SSE transport modes
 
 ## Development
 
@@ -139,17 +145,58 @@ ruff check src/ tests/
 
 ## Configuration
 
-Configuration is managed through environment variables. Create a `.env` file in the project root:
+Configuration is managed through environment variables using the `src/config.py` module with Pydantic Settings.
+
+### Environment Variables
+
+Create a `.env` file in the project root (see `.env.example` for reference):
 
 ```env
-# Server Configuration
+# Server Identity
+SERVER_NAME="Music Library MCP"
+SERVER_VERSION="0.1.0"
+SERVER_INSTRUCTIONS="Your custom instructions here"
+
+# Server Runtime
+SERVER_HOST=0.0.0.0
+SERVER_PORT=8080
+SERVER_TRANSPORT=stdio  # Options: stdio, http, sse
+
+# Authentication (future)
 BEARER_TOKEN=your-secret-token-here
-HOST=0.0.0.0
-PORT=8080
+AUTH_ENABLED=false
 
 # Logging
-LOG_LEVEL=INFO
+LOG_LEVEL=INFO    # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
+LOG_FORMAT=text   # Options: json, text
+
+# MCP Protocol
+MCP_PROTOCOL_VERSION=2024-11-05
+INCLUDE_FASTMCP_META=true
+
+# Duplicate Handling Policies
+ON_DUPLICATE_TOOLS=error      # Options: error, warn, replace, ignore
+ON_DUPLICATE_RESOURCES=warn   # Options: error, warn, replace, ignore
+ON_DUPLICATE_PROMPTS=replace  # Options: error, warn, replace, ignore
+
+# Performance
+MAX_WORKERS=4
+REQUEST_TIMEOUT=30
+
+# Feature Flags
+ENABLE_CORS=true
+CORS_ORIGINS=*
+ENABLE_METRICS=false
+ENABLE_HEALTHCHECK=true
 ```
+
+### Configuration Features
+
+- **Centralized Configuration**: All settings in `src/config.py` using Pydantic
+- **Environment Variable Support**: Override any setting via `.env` file
+- **Sensible Defaults**: Server works out-of-the-box without configuration
+- **Type Safety**: Pydantic validates all configuration values
+- **Lifespan Management**: Startup and shutdown hooks for resource management
 
 ## API Documentation
 

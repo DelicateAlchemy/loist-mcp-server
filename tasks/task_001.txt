@@ -107,11 +107,54 @@ Create a virtual environment, install FastMCP (and optionally WebSocket support)
 All temporary test files cleaned up. Project initialization is 100% complete and verified working.
 </info added on 2025-10-09T10:21:06.570Z>
 
-## 2. FastMCP Server Instantiation [pending]
+## 2. FastMCP Server Instantiation [done]
 ### Dependencies: 1.1
 ### Description: Create and configure the core FastMCP server instance.
 ### Details:
 Instantiate the FastMCP class, optionally providing a name, instructions, and initial settings. This forms the foundation for adding tools, resources, and further configuration.
+<info added on 2025-10-09T10:28:15.888Z>
+Successfully configured the core FastMCP server instance with advanced settings:
+
+**Configuration Management:**
+- Created `src/config.py` with Pydantic Settings for type-safe configuration
+- Centralized all settings with environment variable support
+- Sensible defaults - server works out-of-the-box
+- Configuration includes: server identity, runtime settings, logging, MCP protocol, duplicate policies, performance tuning, and feature flags
+
+**Server Enhancement:**
+- Enhanced server instantiation with all advanced FastMCP parameters
+- Added `name`, `instructions`, `lifespan`, `on_duplicate_*` policies, `include_fastmcp_meta`
+- Configured duplicate handling: tools=error, resources=warn, prompts=replace
+
+**Lifespan Management:**
+- Implemented async lifespan context manager
+- Startup logs: server name, version, transport, log level, features
+- Shutdown log with graceful cleanup
+- Verified working: startup logs show correctly, shutdown executes properly
+
+**Logging System:**
+- Structured logging with configurable levels (DEBUG/INFO/WARNING/ERROR/CRITICAL)
+- Support for both text and JSON formats
+- Logger instances per module
+- Health check includes debug logging
+
+**Health Check Enhancement:**
+- Extended to return: status, service, version, transport, log_level
+- Provides comprehensive server state information
+
+**Testing:**
+- Configuration loads correctly with all settings
+- Server instantiates with advanced parameters
+- Lifespan hooks execute (startup and shutdown logs confirmed)
+- Health check returns extended status
+- All tools register properly
+
+**Documentation:**
+- Updated README.md with comprehensive configuration section
+- Documented all environment variables and options
+- Added configuration features list
+- Updated project structure and feature lists
+</info added on 2025-10-09T10:28:15.888Z>
 
 ## 3. Authentication Setup [pending]
 ### Dependencies: 1.2
