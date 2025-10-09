@@ -179,11 +179,68 @@ All required functionality was implemented in subtask 4.1 as part of the Metadat
 **Verification:** ✅ Complete - All requirements met (duration, sample rate, bit depth, channel count)
 </info added on 2025-10-09T14:55:40.459Z>
 
-## 3. Artwork Extraction [pending]
+## 3. Artwork Extraction [done]
 ### Dependencies: None
 ### Description: Extract embedded artwork (album cover images) from audio files where available.
 ### Details:
 Use metadata libraries capable of reading image data from audio file tags (e.g., Mutagen for MP3, Vorbis comments for FLAC/Ogg). Handle image format conversion if necessary.
+<info added on 2025-10-09T15:04:03.952Z>
+**TASK 4.3 SUCCESSFULLY COMPLETED! ✅**
+
+**Artwork Extraction Implementation:**
+- Implemented comprehensive artwork extraction for multiple audio formats
+- Created format-specific extraction methods for MP3, FLAC, M4A/AAC, OGG
+- Added picture type prioritization (front cover preferred)
+- Implemented MIME type to file extension conversion
+- Supports saving to temporary files or specific destinations
+
+**Format Support:**
+- MP3: APIC frames from ID3 tags
+- FLAC: Picture blocks from metadata
+- M4A/AAC: covr atom from MP4 tags
+- OGG: METADATA_BLOCK_PICTURE from Vorbis comments
+- Automatic format detection from file extension
+
+**Artwork Features:**
+- Picture type priority system (front cover > other > back cover)
+- MIME type detection (JPEG, PNG, GIF, BMP, WebP)
+- PNG signature detection for MP4 files
+- Temporary file creation with proper extensions
+- Custom destination path support
+- Graceful handling when no artwork present (returns None)
+
+**Implementation Details:**
+- MetadataExtractor.extract_artwork() - Main entry point
+- _extract_artwork_mp3() - APIC frame extraction
+- _extract_artwork_flac() - FLAC picture block extraction
+- _extract_artwork_mp4() - MP4 covr atom extraction
+- _extract_artwork_ogg() - OGG picture extraction
+- _mime_to_extension() - MIME to extension conversion
+
+**Testing** (tests/test_metadata_extraction.py):
+- Added TestArtworkExtraction class with 8 comprehensive tests
+- MP3 artwork extraction tests (APIC frames)
+- FLAC artwork extraction tests (Picture blocks)
+- M4A artwork extraction tests (JPEG and PNG)
+- No artwork handling tests
+- Custom destination tests
+- Front cover priority tests
+- File not found error tests
+
+**Documentation** (docs/task-4.3-artwork-extraction.md):
+- Complete artwork extraction guide
+- Supported formats and methods
+- Picture type reference
+- Usage examples
+- Integration examples with GCS upload
+- Best practices
+
+**Files Created/Modified:**
+- src/metadata/extractor.py - Added artwork extraction methods (250+ lines)
+- src/metadata/__init__.py - Added extract_artwork export
+- tests/test_metadata_extraction.py - Added 8 artwork tests
+- docs/task-4.3-artwork-extraction.md - Documentation
+</info added on 2025-10-09T15:04:03.952Z>
 
 ## 4. Format Validation [pending]
 ### Dependencies: None

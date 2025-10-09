@@ -476,6 +476,232 @@ class TestTechnicalSpecExtraction:
             temp_path.unlink()
 
 
+class TestArtworkExtraction:
+    """Test artwork extraction from audio files."""
+    
+    @patch('mutagen.mp3.MP3')
+    def test_extract_artwork_mp3(self, mock_mp3):
+        """Test artwork extraction from MP3."""
+        from src.metadata import extract_artwork
+        from mutagen.id3 import APIC
+        
+        # Mock MP3 with APIC frame
+        mock_apic = APIC()
+        mock_apic.type = 3  # Front cover
+        mock_apic.mime = 'image/jpeg'
+        mock_apic.data = b'fake_jpeg_data'
+        
+        mock_audio = Mock()
+        mock_audio.tags = {
+            'APIC:': mock_apic
+        }
+        mock_audio.tags.values = Mock(return_value=[mock_apic])
+        mock_mp3.return_value = mock_audio
+        
+        with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as f:
+            temp_path = Path(f.name)
+            f.write(b"fake mp3")
+        
+        try:
+            artwork_path = extract_artwork(temp_path)
+            
+            assert artwork_path is not None
+            assert artwork_path.exists()
+            assert artwork_path.suffix == '.jpg'
+            
+            # Cleanup
+            artwork_path.unlink()
+        finally:
+            temp_path.unlink()
+    
+    @patch('mutagen.flac.FLAC')
+    def test_extract_artwork_flac(self, mock_flac):
+        """Test artwork extraction from FLAC."""
+        from src.metadata import extract_artwork
+        
+        # Mock FLAC picture
+        mock_picture = Mock()
+        mock_picture.type = 3  # Front cover
+        mock_picture.mime = 'image/png'
+        mock_picture.data = b'fake_png_data'
+        
+        mock_audio = Mock()
+        mock_audio.pictures = [mock_picture]
+        mock_flac.return_value = mock_audio
+        
+        with tempfile.NamedTemporaryFile(suffix='.flac', delete=False) as f:
+            temp_path = Path(f.name)
+            f.write(b"fake flac")
+        
+        try:
+            artwork_path = extract_artwork(temp_path)
+            
+            assert artwork_path is not None
+            assert artwork_path.exists()
+            assert artwork_path.suffix == '.png'
+            
+            # Cleanup
+            artwork_path.unlink()
+        finally:
+            temp_path.unlink()
+    
+    @patch('mutagen.mp4.MP4')
+    def test_extract_artwork_mp4(self, mock_mp4):
+        """Test artwork extraction from M4A."""
+        from src.metadata import extract_artwork
+        
+        # Mock MP4 cover art (JPEG)
+        jpeg_data = b'\xff\xd8\xff\xe0fake_jpeg'
+        
+        mock_audio = Mock()
+        mock_audio.tags = {'covr': [jpeg_data]}
+        mock_mp4.return_value = mock_audio
+        
+        with tempfile.NamedTemporaryFile(suffix='.m4a', delete=False) as f:
+            temp_path = Path(f.name)
+            f.write(b"fake m4a")
+        
+        try:
+            artwork_path = extract_artwork(temp_path)
+            
+            assert artwork_path is not None
+            assert artwork_path.exists()
+            assert artwork_path.suffix == '.jpg'
+            
+            # Cleanup
+            artwork_path.unlink()
+        finally:
+            temp_path.unlink()
+    
+    @patch('mutagen.mp4.MP4')
+    def test_extract_artwork_mp4_png(self, mock_mp4):
+        """Test PNG artwork extraction from M4A."""
+        from src.metadata import extract_artwork
+        
+        # Mock MP4 cover art (PNG signature)
+        png_data = b'\x89PNG\r\n\x1a\nfake_png'
+        
+        mock_audio = Mock()
+        mock_audio.tags = {'covr': [png_data]}
+        mock_mp4.return_value = mock_audio
+        
+        with tempfile.NamedTemporaryFile(suffix='.m4a', delete=False) as f:
+            temp_path = Path(f.name)
+            f.write(b"fake m4a")
+        
+        try:
+            artwork_path = extract_artwork(temp_path)
+            
+            assert artwork_path is not None
+            assert artwork_path.suffix == '.png'
+            
+            # Cleanup
+            artwork_path.unlink()
+        finally:
+            temp_path.unlink()
+    
+    @patch('mutagen.mp3.MP3')
+    def test_extract_artwork_no_artwork(self, mock_mp3):
+        """Test handling when no artwork is present."""
+        from src.metadata import extract_artwork
+        
+        # Mock MP3 with no APIC frames
+        mock_audio = Mock()
+        mock_audio.tags = {}
+        mock_audio.tags.values = Mock(return_value=[])
+        mock_mp3.return_value = mock_audio
+        
+        with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as f:
+            temp_path = Path(f.name)
+            f.write(b"fake mp3")
+        
+        try:
+            artwork_path = extract_artwork(temp_path)
+            
+            # Should return None, not raise error
+            assert artwork_path is None
+        finally:
+            temp_path.unlink()
+    
+    @patch('mutagen.mp3.MP3')
+    def test_extract_artwork_with_destination(self, mock_mp3):
+        """Test artwork extraction to specific destination."""
+        from src.metadata import extract_artwork
+        from mutagen.id3 import APIC
+        
+        # Mock APIC frame
+        mock_apic = APIC()
+        mock_apic.type = 3
+        mock_apic.mime = 'image/jpeg'
+        mock_apic.data = b'fake_jpeg'
+        
+        mock_audio = Mock()
+        mock_audio.tags = {'APIC:': mock_apic}
+        mock_audio.tags.values = Mock(return_value=[mock_apic])
+        mock_mp3.return_value = mock_audio
+        
+        with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as f:
+            temp_path = Path(f.name)
+            f.write(b"fake mp3")
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dest = Path(tmpdir) / "cover.jpg"
+            
+            try:
+                artwork_path = extract_artwork(temp_path, destination=dest)
+                
+                assert artwork_path == dest
+                assert artwork_path.exists()
+            finally:
+                temp_path.unlink()
+    
+    @patch('mutagen.mp3.MP3')
+    def test_extract_artwork_priority_front_cover(self, mock_mp3):
+        """Test that front cover is prioritized."""
+        from src.metadata import extract_artwork
+        from mutagen.id3 import APIC
+        
+        # Mock multiple APIC frames with different types
+        mock_apic_back = APIC()
+        mock_apic_back.type = 4  # Back cover
+        mock_apic_back.mime = 'image/jpeg'
+        mock_apic_back.data = b'back_cover'
+        
+        mock_apic_front = APIC()
+        mock_apic_front.type = 3  # Front cover (preferred)
+        mock_apic_front.mime = 'image/jpeg'
+        mock_apic_front.data = b'front_cover'
+        
+        mock_audio = Mock()
+        mock_audio.tags = Mock()
+        mock_audio.tags.values = Mock(return_value=[mock_apic_back, mock_apic_front])
+        mock_mp3.return_value = mock_audio
+        
+        with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as f:
+            temp_path = Path(f.name)
+            f.write(b"fake mp3")
+        
+        try:
+            artwork_path = extract_artwork(temp_path, prefer_front_cover=True)
+            
+            assert artwork_path is not None
+            # Should have selected front cover
+            content = artwork_path.read_bytes()
+            assert content == b'front_cover'
+            
+            # Cleanup
+            artwork_path.unlink()
+        finally:
+            temp_path.unlink()
+    
+    def test_extract_artwork_file_not_found(self):
+        """Test error when file doesn't exist."""
+        from src.metadata import extract_artwork, MetadataExtractionError
+        
+        with pytest.raises(MetadataExtractionError, match="File not found"):
+            extract_artwork("/nonexistent/file.mp3")
+
+
 if __name__ == "__main__":
     # Allow running tests directly
     pytest.main([__file__, "-v"])

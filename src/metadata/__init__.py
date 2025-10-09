@@ -12,6 +12,7 @@ from .extractor import (
     MetadataExtractor,
     extract_metadata,
     extract_id3_tags,
+    extract_artwork,
     MetadataExtractionError,
 )
 
@@ -19,6 +20,7 @@ __all__ = [
     "MetadataExtractor",
     "extract_metadata",
     "extract_id3_tags",
+    "extract_artwork",
     "MetadataExtractionError",
 ]
 

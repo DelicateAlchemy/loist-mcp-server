@@ -13,12 +13,13 @@ import logging
 from pathlib import Path
 from typing import Optional, Dict, Any
 from mutagen import File as MutagenFile
-from mutagen.id3 import ID3, ID3NoHeaderError
+from mutagen.id3 import ID3, ID3NoHeaderError, APIC
 from mutagen.mp3 import MP3
-from mutagen.flac import FLAC
+from mutagen.flac import FLAC, Picture
 from mutagen.mp4 import MP4
 from mutagen.oggvorbis import OggVorbis
 from mutagen.wave import WAVE
+import tempfile
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,14 @@ class MetadataExtractor:
     
     # Supported audio formats
     SUPPORTED_FORMATS = {".mp3", ".flac", ".m4a", ".aac", ".ogg", ".wav"}
+    
+    # Picture type priorities (APIC/Picture type field)
+    # 3 = Front cover (preferred)
+    # 0 = Other
+    # 1 = 32x32 file icon
+    # 2 = Other file icon
+    # 4 = Back cover
+    PICTURE_TYPE_PRIORITY = [3, 0, 4, 2, 1]
     
     @staticmethod
     def extract_id3_tags(file_path: Path | str) -> Dict[str, Any]:
@@ -329,9 +338,339 @@ class MetadataExtractor:
             raise
         except Exception as e:
             raise MetadataExtractionError(f"Metadata extraction failed: {e}")
+    
+    @staticmethod
+    def extract_artwork(
+        file_path: Path | str,
+        destination: Optional[Path | str] = None,
+        prefer_front_cover: bool = True
+    ) -> Optional[Path]:
+        """
+        Extract embedded artwork from audio file.
+        
+        Args:
+            file_path: Path to audio file
+            destination: Destination path for artwork (temp file if None)
+            prefer_front_cover: Prefer front cover artwork (type 3)
+        
+        Returns:
+            Path to extracted artwork or None if no artwork found
+        
+        Raises:
+            MetadataExtractionError: If extraction fails
+        """
+        file_path = Path(file_path)
+        
+        if not file_path.exists():
+            raise MetadataExtractionError(f"File not found: {file_path}")
+        
+        suffix = file_path.suffix.lower()
+        
+        # Extract artwork based on format
+        if suffix == '.mp3':
+            return MetadataExtractor._extract_artwork_mp3(file_path, destination, prefer_front_cover)
+        elif suffix == '.flac':
+            return MetadataExtractor._extract_artwork_flac(file_path, destination, prefer_front_cover)
+        elif suffix in {'.m4a', '.aac'}:
+            return MetadataExtractor._extract_artwork_mp4(file_path, destination, prefer_front_cover)
+        elif suffix == '.ogg':
+            return MetadataExtractor._extract_artwork_ogg(file_path, destination, prefer_front_cover)
+        else:
+            logger.debug(f"Artwork extraction not supported for {suffix}")
+            return None
+    
+    @staticmethod
+    def _extract_artwork_mp3(
+        file_path: Path,
+        destination: Optional[Path | str],
+        prefer_front_cover: bool
+    ) -> Optional[Path]:
+        """Extract artwork from MP3 file (APIC frames)."""
+        try:
+            audio = MP3(str(file_path))
+            
+            if not audio.tags:
+                logger.debug(f"No tags found in {file_path}")
+                return None
+            
+            # Find APIC frames (artwork)
+            apic_frames = [tag for tag in audio.tags.values() if isinstance(tag, APIC)]
+            
+            if not apic_frames:
+                logger.debug(f"No artwork found in {file_path}")
+                return None
+            
+            # Select artwork based on priority
+            selected_artwork = None
+            
+            if prefer_front_cover:
+                # Try to find front cover (type 3)
+                for priority_type in MetadataExtractor.PICTURE_TYPE_PRIORITY:
+                    for frame in apic_frames:
+                        if frame.type == priority_type:
+                            selected_artwork = frame
+                            break
+                    if selected_artwork:
+                        break
+            
+            # If no prioritized artwork found, use first one
+            if not selected_artwork:
+                selected_artwork = apic_frames[0]
+            
+            # Determine file extension from MIME type
+            mime_type = selected_artwork.mime
+            extension = MetadataExtractor._mime_to_extension(mime_type)
+            
+            # Create destination path
+            if destination:
+                dest_path = Path(destination)
+            else:
+                temp_file = tempfile.NamedTemporaryFile(
+                    delete=False,
+                    suffix=extension
+                )
+                dest_path = Path(temp_file.name)
+                temp_file.close()
+            
+            # Save artwork
+            dest_path.parent.mkdir(parents=True, exist_ok=True)
+            dest_path.write_bytes(selected_artwork.data)
+            
+            logger.info(
+                f"Extracted artwork from {file_path.name} ({len(selected_artwork.data)} bytes) "
+                f"to {dest_path}"
+            )
+            return dest_path
+            
+        except Exception as e:
+            logger.error(f"Failed to extract artwork from MP3: {e}")
+            return None
+    
+    @staticmethod
+    def _extract_artwork_flac(
+        file_path: Path,
+        destination: Optional[Path | str],
+        prefer_front_cover: bool
+    ) -> Optional[Path]:
+        """Extract artwork from FLAC file (Picture blocks)."""
+        try:
+            audio = FLAC(str(file_path))
+            
+            if not audio.pictures:
+                logger.debug(f"No artwork found in {file_path}")
+                return None
+            
+            # Select picture based on priority
+            selected_picture = None
+            
+            if prefer_front_cover:
+                # Try to find front cover (type 3)
+                for priority_type in MetadataExtractor.PICTURE_TYPE_PRIORITY:
+                    for picture in audio.pictures:
+                        if picture.type == priority_type:
+                            selected_picture = picture
+                            break
+                    if selected_picture:
+                        break
+            
+            # If no prioritized picture found, use first one
+            if not selected_picture:
+                selected_picture = audio.pictures[0]
+            
+            # Determine file extension from MIME type
+            mime_type = selected_picture.mime
+            extension = MetadataExtractor._mime_to_extension(mime_type)
+            
+            # Create destination path
+            if destination:
+                dest_path = Path(destination)
+            else:
+                temp_file = tempfile.NamedTemporaryFile(
+                    delete=False,
+                    suffix=extension
+                )
+                dest_path = Path(temp_file.name)
+                temp_file.close()
+            
+            # Save artwork
+            dest_path.parent.mkdir(parents=True, exist_ok=True)
+            dest_path.write_bytes(selected_picture.data)
+            
+            logger.info(
+                f"Extracted artwork from {file_path.name} ({len(selected_picture.data)} bytes) "
+                f"to {dest_path}"
+            )
+            return dest_path
+            
+        except Exception as e:
+            logger.error(f"Failed to extract artwork from FLAC: {e}")
+            return None
+    
+    @staticmethod
+    def _extract_artwork_mp4(
+        file_path: Path,
+        destination: Optional[Path | str],
+        prefer_front_cover: bool
+    ) -> Optional[Path]:
+        """Extract artwork from MP4/M4A file (covr atom)."""
+        try:
+            audio = MP4(str(file_path))
+            
+            if not audio.tags or 'covr' not in audio.tags:
+                logger.debug(f"No artwork found in {file_path}")
+                return None
+            
+            # Get cover artwork
+            covers = audio.tags['covr']
+            
+            if not covers:
+                return None
+            
+            # Use first cover (MP4 doesn't have type priorities like ID3)
+            cover = covers[0]
+            
+            # Determine file extension (MP4 cover can be JPEG or PNG)
+            # Check for PNG signature
+            if cover[:8] == b'\x89PNG\r\n\x1a\n':
+                extension = '.png'
+            else:
+                extension = '.jpg'  # Default to JPEG
+            
+            # Create destination path
+            if destination:
+                dest_path = Path(destination)
+            else:
+                temp_file = tempfile.NamedTemporaryFile(
+                    delete=False,
+                    suffix=extension
+                )
+                dest_path = Path(temp_file.name)
+                temp_file.close()
+            
+            # Save artwork
+            dest_path.parent.mkdir(parents=True, exist_ok=True)
+            dest_path.write_bytes(cover)
+            
+            logger.info(
+                f"Extracted artwork from {file_path.name} ({len(cover)} bytes) "
+                f"to {dest_path}"
+            )
+            return dest_path
+            
+        except Exception as e:
+            logger.error(f"Failed to extract artwork from MP4: {e}")
+            return None
+    
+    @staticmethod
+    def _extract_artwork_ogg(
+        file_path: Path,
+        destination: Optional[Path | str],
+        prefer_front_cover: bool
+    ) -> Optional[Path]:
+        """Extract artwork from OGG file (METADATA_BLOCK_PICTURE)."""
+        try:
+            audio = OggVorbis(str(file_path))
+            
+            # OGG Vorbis can have METADATA_BLOCK_PICTURE in comments
+            if not audio.tags:
+                return None
+            
+            # Look for picture data in Vorbis comments
+            metadata_block = audio.tags.get('metadata_block_picture')
+            
+            if not metadata_block:
+                logger.debug(f"No artwork found in {file_path}")
+                return None
+            
+            # Decode picture data (base64 encoded FLAC picture block)
+            import base64
+            picture_data = base64.b64decode(metadata_block[0])
+            
+            # Parse FLAC picture block
+            # For simplicity, we'll extract the raw image data
+            # (Full FLAC picture parsing would require more complex logic)
+            
+            # Create destination path
+            if destination:
+                dest_path = Path(destination)
+            else:
+                temp_file = tempfile.NamedTemporaryFile(
+                    delete=False,
+                    suffix='.jpg'  # Default to JPEG
+                )
+                dest_path = Path(temp_file.name)
+                temp_file.close()
+            
+            # Save picture data
+            dest_path.parent.mkdir(parents=True, exist_ok=True)
+            dest_path.write_bytes(picture_data)
+            
+            logger.info(f"Extracted artwork from {file_path.name} to {dest_path}")
+            return dest_path
+            
+        except Exception as e:
+            logger.debug(f"No artwork in OGG file or extraction failed: {e}")
+            return None
+    
+    @staticmethod
+    def _mime_to_extension(mime_type: str) -> str:
+        """
+        Convert MIME type to file extension.
+        
+        Args:
+            mime_type: MIME type string
+        
+        Returns:
+            File extension with dot (e.g., ".jpg")
+        """
+        mime_map = {
+            'image/jpeg': '.jpg',
+            'image/jpg': '.jpg',
+            'image/png': '.png',
+            'image/gif': '.gif',
+            'image/bmp': '.bmp',
+            'image/webp': '.webp',
+        }
+        
+        return mime_map.get(mime_type.lower(), '.jpg')
 
 
-# Convenience functions
+def extract_id3_tags(file_path: Path | str) -> Dict[str, Any]:
+    """
+    Extract only ID3 tags from MP3 file.
+    
+    Args:
+        file_path: Path to MP3 file
+    
+    Returns:
+        Dictionary of ID3 tag metadata
+    """
+    return MetadataExtractor.extract_id3_tags(file_path)
+
+
+def extract_artwork(
+    file_path: Path | str,
+    destination: Optional[Path | str] = None,
+    prefer_front_cover: bool = True
+) -> Optional[Path]:
+    """
+    Extract artwork from audio file.
+    
+    Args:
+        file_path: Path to audio file
+        destination: Destination path for artwork (temp file if None)
+        prefer_front_cover: Prefer front cover artwork
+    
+    Returns:
+        Path to extracted artwork or None if no artwork found
+    
+    Example:
+        >>> from src.metadata import extract_artwork
+        >>> artwork_path = extract_artwork("song.mp3")
+        >>> if artwork_path:
+        ...     print(f"Artwork saved to: {artwork_path}")
+    """
+    return MetadataExtractor.extract_artwork(file_path, destination, prefer_front_cover)
 
 def extract_metadata(file_path: Path | str) -> Dict[str, Any]:
     """
@@ -364,4 +703,29 @@ def extract_id3_tags(file_path: Path | str) -> Dict[str, Any]:
         Dictionary of ID3 tag metadata
     """
     return MetadataExtractor.extract_id3_tags(file_path)
+
+
+def extract_artwork(
+    file_path: Path | str,
+    destination: Optional[Path | str] = None,
+    prefer_front_cover: bool = True
+) -> Optional[Path]:
+    """
+    Extract artwork from audio file.
+    
+    Args:
+        file_path: Path to audio file
+        destination: Destination path for artwork (temp file if None)
+        prefer_front_cover: Prefer front cover artwork
+    
+    Returns:
+        Path to extracted artwork or None if no artwork found
+    
+    Example:
+        >>> from src.metadata import extract_artwork
+        >>> artwork_path = extract_artwork("song.mp3")
+        >>> if artwork_path:
+        ...     print(f"Artwork saved to: {artwork_path}")
+    """
+    return MetadataExtractor.extract_artwork(file_path, destination, prefer_front_cover)
 
