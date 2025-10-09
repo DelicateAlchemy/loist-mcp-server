@@ -57,6 +57,25 @@ class ServerConfig(BaseSettings):
     storage_path: str = "./storage"
     max_file_size: int = 104857600  # 100MB
     
+    # Google Cloud Storage Configuration
+    gcs_bucket_name: str | None = None
+    gcs_project_id: str | None = None
+    gcs_region: str = "us-central1"
+    gcs_signed_url_expiration: int = 900  # 15 minutes in seconds
+    gcs_service_account_email: str | None = None
+    google_application_credentials: str | None = None  # Path to service account key
+    
+    # Database Configuration
+    db_host: str | None = None
+    db_port: int = 5432
+    db_name: str | None = None
+    db_user: str | None = None
+    db_password: str | None = None
+    db_connection_name: str | None = None  # For Cloud SQL Proxy
+    db_min_connections: int = 2
+    db_max_connections: int = 10
+    db_command_timeout: int = 30
+    
     # CORS Configuration
     enable_cors: bool = True
     cors_origins: str = "*"  # Comma-separated origins in production
@@ -95,6 +114,61 @@ class ServerConfig(BaseSettings):
     def log_level_int(self) -> int:
         """Convert log level string to logging constant"""
         return getattr(logging, self.log_level.upper(), logging.INFO)
+    
+    @property
+    def gcs_credentials_path(self) -> str | None:
+        """
+        Get GCS credentials path from config or environment.
+        Checks GOOGLE_APPLICATION_CREDENTIALS env var as fallback.
+        """
+        if self.google_application_credentials:
+            return self.google_application_credentials
+        return os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+    
+    @property
+    def is_gcs_configured(self) -> bool:
+        """Check if GCS is properly configured"""
+        return bool(
+            self.gcs_bucket_name and 
+            self.gcs_project_id and
+            (self.gcs_credentials_path or os.getenv("GOOGLE_APPLICATION_CREDENTIALS"))
+        )
+    
+    @property
+    def is_database_configured(self) -> bool:
+        """Check if database is properly configured"""
+        # Can use either direct connection or Cloud SQL Proxy
+        has_direct = bool(self.db_host and self.db_name and self.db_user and self.db_password)
+        has_proxy = bool(self.db_connection_name and self.db_name and self.db_user and self.db_password)
+        return has_direct or has_proxy
+    
+    @property
+    def database_url(self) -> str | None:
+        """
+        Generate PostgreSQL connection URL.
+        Returns None if database is not configured.
+        """
+        if not self.is_database_configured:
+            return None
+        
+        if self.db_connection_name:
+            # Cloud SQL Proxy connection
+            # Format: postgresql://user:password@/dbname?host=/cloudsql/connection_name
+            return f"postgresql://{self.db_user}:{self.db_password}@/{self.db_name}?host=/cloudsql/{self.db_connection_name}"
+        else:
+            # Direct connection
+            return f"postgresql://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}"
+    
+    def validate_credentials(self) -> dict[str, bool]:
+        """
+        Validate that all required credentials are available.
+        Returns a dict showing which services are properly configured.
+        """
+        return {
+            "gcs": self.is_gcs_configured,
+            "database": self.is_database_configured,
+            "auth": bool(self.bearer_token) if self.auth_enabled else True,
+        }
     
     def configure_logging(self) -> None:
         """Configure application logging based on settings"""

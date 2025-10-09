@@ -16,6 +16,13 @@ from google.cloud import storage
 from google.cloud.exceptions import NotFound, GoogleCloudError
 import os
 
+# Try to import config, but make it optional for backward compatibility
+try:
+    from src.config import config as app_config
+    HAS_APP_CONFIG = True
+except ImportError:
+    HAS_APP_CONFIG = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -26,19 +33,35 @@ class GCSClient:
         self,
         bucket_name: Optional[str] = None,
         project_id: Optional[str] = None,
+        credentials_path: Optional[str] = None,
     ):
         """
         Initialize GCS client.
         
         Args:
-            bucket_name: Name of the GCS bucket (defaults to env var GCS_BUCKET_NAME)
-            project_id: GCP project ID (defaults to env var GCS_PROJECT_ID)
+            bucket_name: Name of the GCS bucket (defaults to config or env var GCS_BUCKET_NAME)
+            project_id: GCP project ID (defaults to config or env var GCS_PROJECT_ID)
+            credentials_path: Path to service account key (defaults to config or env var GOOGLE_APPLICATION_CREDENTIALS)
         """
-        self.bucket_name = bucket_name or os.getenv("GCS_BUCKET_NAME")
-        self.project_id = project_id or os.getenv("GCS_PROJECT_ID")
+        # Try to get values from config first, then env vars, then parameters
+        if HAS_APP_CONFIG:
+            self.bucket_name = bucket_name or app_config.gcs_bucket_name or os.getenv("GCS_BUCKET_NAME")
+            self.project_id = project_id or app_config.gcs_project_id or os.getenv("GCS_PROJECT_ID")
+            self.credentials_path = credentials_path or app_config.gcs_credentials_path
+        else:
+            self.bucket_name = bucket_name or os.getenv("GCS_BUCKET_NAME")
+            self.project_id = project_id or os.getenv("GCS_PROJECT_ID")
+            self.credentials_path = credentials_path or os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
         
         if not self.bucket_name:
-            raise ValueError("Bucket name must be provided or set in GCS_BUCKET_NAME env var")
+            raise ValueError("Bucket name must be provided via parameter, config, or GCS_BUCKET_NAME env var")
+        
+        # Set credentials in environment if provided
+        if self.credentials_path and os.path.exists(self.credentials_path):
+            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = self.credentials_path
+            logger.info(f"Using credentials from: {self.credentials_path}")
+        elif self.credentials_path:
+            logger.warning(f"Credentials path provided but file not found: {self.credentials_path}")
         
         self._client: Optional[storage.Client] = None
         self._bucket: Optional[storage.Bucket] = None
@@ -304,6 +327,7 @@ class GCSClient:
 def create_gcs_client(
     bucket_name: Optional[str] = None,
     project_id: Optional[str] = None,
+    credentials_path: Optional[str] = None,
 ) -> GCSClient:
     """
     Create a GCS client instance.
@@ -311,11 +335,16 @@ def create_gcs_client(
     Args:
         bucket_name: GCS bucket name
         project_id: GCP project ID
+        credentials_path: Path to service account key file
     
     Returns:
         GCSClient instance
     """
-    return GCSClient(bucket_name=bucket_name, project_id=project_id)
+    return GCSClient(
+        bucket_name=bucket_name,
+        project_id=project_id,
+        credentials_path=credentials_path
+    )
 
 
 def generate_signed_url(

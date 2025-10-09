@@ -323,11 +323,71 @@ Environment configuration established in .env.gcs with all necessary parameters.
 All implementation code, tests, and documentation are complete. The bucket is production-ready with infrastructure code implemented and validated.
 </info added on 2025-10-09T13:49:41.474Z>
 
-## 4. Implement GCS Authentication and Access Control [pending]
+## 4. Implement GCS Authentication and Access Control [done]
 ### Dependencies: 2.3
 ### Description: Configure service accounts, IAM roles, and access policies to secure GCS bucket access for different application components and users.
 ### Details:
 Create service accounts for application services, assign appropriate IAM roles (Storage Object Admin, Storage Object Viewer, Storage Object Creator), configure bucket-level and object-level permissions, set up workload identity for GKE if applicable, implement least-privilege access principles, and document credential management procedures.
+<info added on 2025-10-09T14:02:35.808Z>
+**IAM Permissions Validated:**
+- Service account exists: loist-music-library-sa@loist-music-library.iam.gserviceaccount.com
+- Project-level roles: storage.admin, cloudsql.admin, logging.logWriter, monitoring.metricWriter
+- Bucket-level roles: storage.objectAdmin on loist-music-library-audio
+- All GCS operations verified: upload, read, list, delete
+- SignBlob permission confirmed for signed URL generation
+
+**Credential Management Implemented:**
+- Enhanced src/config.py with GCS and database authentication settings
+- Added credential loading hierarchy: parameters → config → environment → ADC
+- Implemented validation methods: is_gcs_configured, is_database_configured, validate_credentials()
+- Added database_url property for connection string generation
+- Support for both direct connection and Cloud SQL Proxy
+
+**GCS Client Enhanced:**
+- Updated GCSClient to use application config for credentials
+- Added credentials_path parameter for explicit key file specification
+- Implemented automatic credential detection from multiple sources
+- Added credential logging for debugging (path only, not content)
+- Backward compatibility maintained for environment-only usage
+
+**Security Features:**
+- Least-privilege access model documented
+- Service account key protection (.gitignore)
+- Environment-based credential loading
+- Support for Workload Identity (production)
+- Comprehensive security best practices documented
+
+**Testing & Validation:**
+- Created 40+ authentication tests (tests/test_authentication.py)
+- Tests cover: credential loading, configuration hierarchy, access control, error handling
+- Created IAM validation script (scripts/validate-iam-permissions.sh)
+- Validated all required permissions with live GCS operations
+- Generated security report: scripts/iam-validation-report-20251009-150157.txt
+
+**Documentation:**
+- Complete authentication and security guide (docs/task-2.4-authentication-security.md)
+- Service account overview and IAM roles documentation
+- Credential management patterns and examples
+- Security best practices and recommendations
+- Access control patterns (application-level, signed URLs, impersonation)
+- Monitoring and auditing guidelines
+- Troubleshooting guide for common auth issues
+- Security checklist for validation
+
+**Files Created/Modified:**
+- src/config.py - Enhanced with GCS/database credential management
+- src/storage/gcs_client.py - Integrated with application config
+- tests/test_authentication.py - Comprehensive authentication test suite
+- scripts/validate-iam-permissions.sh - IAM validation script
+- docs/task-2.4-authentication-security.md - Complete security documentation
+- scripts/iam-validation-report-20251009-150157.txt - Validation report
+
+**Security Recommendations:**
+1. Consider removing project-level roles/storage.admin for least privilege
+2. Implement 90-day service account key rotation policy
+3. Use Workload Identity for production GKE deployments
+4. Enable Cloud Audit Logs for security monitoring
+</info added on 2025-10-09T14:02:35.808Z>
 
 ## 5. Configure Database Connection Pooling [pending]
 ### Dependencies: 2.2
