@@ -63,15 +63,34 @@ def health_check() -> dict:
     
     Returns:
         dict: Server status information including version and configuration
+        
+    Raises:
+        Exception: If health check fails (demonstrates error handling)
     """
-    logger.debug("Health check requested")
-    return {
-        "status": "healthy",
-        "service": config.server_name,
-        "version": config.server_version,
-        "transport": config.server_transport,
-        "log_level": config.log_level
-    }
+    from exceptions import MusicLibraryError
+    from error_utils import handle_tool_error
+    
+    try:
+        logger.debug("Health check requested")
+        
+        # Verify server is operational
+        response = {
+            "status": "healthy",
+            "service": config.server_name,
+            "version": config.server_version,
+            "transport": config.server_transport,
+            "log_level": config.log_level,
+            "authentication": "enabled" if config.auth_enabled else "disabled"
+        }
+        
+        logger.info("Health check passed")
+        return response
+        
+    except Exception as e:
+        # Log and return error response
+        error_response = handle_tool_error(e, "health_check")
+        logger.error(f"Health check failed: {error_response}")
+        return error_response
 
 if __name__ == "__main__":
     # Run the FastMCP server

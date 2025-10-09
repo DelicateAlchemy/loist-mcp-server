@@ -70,12 +70,23 @@ class ServerConfig(BaseSettings):
     
     def configure_logging(self) -> None:
         """Configure application logging based on settings"""
+        if self.log_format == "json":
+            # JSON format for structured logging
+            log_format = '{"timestamp":"%(asctime)s","logger":"%(name)s","level":"%(levelname)s","message":"%(message)s","module":"%(module)s","function":"%(funcName)s","line":%(lineno)d}'
+        else:
+            # Text format for human-readable logs
+            log_format = '%(asctime)s - %(name)s - %(levelname)s - [%(module)s.%(funcName)s:%(lineno)d] - %(message)s'
+        
         logging.basicConfig(
             level=self.log_level_int,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-            if self.log_format == "text"
-            else '{"time":"%(asctime)s","name":"%(name)s","level":"%(levelname)s","message":"%(message)s"}'
+            format=log_format,
+            datefmt='%Y-%m-%d %H:%M:%S'
         )
+        
+        # Set specific log levels for noisy libraries
+        logging.getLogger("httpx").setLevel(logging.WARNING)
+        logging.getLogger("httpcore").setLevel(logging.WARNING)
+        logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 
 # Global configuration instance

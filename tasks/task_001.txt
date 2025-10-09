@@ -184,11 +184,51 @@ Our implementation is compatible with FastMCP's environment variable approach bu
 Settings are accessible via a global config instance (`from config import config`), used throughout the server and authentication modules, and validated at startup with clear error messages. Comprehensive documentation has been added to README.md, including a complete Configuration section with all environment variables, examples, features list, and default values.
 </info added on 2025-10-09T10:48:53.141Z>
 
-## 5. Error Handling & Logging [pending]
+## 5. Error Handling & Logging [done]
 ### Dependencies: 1.2, 1.4
 ### Description: Implement centralized error handling and logging for the server.
 ### Details:
 Add exception handlers, customize error responses, and configure logging levels and outputs. Ensure errors are logged appropriately for debugging and monitoring.
+<info added on 2025-10-09T10:55:52.294Z>
+Exception Handling & Logging Implementation:
+
+Created a comprehensive error handling and logging system:
+
+1. Exception Hierarchy:
+   - Implemented `src/exceptions.py` with 8 custom exception classes
+   - Base `MusicLibraryError` class with message and details support
+   - Specialized exceptions: AudioProcessingError, StorageError, ValidationError, ResourceNotFoundError, TimeoutError, AuthenticationError, RateLimitError, ExternalServiceError
+   - Error code mapping for MCP protocol responses
+   - Added `get_error_code()` utility for consistent error codes
+
+2. Error Response Utilities:
+   - Created `src/error_utils.py` with standardized error handling functions
+   - `create_error_response()` for consistent MCP error formatting
+   - `log_error()` for structured error logging with context
+   - `handle_tool_error()` and `handle_resource_error()` for specific error scenarios
+   - `safe_execute()` wrapper for exception-safe function execution
+
+3. Logging Configuration:
+   - Enhanced logging format with module, function, and line numbers
+   - Implemented JSON structured logging with comprehensive metadata
+   - Improved text format for debugging clarity
+   - Configured noise reduction for third-party libraries
+   - Standardized timestamp formatting
+
+4. Health Check Integration:
+   - Updated health_check tool with error handling pattern
+   - Enhanced status reporting including authentication state
+   - Implemented proper error logging on failures
+
+5. Testing & Documentation:
+   - Verified all exception handling components function correctly
+   - Added comprehensive documentation to README
+   - Documented exception hierarchy, error codes, and utilities
+   - Provided implementation examples
+   - Updated project structure documentation
+
+The error handling system is now production-ready and provides a foundation for future audio processing tools.
+</info added on 2025-10-09T10:55:52.294Z>
 
 ## 6. Entry Point, Routing, CORS, and Health Check [pending]
 ### Dependencies: 1.2, 1.4

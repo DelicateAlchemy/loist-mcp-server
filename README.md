@@ -69,6 +69,8 @@ loist-mcp-server/
 ├── src/
 │   ├── server.py          # Main FastMCP server implementation
 │   ├── config.py          # Configuration management
+│   ├── exceptions.py      # Custom exception classes
+│   ├── error_utils.py     # Error handling utilities
 │   └── auth/              # Authentication module
 │       ├── __init__.py
 │       └── bearer.py      # Bearer token authentication
@@ -106,6 +108,7 @@ python src/server.py
 - ✅ Advanced configuration management with Pydantic
 - ✅ Lifespan hooks (startup/shutdown)
 - ✅ Bearer token authentication (SimpleBearerAuth)
+- ✅ Centralized error handling & logging
 - ✅ Health check tool with extended status
 - ✅ Structured logging (JSON/text formats)
 - ✅ Duplicate handling policies
@@ -202,6 +205,94 @@ ENABLE_HEALTHCHECK=true
 - **Sensible Defaults**: Server works out-of-the-box without configuration
 - **Type Safety**: Pydantic validates all configuration values
 - **Lifespan Management**: Startup and shutdown hooks for resource management
+
+## Error Handling & Logging
+
+The server implements comprehensive error handling and structured logging for debugging and monitoring.
+
+### Error Handling Architecture
+
+**Custom Exception Hierarchy:**
+- `MusicLibraryError` - Base exception for all errors
+- `AudioProcessingError` - Audio file processing failures
+- `StorageError` - GCS/storage operation failures
+- `ValidationError` - Input validation failures
+- `ResourceNotFoundError` - Missing resources
+- `TimeoutError` - Operation timeouts
+- `AuthenticationError` - Authentication failures
+- `RateLimitError` - Rate limit exceeded
+- `ExternalServiceError` - External service failures
+
+### Error Responses
+
+All errors return standardized responses:
+
+```json
+{
+  "success": false,
+  "error": "ERROR_CODE",
+  "message": "Human-readable error message",
+  "details": {
+    "additional": "context",
+    "if": "available"
+  }
+}
+```
+
+**Error Codes:**
+- `AUDIO_PROCESSING_FAILED` - Audio processing error
+- `STORAGE_ERROR` - Storage operation failed
+- `VALIDATION_ERROR` - Invalid input
+- `RESOURCE_NOT_FOUND` - Resource doesn't exist
+- `TIMEOUT` - Operation timed out
+- `AUTHENTICATION_FAILED` - Auth error
+- `RATE_LIMIT_EXCEEDED` - Too many requests
+- `EXTERNAL_SERVICE_ERROR` - External service unavailable
+- `INTERNAL_ERROR` - Unexpected server error
+
+### Structured Logging
+
+Logging supports both text and JSON formats:
+
+**Text Format** (human-readable):
+```
+2025-10-09 11:54:43 - server - INFO - [server.health_check:86] - Health check passed
+```
+
+**JSON Format** (structured):
+```json
+{"timestamp":"2025-10-09 11:54:43","logger":"server","level":"INFO","message":"Health check passed","module":"server","function":"health_check","line":86}
+```
+
+Configure via environment variables:
+```env
+LOG_LEVEL=INFO  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+LOG_FORMAT=text  # text or json
+```
+
+### Error Handling Utilities
+
+**`create_error_response(error)`** - Format error for MCP protocol  
+**`log_error(error, context)`** - Log with structured context  
+**`handle_tool_error(error, tool_name, args)`** - Handle tool errors  
+**`handle_resource_error(error, uri)`** - Handle resource errors  
+**`safe_execute(func, *args)`** - Execute with error capture
+
+### Implementation Example
+
+```python
+from exceptions import AudioProcessingError
+from error_utils import handle_tool_error
+
+@mcp.tool()
+def process_audio(url: str) -> dict:
+    try:
+        # Process audio
+        result = process_audio_file(url)
+        return {"success": True, "data": result}
+    except AudioProcessingError as e:
+        return handle_tool_error(e, "process_audio", {"url": url})
+```
 
 ## Authentication
 
