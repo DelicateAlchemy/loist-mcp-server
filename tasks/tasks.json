@@ -94,7 +94,7 @@
       "dependencies": [
         1
       ],
-      "status": "pending",
+      "status": "done",
       "subtasks": [
         {
           "id": 1,
@@ -161,7 +161,7 @@
             3
           ],
           "details": "Define lifecycle rules for object deletion after specified days, configure automatic transition to cheaper storage classes (Nearline, Coldline, Archive) based on age, set up rules for versioned object cleanup, implement conditional policies based on object metadata or creation date, test policy effectiveness, and monitor storage costs.",
-          "status": "pending"
+          "status": "done"
         },
         {
           "id": 8,
@@ -171,7 +171,7 @@
             4
           ],
           "details": "Implement signed URL generation using service account credentials with signBlob permissions, configure appropriate expiration times based on use case, add optional content-type and response-disposition parameters, implement URL generation API endpoint or library function, add validation and error handling, test with various object types, and document usage patterns for application developers.",
-          "status": "pending"
+          "status": "done"
         }
       ]
     },

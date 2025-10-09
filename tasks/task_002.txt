@@ -1,6 +1,6 @@
 # Task ID: 2
 # Title: Setup Database and Storage Infrastructure
-# Status: pending
+# Status: done
 # Dependencies: 1
 # Priority: high
 # Description: Configure PostgreSQL for metadata storage and Google Cloud Storage for audio files with appropriate schemas and access controls.
@@ -420,13 +420,13 @@ Created extensive test suite (tests/test_migrations.py) covering initialization,
 All migration infrastructure is now implemented, tested, and documented for production use.
 </info added on 2025-10-09T14:14:07.006Z>
 
-## 7. Configure GCS Lifecycle Policies [pending]
+## 7. Configure GCS Lifecycle Policies [done]
 ### Dependencies: 2.3
 ### Description: Define and implement object lifecycle management rules to automatically transition or delete objects based on age and access patterns for cost optimization.
 ### Details:
 Define lifecycle rules for object deletion after specified days, configure automatic transition to cheaper storage classes (Nearline, Coldline, Archive) based on age, set up rules for versioned object cleanup, implement conditional policies based on object metadata or creation date, test policy effectiveness, and monitor storage costs.
 
-## 8. Implement Signed URL Generation System [pending]
+## 8. Implement Signed URL Generation System [done]
 ### Dependencies: 2.4
 ### Description: Build mechanism to generate time-limited signed URLs for secure temporary access to GCS objects without exposing credentials.
 ### Details:
