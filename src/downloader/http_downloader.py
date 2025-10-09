@@ -20,6 +20,8 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from .validators import URLSchemeValidator, URLValidationError
+
 logger = logging.getLogger(__name__)
 
 
@@ -116,28 +118,21 @@ class HTTPDownloader:
         
         return session
     
-    def validate_url_scheme(self, url: str) -> None:
+    def validate_url_scheme(self, url: str) -> str:
         """
         Validate that URL uses allowed scheme (HTTP/HTTPS).
         
         Args:
             url: URL to validate
         
+        Returns:
+            Validated (and normalized) URL
+        
         Raises:
-            ValueError: If URL scheme is not allowed
+            URLValidationError: If URL scheme is not allowed
         """
-        parsed = urlparse(url)
-        
-        if parsed.scheme not in ("http", "https"):
-            raise ValueError(
-                f"Unsupported URL scheme: {parsed.scheme}. "
-                f"Only HTTP and HTTPS are allowed."
-            )
-        
-        if not parsed.netloc:
-            raise ValueError(f"Invalid URL: missing hostname")
-        
-        logger.debug(f"URL scheme validated: {parsed.scheme}://{parsed.netloc}")
+        # Use comprehensive validator
+        return URLSchemeValidator.validate(url, normalize=True)
     
     def check_file_size(self, url: str, headers: Optional[Dict[str, str]] = None) -> int:
         """
@@ -208,8 +203,8 @@ class HTTPDownloader:
             DownloadTimeoutError: If download times out
             DownloadError: If download fails
         """
-        # Validate URL scheme
-        self.validate_url_scheme(url)
+        # Validate and normalize URL
+        url = self.validate_url_scheme(url)
         
         # Check file size
         try:

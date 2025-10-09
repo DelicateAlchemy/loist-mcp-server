@@ -121,11 +121,24 @@ Ensure support for both HTTP and HTTPS protocols, manage request/response cycles
 - docs/task-3.1-http-downloader.md
 </info added on 2025-10-09T14:28:03.292Z>
 
-## 2. Validate URL Scheme [pending]
+## 2. Validate URL Scheme [done]
 ### Dependencies: 3.1
 ### Description: Check and validate the URL scheme to ensure only allowed protocols (HTTP/HTTPS) are processed.
 ### Details:
 Reject URLs with unsupported or potentially dangerous schemes (e.g., file://, ftp://) before initiating download.
+<info added on 2025-10-09T14:35:07.526Z>
+Implemented comprehensive URL scheme validation to prevent security vulnerabilities:
+
+- Created URLSchemeValidator class with allowlist (HTTP/HTTPS only) and blocklist of 14+ dangerous schemes
+- Added hostname validation with format checking and invalid character detection
+- Implemented URL normalization for consistency (case normalization, default port removal)
+- Developed validation pipeline with specific methods for scheme validation, hostname validation, and URL normalization
+- Created extensive test suite with 40+ tests covering allowed schemes, blocked schemes, hostname validation, and edge cases
+- Integrated validator into HTTPDownloader with proper exception handling
+- Documented security model, threat prevention strategies, and attack scenarios in comprehensive security guide
+- Prevents multiple attack vectors including local file access, protocol bypass, code injection, and resource exhaustion
+- Established first line of defense in the security pipeline: URL Scheme Validation → SSRF Protection → Download
+</info added on 2025-10-09T14:35:07.526Z>
 
 ## 3. Apply SSRF Protection [pending]
 ### Dependencies: 3.2

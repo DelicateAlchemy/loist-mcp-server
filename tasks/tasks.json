@@ -202,8 +202,8 @@
           "dependencies": [
             1
           ],
-          "details": "Reject URLs with unsupported or potentially dangerous schemes (e.g., file://, ftp://) before initiating download.",
-          "status": "pending"
+          "details": "Reject URLs with unsupported or potentially dangerous schemes (e.g., file://, ftp://) before initiating download.\n<info added on 2025-10-09T14:35:07.526Z>\nImplemented comprehensive URL scheme validation to prevent security vulnerabilities:\n\n- Created URLSchemeValidator class with allowlist (HTTP/HTTPS only) and blocklist of 14+ dangerous schemes\n- Added hostname validation with format checking and invalid character detection\n- Implemented URL normalization for consistency (case normalization, default port removal)\n- Developed validation pipeline with specific methods for scheme validation, hostname validation, and URL normalization\n- Created extensive test suite with 40+ tests covering allowed schemes, blocked schemes, hostname validation, and edge cases\n- Integrated validator into HTTPDownloader with proper exception handling\n- Documented security model, threat prevention strategies, and attack scenarios in comprehensive security guide\n- Prevents multiple attack vectors including local file access, protocol bypass, code injection, and resource exhaustion\n- Established first line of defense in the security pipeline: URL Scheme Validation → SSRF Protection → Download\n</info added on 2025-10-09T14:35:07.526Z>",
+          "status": "done"
         },
         {
           "id": 3,
