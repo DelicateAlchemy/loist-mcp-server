@@ -222,8 +222,8 @@
           "dependencies": [
             3
           ],
-          "details": "Use HTTP HEAD requests or Content-Length headers to validate file size prior to download; abort if size exceeds limits.",
-          "status": "pending"
+          "details": "Use HTTP HEAD requests or Content-Length headers to validate file size prior to download; abort if size exceeds limits.\n<info added on 2025-10-09T14:43:46.753Z>\n**SUBTASK 3.4 VERIFIED AS COMPLETE! ✅**\n\n**File Size Validation Implementation (from subtask 3.1):**\n\nAll required functionality was implemented in subtask 3.1 as part of the core HTTPDownloader class:\n\n**Features Implemented:**\n- check_file_size() method using HTTP HEAD requests\n- Content-Length header parsing and validation\n- Pre-download size validation\n- During-download size validation (streaming)\n- DownloadSizeError exception for size violations\n- Configurable max_size_mb parameter (default: 100MB)\n\n**Code Location:** src/downloader/http_downloader.py\n- Lines ~138-175: check_file_size() implementation\n- Lines ~260-269: Size check during streaming download\n- Automatic cleanup of partial files when size exceeded\n\n**Testing:** Already covered in tests/test_http_downloader.py\n- File size validation tests\n- Size limit exceeded tests\n- Missing Content-Length header handling\n\n**Verification:** ✅ Complete - All requirements met in subtask 3.1 implementation\n</info added on 2025-10-09T14:43:46.753Z>",
+          "status": "done"
         },
         {
           "id": 5,
@@ -232,8 +232,8 @@
           "dependencies": [
             4
           ],
-          "details": "Set reasonable timeouts for connections and data transfer; define retry policies for transient failures.",
-          "status": "pending"
+          "details": "Set reasonable timeouts for connections and data transfer; define retry policies for transient failures.\n<info added on 2025-10-09T14:43:51.540Z>\n**SUBTASK 3.5 VERIFIED AS COMPLETE! ✅**\n\n**Timeout and Retry Logic Implementation (from subtask 3.1):**\n\nAll required functionality was implemented in subtask 3.1 as part of the core HTTPDownloader class:\n\n**Features Implemented:**\n- Configurable timeout_seconds parameter (default: 60s)\n- Configurable max_retries parameter (default: 3)\n- Exponential backoff retry strategy (1s, 2s, 4s)\n- Retry on transient HTTP errors (429, 500, 502, 503, 504)\n- DownloadTimeoutError exception for timeout failures\n- Connection timeout and data transfer timeout\n- Automatic retry with urllib3.util.Retry\n\n**Code Location:** src/downloader/http_downloader.py\n- Lines ~103-112: Retry strategy configuration\n- Lines ~61-91: Timeout and retry parameter initialization\n- Lines ~280-285: Timeout error handling with cleanup\n\n**Testing:** Already covered in tests/test_http_downloader.py\n- Timeout handling tests\n- Retry logic (via mock-based testing)\n- Error handling for network failures\n\n**Verification:** ✅ Complete - All requirements met in subtask 3.1 implementation\n</info added on 2025-10-09T14:43:51.540Z>",
+          "status": "done"
         },
         {
           "id": 6,
@@ -242,8 +242,8 @@
           "dependencies": [
             5
           ],
-          "details": "Write to temporary files during download, handle interruptions, and securely move files upon completion.",
-          "status": "pending"
+          "details": "Write to temporary files during download, handle interruptions, and securely move files upon completion.\n<info added on 2025-10-09T14:43:56.242Z>\nTemporary file management has been fully implemented as part of the core HTTPDownloader class in subtask 3.1. The implementation includes creating temporary files using tempfile.NamedTemporaryFile with delete=False, detecting and preserving file extensions, cleaning up temporary files on various error conditions (download errors, timeouts, size limits, network issues, and exceptions), and performing atomic operations with proper error handling. The code is located in src/downloader/http_downloader.py, with temporary file creation at lines ~226-232 and comprehensive cleanup handling at lines ~267-297. All functionality has been thoroughly tested in tests/test_http_downloader.py, including tests for temporary file creation, cleanup on errors, and file extension preservation. This subtask is verified as complete with all requirements satisfied by the implementation in subtask 3.1.\n</info added on 2025-10-09T14:43:56.242Z>",
+          "status": "done"
         },
         {
           "id": 7,
@@ -252,8 +252,8 @@
           "dependencies": [
             6
           ],
-          "details": "Monitor bytes downloaded, update progress indicators, and handle partial downloads if supported.",
-          "status": "pending"
+          "details": "Monitor bytes downloaded, update progress indicators, and handle partial downloads if supported.\n<info added on 2025-10-09T14:43:59.983Z>\n**SUBTASK 3.7 VERIFIED AS COMPLETE! ✅**\n\n**Progress Tracking Implementation (from subtask 3.1):**\n\nAll required functionality was implemented in subtask 3.1 as part of the core HTTPDownloader class:\n\n**Features Implemented:**\n- progress_callback parameter for download() method\n- Callback signature: callback(bytes_downloaded, total_bytes)\n- Called for each chunk during streaming download\n- Optional parameter (can be None)\n- Tracks bytes downloaded in real-time\n- Provides total_bytes when Content-Length available\n- Works with streaming downloads\n\n**Code Location:** src/downloader/http_downloader.py\n- Lines ~187, 196: progress_callback parameter definition\n- Lines ~273-274: Progress callback invocation during download\n- Lines ~345, 358, 385: Convenience function support\n\n**Testing:** Already covered in tests/test_http_downloader.py\n- Progress callback tests\n- Progress tracking with multiple chunks\n- Callback invocation verification\n\n**Verification:** ✅ Complete - All requirements met in subtask 3.1 implementation\n</info added on 2025-10-09T14:43:59.983Z>",
+          "status": "done"
         }
       ]
     },
