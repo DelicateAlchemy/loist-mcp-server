@@ -269,6 +269,7 @@ class MetadataExtractor:
             "channels": None,
             "sample_rate": None,
             "bitrate": None,
+            "bit_depth": None,
             "format": suffix.lstrip('.').upper(),
         }
         
@@ -308,6 +309,13 @@ class MetadataExtractor:
             
             if hasattr(audio.info, 'bitrate'):
                 metadata['bitrate'] = audio.info.bitrate // 1000  # Convert to kbps
+            
+            # Bit depth (bits per sample) - available for some formats
+            if hasattr(audio.info, 'bits_per_sample'):
+                metadata['bit_depth'] = audio.info.bits_per_sample
+            elif hasattr(audio.info, 'sample_width'):
+                # For WAV files, sample_width is in bytes
+                metadata['bit_depth'] = audio.info.sample_width * 8
             
             # If title is missing, use filename
             if not metadata['title']:

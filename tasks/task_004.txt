@@ -121,11 +121,63 @@ The MetadataExtractor class has been successfully implemented in src/metadata/ex
 Complete documentation is available in docs/task-4.1-id3-tag-extraction.md, including supported formats reference, tag mapping, usage examples, and best practices. A comprehensive test suite with 20+ tests has been created in tests/test_metadata_extraction.py.
 </info added on 2025-10-09T14:50:26.394Z>
 
-## 2. Technical Specification Extraction [pending]
+## 2. Technical Specification Extraction [done]
 ### Dependencies: None
 ### Description: Extract technical metadata including duration, sample rate, bit depth, and channel count from audio files.
 ### Details:
 Utilize tools such as FFmpeg, Libsndfile, or pydub to access technical properties. Ensure compatibility with multiple audio formats and validate extracted data.
+<info added on 2025-10-09T14:55:40.459Z>
+**TASK 4.2 VERIFIED AS COMPLETE! ✅**
+
+**Technical Specification Extraction Implementation:**
+
+All required functionality was implemented in subtask 4.1 as part of the MetadataExtractor.extract() method:
+
+**Technical Specs Extracted:**
+- duration: From audio.info.length (seconds with 3 decimal precision)
+- channels: From audio.info.channels (1=mono, 2=stereo, etc.)
+- sample_rate: From audio.info.sample_rate (Hz)
+- bitrate: From audio.info.bitrate (converted to kbps)
+- bit_depth: From audio.info.bits_per_sample or sample_width
+- format: From file extension (uppercase)
+
+**Enhancements Made:**
+- Added bit_depth field to metadata structure
+- Implemented bits_per_sample extraction (FLAC, WAV)
+- Implemented sample_width extraction with conversion (WAV)
+- Added 6 comprehensive tests for technical specs
+
+**Code Location:** src/metadata/extractor.py
+- Lines ~300-318: Technical specification extraction
+- Handles missing specs gracefully (hasattr checks)
+- Converts bitrate from bps to kbps
+- Converts sample_width (bytes) to bit_depth (bits)
+- Rounds duration to 3 decimal places
+
+**Format Support:**
+- MP3: duration, channels, sample_rate, bitrate
+- FLAC: duration, channels, sample_rate, bitrate, bit_depth
+- M4A/AAC: duration, channels, sample_rate, bitrate
+- OGG: duration, channels, sample_rate, bitrate
+- WAV: duration, channels, sample_rate, bit_depth
+
+**Testing** (tests/test_metadata_extraction.py):
+- Added TestTechnicalSpecExtraction class with 6 tests
+- Duration extraction test
+- Channels extraction test
+- Sample rate extraction test
+- Bitrate extraction test
+- Bit depth extraction test
+- All specs combined test
+
+**Documentation** (docs/task-4.2-technical-specs.md):
+- Technical specifications reference
+- Format-specific details
+- Common values guide
+- Usage examples
+
+**Verification:** ✅ Complete - All requirements met (duration, sample rate, bit depth, channel count)
+</info added on 2025-10-09T14:55:40.459Z>
 
 ## 3. Artwork Extraction [pending]
 ### Dependencies: None
