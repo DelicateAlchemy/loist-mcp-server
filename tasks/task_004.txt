@@ -1,6 +1,6 @@
 # Task ID: 4
 # Title: Implement Audio Metadata Extraction
-# Status: in-progress
+# Status: done
 # Dependencies: 3
 # Priority: high
 # Description: Create a module to extract ID3 tags and technical audio specifications from downloaded audio files.
