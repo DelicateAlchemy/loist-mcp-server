@@ -19,6 +19,11 @@ from .operations import (
     get_all_audio_metadata,
     search_audio_tracks,
     search_audio_tracks_advanced,
+    update_processing_status,
+    update_processing_status_batch,
+    mark_as_failed,
+    mark_as_completed,
+    mark_as_processing,
 )
 
 __all__ = [
@@ -33,5 +38,10 @@ __all__ = [
     "get_all_audio_metadata",
     "search_audio_tracks",
     "search_audio_tracks_advanced",
+    "update_processing_status",
+    "update_processing_status_batch",
+    "mark_as_failed",
+    "mark_as_completed",
+    "mark_as_processing",
 ]
 
