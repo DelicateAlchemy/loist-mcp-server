@@ -17,6 +17,8 @@ from .operations import (
     get_audio_metadata_by_id,
     get_audio_metadata_by_ids,
     get_all_audio_metadata,
+    search_audio_tracks,
+    search_audio_tracks_advanced,
 )
 
 __all__ = [
@@ -29,5 +31,7 @@ __all__ = [
     "get_audio_metadata_by_id",
     "get_audio_metadata_by_ids",
     "get_all_audio_metadata",
+    "search_audio_tracks",
+    "search_audio_tracks_advanced",
 ]
 

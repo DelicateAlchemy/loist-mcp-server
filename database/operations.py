@@ -577,19 +577,333 @@ def get_all_audio_metadata(
 
 
 # ============================================================================
+# Full-Text Search Operations
+# ============================================================================
+
+def search_audio_tracks(
+    query: str,
+    limit: int = 20,
+    offset: int = 0,
+    min_rank: float = 0.0
+) -> List[Dict[str, Any]]:
+    """
+    Search audio tracks using PostgreSQL full-text search.
+    
+    Uses the search_vector column (auto-populated via trigger) with
+    tsvector/tsquery for fast, indexed searching across metadata fields.
+    Results are ranked by relevance using ts_rank.
+    
+    Args:
+        query: Search query string (e.g., "queen bohemian rhapsody")
+            - Multiple words treated as AND search
+            - Use operators: & (AND), | (OR), ! (NOT), <-> (phrase)
+        limit: Maximum number of results (default: 20, max: 100)
+        offset: Number of results to skip for pagination
+        min_rank: Minimum relevance score (0.0-1.0, default: 0.0)
+    
+    Returns:
+        List of track dictionaries ordered by relevance (highest first):
+            - All track metadata fields
+            - rank: Relevance score (float)
+    
+    Raises:
+        ValidationError: If parameters are invalid
+        DatabaseOperationError: If search fails
+    
+    Example:
+        >>> results = search_audio_tracks("queen bohemian")
+        >>> for track in results:
+        ...     print(f"{track['title']} by {track['artist']} (score: {track['rank']:.3f})")
+        
+        >>> # Phrase search
+        >>> results = search_audio_tracks("'night' & 'opera'")
+        
+        >>> # OR search
+        >>> results = search_audio_tracks("queen | beatles")
+    """
+    # Validation
+    if not query or not query.strip():
+        raise ValidationError("Search query cannot be empty")
+    
+    if limit < 1 or limit > 100:
+        raise ValidationError("Limit must be between 1 and 100")
+    
+    if offset < 0:
+        raise ValidationError("Offset must be non-negative")
+    
+    if min_rank < 0.0 or min_rank > 1.0:
+        raise ValidationError("min_rank must be between 0.0 and 1.0")
+    
+    # Sanitize and prepare query
+    # Convert spaces to AND operator for multi-word queries
+    query_sanitized = query.strip()
+    
+    # If query doesn't contain operators, treat words as AND
+    if not any(op in query_sanitized for op in ['&', '|', '!', '<->']):
+        # Split on whitespace and join with &
+        words = query_sanitized.split()
+        tsquery_string = ' & '.join(words)
+    else:
+        tsquery_string = query_sanitized
+    
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                # Full-text search with ranking
+                search_query = """
+                    SELECT 
+                        id, status, artist, title, album, genre, year,
+                        duration_seconds, channels, sample_rate, bitrate,
+                        format, file_size_bytes, audio_gcs_path, thumbnail_gcs_path,
+                        created_at, updated_at,
+                        ts_rank(search_vector, to_tsquery('english', %s)) as rank
+                    FROM audio_tracks
+                    WHERE search_vector @@ to_tsquery('english', %s)
+                        AND ts_rank(search_vector, to_tsquery('english', %s)) >= %s
+                    ORDER BY rank DESC, created_at DESC
+                    LIMIT %s OFFSET %s
+                """
+                
+                cur.execute(
+                    search_query,
+                    (tsquery_string, tsquery_string, tsquery_string, min_rank, limit, offset)
+                )
+                results = cur.fetchall()
+                
+                logger.info(
+                    f"Full-text search for '{query}' returned {len(results)} results "
+                    f"(limit={limit}, offset={offset}, min_rank={min_rank})"
+                )
+                
+                return [dict(row) for row in results]
+    
+    except DatabaseError as e:
+        # Handle specific tsquery syntax errors
+        if "syntax error" in str(e).lower():
+            raise ValidationError(f"Invalid search query syntax: {query}")
+        
+        logger.error(f"Database error during search: {e}")
+        raise DatabaseOperationError(
+            f"Search operation failed: database error - {str(e)}"
+        )
+    
+    except Exception as e:
+        logger.error(f"Unexpected error during search: {e}")
+        raise DatabaseOperationError(
+            f"Search operation failed: {str(e)}"
+        )
+
+
+def search_audio_tracks_advanced(
+    query: str,
+    limit: int = 20,
+    offset: int = 0,
+    status_filter: Optional[str] = None,
+    year_min: Optional[int] = None,
+    year_max: Optional[int] = None,
+    format_filter: Optional[str] = None,
+    min_rank: float = 0.0,
+    rank_normalization: int = 1
+) -> Dict[str, Any]:
+    """
+    Advanced full-text search with additional filters and ranking options.
+    
+    Combines full-text search with structured filters for precise results.
+    Supports rank normalization methods for better relevance scoring.
+    
+    Args:
+        query: Search query string
+        limit: Maximum results (1-100, default: 20)
+        offset: Pagination offset
+        status_filter: Filter by status ('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED')
+        year_min: Minimum year (inclusive)
+        year_max: Maximum year (inclusive)
+        format_filter: Filter by audio format (e.g., 'MP3', 'FLAC')
+        min_rank: Minimum relevance score (0.0-1.0)
+        rank_normalization: ts_rank normalization method:
+            - 0: Default (no normalization)
+            - 1: Divides by 1 + log(document length)
+            - 2: Divides by document length
+            - 4: Divides by mean harmonic distance
+            - 8: Divides by unique word count
+            - 16: Divides by 1 + log(unique word count)
+            - 32: Divides by rank + 1
+    
+    Returns:
+        Dictionary containing:
+            - tracks: List of matching tracks with relevance scores
+            - total_matches: Approximate total matching tracks
+            - query: Original query string
+            - filters: Applied filters
+            - limit/offset: Pagination info
+    
+    Raises:
+        ValidationError: If parameters are invalid
+        DatabaseOperationError: If search fails
+    
+    Example:
+        >>> result = search_audio_tracks_advanced(
+        ...     query="rock",
+        ...     status_filter="COMPLETED",
+        ...     year_min=1970,
+        ...     year_max=1989,
+        ...     format_filter="FLAC",
+        ...     min_rank=0.1
+        ... )
+        >>> print(f"Found {result['total_matches']} matching tracks")
+        >>> for track in result['tracks']:
+        ...     print(f"{track['year']}: {track['title']} ({track['rank']:.3f})")
+    """
+    # Reuse basic validation
+    if not query or not query.strip():
+        raise ValidationError("Search query cannot be empty")
+    
+    if limit < 1 or limit > 100:
+        raise ValidationError("Limit must be between 1 and 100")
+    
+    if offset < 0:
+        raise ValidationError("Offset must be non-negative")
+    
+    if min_rank < 0.0 or min_rank > 1.0:
+        raise ValidationError("min_rank must be between 0.0 and 1.0")
+    
+    # Validate additional filters
+    valid_statuses = ['PENDING', 'PROCESSING', 'COMPLETED', 'FAILED']
+    if status_filter and status_filter not in valid_statuses:
+        raise ValidationError(f"Invalid status filter. Must be one of: {valid_statuses}")
+    
+    if year_min is not None and (year_min < 1800 or year_min > 2100):
+        raise ValidationError("year_min must be between 1800 and 2100")
+    
+    if year_max is not None and (year_max < 1800 or year_max > 2100):
+        raise ValidationError("year_max must be between 1800 and 2100")
+    
+    if year_min and year_max and year_min > year_max:
+        raise ValidationError("year_min cannot be greater than year_max")
+    
+    valid_normalizations = [0, 1, 2, 4, 8, 16, 32]
+    if rank_normalization not in valid_normalizations:
+        raise ValidationError(
+            f"Invalid rank_normalization. Must be one of: {valid_normalizations}"
+        )
+    
+    # Prepare tsquery
+    query_sanitized = query.strip()
+    if not any(op in query_sanitized for op in ['&', '|', '!', '<->']):
+        words = query_sanitized.split()
+        tsquery_string = ' & '.join(words)
+    else:
+        tsquery_string = query_sanitized
+    
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                # Build dynamic WHERE clause
+                where_conditions = ["search_vector @@ to_tsquery('english', %s)"]
+                params = [tsquery_string]
+                
+                # Add rank filter
+                where_conditions.append(f"ts_rank(search_vector, to_tsquery('english', %s), {rank_normalization}) >= %s")
+                params.extend([tsquery_string, min_rank])
+                
+                # Add optional filters
+                if status_filter:
+                    where_conditions.append("status = %s")
+                    params.append(status_filter)
+                
+                if year_min is not None:
+                    where_conditions.append("year >= %s")
+                    params.append(year_min)
+                
+                if year_max is not None:
+                    where_conditions.append("year <= %s")
+                    params.append(year_max)
+                
+                if format_filter:
+                    where_conditions.append("UPPER(format) = UPPER(%s)")
+                    params.append(format_filter)
+                
+                where_clause = " AND ".join(where_conditions)
+                
+                # Count total matches
+                count_query = f"""
+                    SELECT COUNT(*) as total
+                    FROM audio_tracks
+                    WHERE {where_clause}
+                """
+                
+                cur.execute(count_query, params)
+                total_matches = cur.fetchone()['total']
+                
+                # Get ranked results
+                search_query = f"""
+                    SELECT 
+                        id, status, artist, title, album, genre, year,
+                        duration_seconds, channels, sample_rate, bitrate,
+                        format, file_size_bytes, audio_gcs_path, thumbnail_gcs_path,
+                        created_at, updated_at,
+                        ts_rank(search_vector, to_tsquery('english', %s), {rank_normalization}) as rank
+                    FROM audio_tracks
+                    WHERE {where_clause}
+                    ORDER BY rank DESC, created_at DESC
+                    LIMIT %s OFFSET %s
+                """
+                
+                # Add tsquery param for rank calculation in SELECT, plus limit/offset
+                search_params = [tsquery_string] + params + [limit, offset]
+                
+                cur.execute(search_query, search_params)
+                results = cur.fetchall()
+                
+                logger.info(
+                    f"Advanced search for '{query}' returned {len(results)}/{total_matches} results "
+                    f"(filters: status={status_filter}, year={year_min}-{year_max}, "
+                    f"format={format_filter}, normalization={rank_normalization})"
+                )
+                
+                return {
+                    'tracks': [dict(row) for row in results],
+                    'total_matches': total_matches,
+                    'query': query,
+                    'filters': {
+                        'status': status_filter,
+                        'year_min': year_min,
+                        'year_max': year_max,
+                        'format': format_filter,
+                        'min_rank': min_rank,
+                        'rank_normalization': rank_normalization,
+                    },
+                    'limit': limit,
+                    'offset': offset,
+                    'has_more': (offset + len(results)) < total_matches
+                }
+    
+    except DatabaseError as e:
+        if "syntax error" in str(e).lower():
+            raise ValidationError(f"Invalid search query syntax: {query}")
+        
+        logger.error(f"Database error during advanced search: {e}")
+        raise DatabaseOperationError(
+            f"Advanced search operation failed: database error - {str(e)}"
+        )
+    
+    except Exception as e:
+        logger.error(f"Unexpected error during advanced search: {e}")
+        raise DatabaseOperationError(
+            f"Advanced search operation failed: {str(e)}"
+        )
+
+
+# ============================================================================
 # Placeholder sections for remaining operations
 # ============================================================================
 # These will be implemented in subsequent subtasks
-
-# Full-Text Search Operations (Subtask 6.3)
-# - search_audio_tracks()
-# - search_audio_tracks_advanced()
 
 # Status Update Operations (Subtask 6.4)
 # - update_processing_status()
 # - update_processing_status_batch()
 
 # Error and Transaction Management (Subtask 6.5)
-# - Already implemented in save and retrieve operations above
+# - Already implemented in save, retrieve, and search operations above
 # - Additional utilities as needed
 
