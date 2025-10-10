@@ -405,6 +405,190 @@ class AudioStorageManager:
         except Exception as e:
             logger.error(f"Failed to upload audio file {source_path}: {e}")
             raise
+    
+    def upload_thumbnail_file(
+        self,
+        source_path: Path | str,
+        audio_id: str,
+        metadata: Optional[Dict[str, str]] = None,
+    ) -> StorageResult:
+        """
+        Upload a thumbnail/artwork image to GCS for an audio file.
+        
+        Args:
+            source_path: Path to the local thumbnail/artwork image
+            audio_id: Audio ID this thumbnail belongs to (must be valid UUID)
+            metadata: Optional custom metadata to attach to the file
+        
+        Returns:
+            StorageResult with upload details and GCS paths
+        
+        Raises:
+            FileNotFoundError: If source file doesn't exist
+            ValueError: If file format is not supported or audio_id is invalid
+            GoogleCloudError: If upload fails after retries
+            
+        Example:
+            >>> manager = AudioStorageManager()
+            >>> result = manager.upload_thumbnail_file(
+            ...     "/tmp/artwork.jpg",
+            ...     "550e8400-e29b-41d4-a716-446655440000"
+            ... )
+            >>> print(result.thumbnail_gcs_path)
+            "gs://my-bucket/audio/550e8400-e29b-41d4-a716-446655440000/thumbnail.jpg"
+        """
+        source_path = Path(source_path) if isinstance(source_path, str) else source_path
+        
+        # Validate source file exists
+        if not source_path.exists():
+            raise FileNotFoundError(f"Thumbnail file not found: {source_path}")
+        
+        # Validate audio_id is a valid UUID
+        if not self.filename_generator.validate_uuid(audio_id):
+            raise ValueError(f"Invalid UUID format for audio_id: {audio_id}")
+        
+        # Validate file extension
+        supported_extensions = {'.jpg', '.jpeg', '.png', '.webp'}
+        if source_path.suffix.lower() not in supported_extensions:
+            raise ValueError(
+                f"Unsupported image format: {source_path.suffix}. "
+                f"Supported formats: {', '.join(supported_extensions)}"
+            )
+        
+        # Generate blob name using thumbnail naming convention
+        blob_name = self.filename_generator.generate_thumbnail_blob_name(
+            audio_id=audio_id,
+            extension=source_path.suffix.lower()
+        )
+        
+        logger.info(f"Uploading thumbnail: {source_path} -> {blob_name}")
+        
+        try:
+            # Determine content type from extension
+            content_type_map = {
+                '.jpg': 'image/jpeg',
+                '.jpeg': 'image/jpeg',
+                '.png': 'image/png',
+                '.webp': 'image/webp',
+            }
+            content_type = content_type_map.get(source_path.suffix.lower(), 'image/jpeg')
+            
+            # Add default metadata
+            upload_metadata = {
+                'audio_id': audio_id,
+                'original_filename': source_path.name,
+                'file_size': str(source_path.stat().st_size),
+                'file_type': 'thumbnail',
+            }
+            
+            # Merge with custom metadata if provided
+            if metadata:
+                upload_metadata.update(metadata)
+            
+            # Upload file to GCS
+            blob = self.gcs_client.upload_file(
+                source_path=source_path,
+                destination_blob_name=blob_name,
+                content_type=content_type,
+                metadata=upload_metadata,
+            )
+            
+            # Format GCS URI
+            gcs_path = self.file_organizer.format_gcs_uri(
+                bucket_name=self.gcs_client.bucket_name,
+                blob_name=blob_name
+            )
+            
+            logger.info(f"Successfully uploaded thumbnail: {gcs_path}")
+            
+            # Return structured result
+            return StorageResult(
+                audio_id=audio_id,
+                audio_gcs_path="",  # Not applicable for thumbnail-only upload
+                thumbnail_gcs_path=gcs_path,
+                thumbnail_blob_name=blob_name,
+                metadata={
+                    'size': blob.size,
+                    'content_type': blob.content_type,
+                    'md5_hash': blob.md5_hash,
+                    'generation': blob.generation,
+                }
+            )
+            
+        except FileNotFoundError:
+            logger.error(f"File disappeared during upload: {source_path}")
+            raise
+        except Exception as e:
+            logger.error(f"Failed to upload thumbnail file {source_path}: {e}")
+            raise
+    
+    def upload_audio_with_thumbnail(
+        self,
+        audio_path: Path | str,
+        thumbnail_path: Optional[Path | str] = None,
+        audio_id: Optional[str] = None,
+        metadata: Optional[Dict[str, str]] = None,
+    ) -> StorageResult:
+        """
+        Upload an audio file and optional thumbnail together.
+        
+        This is the recommended method for uploading a complete audio entry
+        with its associated artwork in a single operation.
+        
+        Args:
+            audio_path: Path to the local audio file
+            thumbnail_path: Optional path to thumbnail/artwork image
+            audio_id: Optional pre-generated audio ID (generates new UUID if not provided)
+            metadata: Optional custom metadata to attach to both files
+        
+        Returns:
+            StorageResult with both audio and thumbnail paths
+        
+        Raises:
+            FileNotFoundError: If source files don't exist
+            ValueError: If file formats are not supported
+            GoogleCloudError: If upload fails after retries
+            
+        Example:
+            >>> manager = AudioStorageManager()
+            >>> result = manager.upload_audio_with_thumbnail(
+            ...     "/tmp/song.mp3",
+            ...     "/tmp/artwork.jpg"
+            ... )
+            >>> print(f"Audio: {result.audio_gcs_path}")
+            >>> print(f"Thumbnail: {result.thumbnail_gcs_path}")
+        """
+        # Upload audio first (this generates the audio_id if not provided)
+        audio_result = self.upload_audio_file(
+            source_path=audio_path,
+            audio_id=audio_id,
+            metadata=metadata,
+        )
+        
+        # Upload thumbnail if provided
+        if thumbnail_path:
+            thumbnail_result = self.upload_thumbnail_file(
+                source_path=thumbnail_path,
+                audio_id=audio_result.audio_id,
+                metadata=metadata,
+            )
+            
+            # Combine results
+            return StorageResult(
+                audio_id=audio_result.audio_id,
+                audio_gcs_path=audio_result.audio_gcs_path,
+                audio_blob_name=audio_result.audio_blob_name,
+                thumbnail_gcs_path=thumbnail_result.thumbnail_gcs_path,
+                thumbnail_blob_name=thumbnail_result.thumbnail_blob_name,
+                metadata={
+                    **audio_result.metadata,
+                    'has_thumbnail': True,
+                }
+            )
+        else:
+            # No thumbnail, return audio result only
+            audio_result.metadata['has_thumbnail'] = False
+            return audio_result
 
 
 # For subtask 5.1, we've implemented:
@@ -424,6 +608,16 @@ class AudioStorageManager:
 # 7. Proper content-type detection from file extensions
 # 8. Detailed logging for debugging and auditing
 
+# For subtask 5.4, we've implemented:
+# 1. upload_thumbnail_file() method for artwork/image uploads
+# 2. Support for multiple image formats (.jpg, .jpeg, .png, .webp)
+# 3. Validation of audio_id before thumbnail upload
+# 4. Content-type detection for image formats
+# 5. Metadata tagging (audio_id, file_type, etc.)
+# 6. upload_audio_with_thumbnail() convenience method
+# 7. Combined result with both audio and thumbnail paths
+# 8. Proper handling of optional thumbnail uploads
+
 # The implementation follows best practices:
 # - UUID v4 for strong randomness (122 bits)
 # - Preserves original file extensions
@@ -431,4 +625,5 @@ class AudioStorageManager:
 # - Helper methods for validation and parsing
 # - Comprehensive docstrings
 # - Proper error handling with informative messages
+# - Coordinated uploads for related files
 
