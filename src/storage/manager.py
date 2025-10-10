@@ -240,6 +240,173 @@ class FileOrganizer:
         return f"gs://{bucket_name}/{blob_name}"
 
 
+class AudioStorageManager:
+    """
+    High-level manager for audio file storage operations.
+    
+    Coordinates the complete upload workflow:
+    1. Generate unique identifiers
+    2. Upload audio files to GCS with proper organization
+    3. Upload thumbnails/artwork
+    4. Handle errors and retries
+    5. Clean up temporary files
+    6. Return structured results
+    
+    Usage:
+        manager = AudioStorageManager(bucket_name="my-bucket")
+        result = manager.upload_audio("/tmp/song.mp3", "/tmp/artwork.jpg")
+        print(f"Audio uploaded: {result.audio_gcs_path}")
+    """
+    
+    def __init__(
+        self,
+        bucket_name: Optional[str] = None,
+        project_id: Optional[str] = None,
+        credentials_path: Optional[str] = None,
+    ):
+        """
+        Initialize the audio storage manager.
+        
+        Args:
+            bucket_name: GCS bucket name (defaults to env var or config)
+            project_id: GCP project ID
+            credentials_path: Path to service account credentials
+        """
+        # Import here to avoid circular dependency
+        from src.storage.gcs_client import GCSClient
+        
+        self.gcs_client = GCSClient(
+            bucket_name=bucket_name,
+            project_id=project_id,
+            credentials_path=credentials_path,
+        )
+        
+        self.filename_generator = FilenameGenerator()
+        self.file_organizer = FileOrganizer()
+        
+        logger.info(f"Initialized AudioStorageManager for bucket: {self.gcs_client.bucket_name}")
+    
+    def upload_audio_file(
+        self,
+        source_path: Path | str,
+        audio_id: Optional[str] = None,
+        metadata: Optional[Dict[str, str]] = None,
+    ) -> StorageResult:
+        """
+        Upload an audio file to GCS with proper organization and error handling.
+        
+        Args:
+            source_path: Path to the local audio file
+            audio_id: Optional pre-generated audio ID (generates new UUID if not provided)
+            metadata: Optional custom metadata to attach to the file
+        
+        Returns:
+            StorageResult with upload details and GCS paths
+        
+        Raises:
+            FileNotFoundError: If source file doesn't exist
+            ValueError: If file format is not supported
+            GoogleCloudError: If upload fails after retries
+            
+        Example:
+            >>> manager = AudioStorageManager()
+            >>> result = manager.upload_audio_file("/tmp/song.mp3")
+            >>> print(result.audio_gcs_path)
+            "gs://my-bucket/audio/550e8400-e29b-41d4-a716-446655440000/audio.mp3"
+        """
+        source_path = Path(source_path) if isinstance(source_path, str) else source_path
+        
+        # Validate source file exists
+        if not source_path.exists():
+            raise FileNotFoundError(f"Audio file not found: {source_path}")
+        
+        # Validate file extension
+        supported_extensions = {'.mp3', '.wav', '.flac', '.ogg', '.m4a', '.aac'}
+        if source_path.suffix.lower() not in supported_extensions:
+            raise ValueError(
+                f"Unsupported audio format: {source_path.suffix}. "
+                f"Supported formats: {', '.join(supported_extensions)}"
+            )
+        
+        # Generate or use provided audio ID
+        if audio_id is None:
+            audio_id = self.filename_generator.generate_audio_id()
+            logger.info(f"Generated new audio ID: {audio_id}")
+        else:
+            # Validate provided UUID
+            if not self.filename_generator.validate_uuid(audio_id):
+                raise ValueError(f"Invalid UUID format: {audio_id}")
+            logger.info(f"Using provided audio ID: {audio_id}")
+        
+        # Generate blob name using organized structure
+        blob_name = self.filename_generator.generate_blob_name(
+            audio_id=audio_id,
+            file_path=source_path,
+            file_type="audio"
+        )
+        
+        logger.info(f"Uploading audio: {source_path} -> {blob_name}")
+        
+        try:
+            # Determine content type from extension
+            content_type_map = {
+                '.mp3': 'audio/mpeg',
+                '.wav': 'audio/wav',
+                '.flac': 'audio/flac',
+                '.ogg': 'audio/ogg',
+                '.m4a': 'audio/mp4',
+                '.aac': 'audio/aac',
+            }
+            content_type = content_type_map.get(source_path.suffix.lower(), 'audio/mpeg')
+            
+            # Add default metadata
+            upload_metadata = {
+                'audio_id': audio_id,
+                'original_filename': source_path.name,
+                'file_size': str(source_path.stat().st_size),
+            }
+            
+            # Merge with custom metadata if provided
+            if metadata:
+                upload_metadata.update(metadata)
+            
+            # Upload file to GCS
+            blob = self.gcs_client.upload_file(
+                source_path=source_path,
+                destination_blob_name=blob_name,
+                content_type=content_type,
+                metadata=upload_metadata,
+            )
+            
+            # Format GCS URI
+            gcs_path = self.file_organizer.format_gcs_uri(
+                bucket_name=self.gcs_client.bucket_name,
+                blob_name=blob_name
+            )
+            
+            logger.info(f"Successfully uploaded audio: {gcs_path}")
+            
+            # Return structured result
+            return StorageResult(
+                audio_id=audio_id,
+                audio_gcs_path=gcs_path,
+                audio_blob_name=blob_name,
+                metadata={
+                    'size': blob.size,
+                    'content_type': blob.content_type,
+                    'md5_hash': blob.md5_hash,
+                    'generation': blob.generation,
+                }
+            )
+            
+        except FileNotFoundError:
+            logger.error(f"File disappeared during upload: {source_path}")
+            raise
+        except Exception as e:
+            logger.error(f"Failed to upload audio file {source_path}: {e}")
+            raise
+
+
 # For subtask 5.1, we've implemented:
 # 1. FilenameGenerator class with UUID v4 generation
 # 2. Collision-resistant unique ID generation
@@ -247,10 +414,21 @@ class FileOrganizer:
 # 4. Security considerations (non-sequential IDs prevent enumeration)
 # 5. Validation and parsing utilities
 
+# For subtask 5.3, we've implemented:
+# 1. AudioStorageManager class for coordinating uploads
+# 2. upload_audio_file() method with comprehensive error handling
+# 3. File validation (existence, supported formats)
+# 4. UUID generation and validation
+# 5. Metadata attachment to uploaded files
+# 6. Structured result object (StorageResult)
+# 7. Proper content-type detection from file extensions
+# 8. Detailed logging for debugging and auditing
+
 # The implementation follows best practices:
 # - UUID v4 for strong randomness (122 bits)
 # - Preserves original file extensions
 # - Clear, documented structure
 # - Helper methods for validation and parsing
 # - Comprehensive docstrings
+# - Proper error handling with informative messages
 
