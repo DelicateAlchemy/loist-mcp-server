@@ -327,11 +327,38 @@ class AudioStorageManager:
         
         return _do_upload()
     
+    def _cleanup_file(self, file_path: Path, file_description: str = "file") -> bool:
+        """
+        Safely delete a file with error handling.
+        
+        Args:
+            file_path: Path to file to delete
+            file_description: Description for logging (e.g., "audio file", "thumbnail")
+        
+        Returns:
+            True if deleted successfully, False if failed
+        """
+        try:
+            if file_path.exists():
+                file_path.unlink()
+                logger.info(f"Cleaned up temporary {file_description}: {file_path}")
+                return True
+            else:
+                logger.debug(f"Temporary {file_description} already removed: {file_path}")
+                return True
+        except PermissionError as e:
+            logger.warning(f"Permission denied when cleaning up {file_description} {file_path}: {e}")
+            return False
+        except Exception as e:
+            logger.warning(f"Failed to cleanup temporary {file_description} {file_path}: {e}")
+            return False
+    
     def upload_audio_file(
         self,
         source_path: Path | str,
         audio_id: Optional[str] = None,
         metadata: Optional[Dict[str, str]] = None,
+        cleanup: bool = False,
     ) -> StorageResult:
         """
         Upload an audio file to GCS with proper organization and error handling.
@@ -340,6 +367,7 @@ class AudioStorageManager:
             source_path: Path to the local audio file
             audio_id: Optional pre-generated audio ID (generates new UUID if not provided)
             metadata: Optional custom metadata to attach to the file
+            cleanup: If True, delete the local file after successful upload
         
         Returns:
             StorageResult with upload details and GCS paths
@@ -428,6 +456,10 @@ class AudioStorageManager:
             
             logger.info(f"Successfully uploaded audio: {gcs_path}")
             
+            # Cleanup temporary file if requested
+            if cleanup:
+                self._cleanup_file(source_path, "audio file")
+            
             # Return structured result
             return StorageResult(
                 audio_id=audio_id,
@@ -453,6 +485,7 @@ class AudioStorageManager:
         source_path: Path | str,
         audio_id: str,
         metadata: Optional[Dict[str, str]] = None,
+        cleanup: bool = False,
     ) -> StorageResult:
         """
         Upload a thumbnail/artwork image to GCS for an audio file.
@@ -461,6 +494,7 @@ class AudioStorageManager:
             source_path: Path to the local thumbnail/artwork image
             audio_id: Audio ID this thumbnail belongs to (must be valid UUID)
             metadata: Optional custom metadata to attach to the file
+            cleanup: If True, delete the local file after successful upload
         
         Returns:
             StorageResult with upload details and GCS paths
@@ -544,6 +578,10 @@ class AudioStorageManager:
             
             logger.info(f"Successfully uploaded thumbnail: {gcs_path}")
             
+            # Cleanup temporary file if requested
+            if cleanup:
+                self._cleanup_file(source_path, "thumbnail file")
+            
             # Return structured result
             return StorageResult(
                 audio_id=audio_id,
@@ -571,6 +609,7 @@ class AudioStorageManager:
         thumbnail_path: Optional[Path | str] = None,
         audio_id: Optional[str] = None,
         metadata: Optional[Dict[str, str]] = None,
+        cleanup: bool = False,
     ) -> StorageResult:
         """
         Upload an audio file and optional thumbnail together.
@@ -583,6 +622,7 @@ class AudioStorageManager:
             thumbnail_path: Optional path to thumbnail/artwork image
             audio_id: Optional pre-generated audio ID (generates new UUID if not provided)
             metadata: Optional custom metadata to attach to both files
+            cleanup: If True, delete local files after successful upload
         
         Returns:
             StorageResult with both audio and thumbnail paths
@@ -606,6 +646,7 @@ class AudioStorageManager:
             source_path=audio_path,
             audio_id=audio_id,
             metadata=metadata,
+            cleanup=cleanup,
         )
         
         # Upload thumbnail if provided
@@ -614,6 +655,7 @@ class AudioStorageManager:
                 source_path=thumbnail_path,
                 audio_id=audio_result.audio_id,
                 metadata=metadata,
+                cleanup=cleanup,
             )
             
             # Combine results
@@ -661,6 +703,16 @@ class AudioStorageManager:
 # 7. Combined result with both audio and thumbnail paths
 # 8. Proper handling of optional thumbnail uploads
 
+# For subtask 5.6, we've implemented:
+# 1. _cleanup_file() private method for safe file deletion
+# 2. Error handling for cleanup (PermissionError, etc.)
+# 3. Optional 'cleanup' parameter in all upload methods
+# 4. Cleanup only happens after successful upload
+# 5. Failed cleanup doesn't break the upload operation
+# 6. Detailed logging of cleanup operations
+# 7. Cleanup applies to both audio and thumbnail files
+# 8. Cleanup in upload_audio_with_thumbnail() handles both files
+
 # The implementation follows best practices:
 # - UUID v4 for strong randomness (122 bits)
 # - Preserves original file extensions
@@ -669,4 +721,5 @@ class AudioStorageManager:
 # - Comprehensive docstrings
 # - Proper error handling with informative messages
 # - Coordinated uploads for related files
+# - Safe cleanup that doesn't interfere with upload success
 
