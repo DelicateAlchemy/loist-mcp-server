@@ -14,6 +14,9 @@ from .pool import (
 from .operations import (
     save_audio_metadata,
     save_audio_metadata_batch,
+    get_audio_metadata_by_id,
+    get_audio_metadata_by_ids,
+    get_all_audio_metadata,
 )
 
 __all__ = [
@@ -23,5 +26,8 @@ __all__ = [
     "close_pool",
     "save_audio_metadata",
     "save_audio_metadata_batch",
+    "get_audio_metadata_by_id",
+    "get_audio_metadata_by_ids",
+    "get_all_audio_metadata",
 ]
 

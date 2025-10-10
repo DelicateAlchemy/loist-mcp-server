@@ -303,13 +303,283 @@ def save_audio_metadata_batch(
 
 
 # ============================================================================
+# Retrieve Metadata Operations
+# ============================================================================
+
+def get_audio_metadata_by_id(track_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Retrieve audio metadata by track ID.
+    
+    Efficiently queries the database using the primary key index.
+    Returns None if track is not found (graceful handling).
+    
+    Args:
+        track_id: UUID string of the track to retrieve
+    
+    Returns:
+        Dictionary with track metadata if found, None otherwise:
+            - id: Track UUID
+            - status: Processing status
+            - artist, title, album, genre, year
+            - duration_seconds, channels, sample_rate, bitrate, format
+            - file_size_bytes, audio_gcs_path, thumbnail_gcs_path
+            - created_at, updated_at timestamps
+            - error_message, retry_count, last_processed_at (if applicable)
+        Returns None if track doesn't exist
+    
+    Raises:
+        ValidationError: If track_id format is invalid
+        DatabaseOperationError: If database query fails
+    
+    Example:
+        >>> track = get_audio_metadata_by_id('123e4567-e89b-12d3-a456-426614174000')
+        >>> if track:
+        ...     print(f"Found: {track['title']} by {track['artist']}")
+        ... else:
+        ...     print("Track not found")
+    """
+    # Validate UUID format
+    try:
+        uuid.UUID(track_id)
+    except ValueError:
+        raise ValidationError(f"Invalid track_id format: {track_id}")
+    
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                # Parameterized query for security
+                query = """
+                    SELECT 
+                        id, status, artist, title, album, genre, year,
+                        duration_seconds, channels, sample_rate, bitrate,
+                        format, file_size_bytes, audio_gcs_path, thumbnail_gcs_path,
+                        created_at, updated_at, error_message, retry_count, last_processed_at
+                    FROM audio_tracks
+                    WHERE id = %s
+                """
+                
+                cur.execute(query, (track_id,))
+                result = cur.fetchone()
+                
+                if result:
+                    logger.debug(f"Retrieved metadata for track: {track_id}")
+                    return dict(result)
+                else:
+                    logger.debug(f"Track not found: {track_id}")
+                    return None
+    
+    except DatabaseError as e:
+        logger.error(f"Database error retrieving metadata for {track_id}: {e}")
+        raise DatabaseOperationError(
+            f"Failed to retrieve metadata: database error - {str(e)}"
+        )
+    
+    except Exception as e:
+        logger.error(f"Unexpected error retrieving metadata for {track_id}: {e}")
+        raise DatabaseOperationError(
+            f"Failed to retrieve metadata: {str(e)}"
+        )
+
+
+def get_audio_metadata_by_ids(track_ids: List[str]) -> List[Dict[str, Any]]:
+    """
+    Retrieve multiple audio metadata records by track IDs.
+    
+    Efficiently queries multiple tracks in a single database operation.
+    Skips invalid UUIDs and returns only found tracks.
+    
+    Args:
+        track_ids: List of UUID strings to retrieve
+    
+    Returns:
+        List of dictionaries with track metadata for found tracks.
+        Empty list if no tracks found.
+        Order is not guaranteed to match input order.
+    
+    Raises:
+        ValidationError: If any track_id format is invalid
+        DatabaseOperationError: If database query fails
+    
+    Example:
+        >>> ids = ['123e4567-e89b-12d3-a456-426614174000', 
+        ...        '223e4567-e89b-12d3-a456-426614174001']
+        >>> tracks = get_audio_metadata_by_ids(ids)
+        >>> print(f"Found {len(tracks)} out of {len(ids)} tracks")
+    """
+    if not track_ids:
+        return []
+    
+    # Validate all UUID formats
+    valid_ids = []
+    for track_id in track_ids:
+        try:
+            uuid.UUID(track_id)
+            valid_ids.append(track_id)
+        except ValueError:
+            raise ValidationError(f"Invalid track_id format in batch: {track_id}")
+    
+    if not valid_ids:
+        return []
+    
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                # Use ANY operator for efficient batch query
+                query = """
+                    SELECT 
+                        id, status, artist, title, album, genre, year,
+                        duration_seconds, channels, sample_rate, bitrate,
+                        format, file_size_bytes, audio_gcs_path, thumbnail_gcs_path,
+                        created_at, updated_at, error_message, retry_count, last_processed_at
+                    FROM audio_tracks
+                    WHERE id = ANY(%s)
+                """
+                
+                cur.execute(query, (valid_ids,))
+                results = cur.fetchall()
+                
+                logger.debug(f"Retrieved {len(results)} tracks out of {len(valid_ids)} requested")
+                
+                return [dict(row) for row in results]
+    
+    except DatabaseError as e:
+        logger.error(f"Database error retrieving batch metadata: {e}")
+        raise DatabaseOperationError(
+            f"Failed to retrieve batch metadata: database error - {str(e)}"
+        )
+    
+    except Exception as e:
+        logger.error(f"Unexpected error retrieving batch metadata: {e}")
+        raise DatabaseOperationError(
+            f"Failed to retrieve batch metadata: {str(e)}"
+        )
+
+
+def get_all_audio_metadata(
+    limit: int = 100,
+    offset: int = 0,
+    status_filter: Optional[str] = None,
+    order_by: str = 'created_at',
+    order_direction: str = 'DESC'
+) -> Dict[str, Any]:
+    """
+    Retrieve paginated list of audio metadata records.
+    
+    Supports filtering, ordering, and pagination for efficient data retrieval.
+    
+    Args:
+        limit: Maximum number of records to return (default: 100, max: 1000)
+        offset: Number of records to skip (for pagination)
+        status_filter: Optional status to filter by ('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED')
+        order_by: Field to order by (default: 'created_at')
+        order_direction: Sort direction 'ASC' or 'DESC' (default: 'DESC')
+    
+    Returns:
+        Dictionary containing:
+            - tracks: List of track metadata dictionaries
+            - total_count: Total number of tracks matching filter
+            - limit: Limit used
+            - offset: Offset used
+            - has_more: Boolean indicating if more records exist
+    
+    Raises:
+        ValidationError: If parameters are invalid
+        DatabaseOperationError: If database query fails
+    
+    Example:
+        >>> result = get_all_audio_metadata(limit=50, status_filter='COMPLETED')
+        >>> print(f"Retrieved {len(result['tracks'])} of {result['total_count']} tracks")
+        >>> for track in result['tracks']:
+        ...     print(f"{track['title']} by {track['artist']}")
+    """
+    # Validation
+    if limit < 1 or limit > 1000:
+        raise ValidationError("Limit must be between 1 and 1000")
+    
+    if offset < 0:
+        raise ValidationError("Offset must be non-negative")
+    
+    valid_statuses = ['PENDING', 'PROCESSING', 'COMPLETED', 'FAILED']
+    if status_filter and status_filter not in valid_statuses:
+        raise ValidationError(f"Invalid status filter. Must be one of: {valid_statuses}")
+    
+    # Whitelist allowed order_by columns to prevent SQL injection
+    valid_order_columns = ['created_at', 'updated_at', 'title', 'artist', 'album', 'year']
+    if order_by not in valid_order_columns:
+        raise ValidationError(f"Invalid order_by column. Must be one of: {valid_order_columns}")
+    
+    if order_direction not in ['ASC', 'DESC']:
+        raise ValidationError("order_direction must be 'ASC' or 'DESC'")
+    
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                # Build query with optional status filter
+                base_query = """
+                    SELECT 
+                        id, status, artist, title, album, genre, year,
+                        duration_seconds, channels, sample_rate, bitrate,
+                        format, file_size_bytes, audio_gcs_path, thumbnail_gcs_path,
+                        created_at, updated_at
+                    FROM audio_tracks
+                """
+                
+                count_query = "SELECT COUNT(*) FROM audio_tracks"
+                
+                where_clause = ""
+                params = []
+                
+                if status_filter:
+                    where_clause = " WHERE status = %s"
+                    params = [status_filter]
+                
+                # Use psycopg2.sql for safe column name injection
+                from psycopg2 import sql
+                
+                # Get total count
+                count_query_full = count_query + where_clause
+                cur.execute(count_query_full, params)
+                total_count = cur.fetchone()['count']
+                
+                # Get paginated results
+                query_full = sql.SQL(base_query + where_clause + " ORDER BY {} {} LIMIT %s OFFSET %s").format(
+                    sql.Identifier(order_by),
+                    sql.SQL(order_direction)
+                )
+                
+                cur.execute(query_full, params + [limit, offset])
+                results = cur.fetchall()
+                
+                logger.debug(
+                    f"Retrieved {len(results)} tracks (offset={offset}, limit={limit}, "
+                    f"total={total_count}, status={status_filter})"
+                )
+                
+                return {
+                    'tracks': [dict(row) for row in results],
+                    'total_count': total_count,
+                    'limit': limit,
+                    'offset': offset,
+                    'has_more': (offset + limit) < total_count
+                }
+    
+    except DatabaseError as e:
+        logger.error(f"Database error retrieving paginated metadata: {e}")
+        raise DatabaseOperationError(
+            f"Failed to retrieve paginated metadata: database error - {str(e)}"
+        )
+    
+    except Exception as e:
+        logger.error(f"Unexpected error retrieving paginated metadata: {e}")
+        raise DatabaseOperationError(
+            f"Failed to retrieve paginated metadata: {str(e)}"
+        )
+
+
+# ============================================================================
 # Placeholder sections for remaining operations
 # ============================================================================
 # These will be implemented in subsequent subtasks
-
-# Retrieve Metadata Operations (Subtask 6.2)
-# - get_audio_metadata_by_id()
-# - get_audio_metadata_by_ids()
 
 # Full-Text Search Operations (Subtask 6.3)
 # - search_audio_tracks()
@@ -320,6 +590,6 @@ def save_audio_metadata_batch(
 # - update_processing_status_batch()
 
 # Error and Transaction Management (Subtask 6.5)
-# - Already implemented in save operations above
+# - Already implemented in save and retrieve operations above
 # - Additional utilities as needed
 
