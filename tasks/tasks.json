@@ -348,8 +348,8 @@
           "title": "Generate Unique Filenames for Uploads",
           "description": "Create a mechanism to generate unique filenames for both audio and thumbnail files to prevent naming collisions in GCS.",
           "dependencies": [],
-          "details": "Implement a function that combines elements such as UUIDs, timestamps, or user identifiers to ensure each uploaded file has a unique name.",
-          "status": "pending"
+          "details": "Implement a function that combines elements such as UUIDs, timestamps, or user identifiers to ensure each uploaded file has a unique name.\n<info added on 2025-10-10T11:07:11.042Z>\nImplementation complete for unique filename generation.\n\nCreated src/storage/manager.py with two main classes:\n\n1. **FilenameGenerator class**:\n   - `generate_audio_id()`: Generates UUID v4 for unique identifiers (122 bits of randomness)\n   - `generate_blob_name()`: Creates GCS blob names with format \"audio/{uuid}/{type}.{ext}\"\n   - `generate_thumbnail_blob_name()`: Specialized method for thumbnail naming\n   - `parse_audio_id_from_blob_name()`: Extracts UUID from blob path\n   - `validate_uuid()`: Validates UUID strings\n\n2. **FileOrganizer class**:\n   - Defines organizational constants (AUDIO_ROOT, AUDIO_FILENAME, THUMBNAIL_FILENAME)\n   - `get_folder_structure()`: Returns folder paths for an audio ID\n   - `get_expected_files()`: Returns expected file paths for validation\n   - `format_gcs_uri()`: Formats proper gs:// URIs\n\n**Design decisions**:\n- UUID v4 chosen for security (non-sequential, prevents enumeration attacks)\n- Preserves original file extensions for proper content-type handling\n- Organized structure: audio/{uuid}/ folder per upload for easy management\n- Collision probability is negligible (~5.3×10^36 possible values)\n- All methods are well-documented with examples\n</info added on 2025-10-10T11:07:11.042Z>",
+          "status": "done"
         },
         {
           "id": 2,
