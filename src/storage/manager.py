@@ -16,6 +16,8 @@ from pathlib import Path
 from typing import Optional, Dict, Any, Tuple
 from dataclasses import dataclass
 
+from src.storage.retry import with_retry, RetryConfig, CONSERVATIVE_CONFIG
+
 logger = logging.getLogger(__name__)
 
 
@@ -263,6 +265,7 @@ class AudioStorageManager:
         bucket_name: Optional[str] = None,
         project_id: Optional[str] = None,
         credentials_path: Optional[str] = None,
+        retry_config: Optional[RetryConfig] = None,
     ):
         """
         Initialize the audio storage manager.
@@ -271,6 +274,7 @@ class AudioStorageManager:
             bucket_name: GCS bucket name (defaults to env var or config)
             project_id: GCP project ID
             credentials_path: Path to service account credentials
+            retry_config: Custom retry configuration (uses CONSERVATIVE_CONFIG if not provided)
         """
         # Import here to avoid circular dependency
         from src.storage.gcs_client import GCSClient
@@ -283,8 +287,45 @@ class AudioStorageManager:
         
         self.filename_generator = FilenameGenerator()
         self.file_organizer = FileOrganizer()
+        self.retry_config = retry_config or CONSERVATIVE_CONFIG
         
-        logger.info(f"Initialized AudioStorageManager for bucket: {self.gcs_client.bucket_name}")
+        logger.info(
+            f"Initialized AudioStorageManager for bucket: {self.gcs_client.bucket_name} "
+            f"with retry config (max_attempts={self.retry_config.max_attempts})"
+        )
+    
+    def _upload_file_with_retry(
+        self,
+        source_path: Path,
+        blob_name: str,
+        content_type: str,
+        metadata: Dict[str, str],
+        operation_name: str,
+    ):
+        """
+        Internal method to upload a file with retry logic.
+        
+        Args:
+            source_path: Local file path
+            blob_name: Destination blob name in GCS
+            content_type: MIME type
+            metadata: File metadata
+            operation_name: Operation name for logging
+        
+        Returns:
+            Uploaded blob object
+        """
+        # Create a wrapped upload function with retry logic
+        @with_retry(config=self.retry_config, operation_name=operation_name)
+        def _do_upload():
+            return self.gcs_client.upload_file(
+                source_path=source_path,
+                destination_blob_name=blob_name,
+                content_type=content_type,
+                metadata=metadata,
+            )
+        
+        return _do_upload()
     
     def upload_audio_file(
         self,
@@ -370,12 +411,13 @@ class AudioStorageManager:
             if metadata:
                 upload_metadata.update(metadata)
             
-            # Upload file to GCS
-            blob = self.gcs_client.upload_file(
+            # Upload file to GCS with retry logic
+            blob = self._upload_file_with_retry(
                 source_path=source_path,
-                destination_blob_name=blob_name,
+                blob_name=blob_name,
                 content_type=content_type,
                 metadata=upload_metadata,
+                operation_name=f"upload_audio_{audio_id}",
             )
             
             # Format GCS URI
@@ -485,12 +527,13 @@ class AudioStorageManager:
             if metadata:
                 upload_metadata.update(metadata)
             
-            # Upload file to GCS
-            blob = self.gcs_client.upload_file(
+            # Upload file to GCS with retry logic
+            blob = self._upload_file_with_retry(
                 source_path=source_path,
-                destination_blob_name=blob_name,
+                blob_name=blob_name,
                 content_type=content_type,
                 metadata=upload_metadata,
+                operation_name=f"upload_thumbnail_{audio_id}",
             )
             
             # Format GCS URI

@@ -389,8 +389,8 @@
             3,
             4
           ],
-          "details": "Incorporate exponential backoff or similar strategies to automatically retry failed uploads, logging errors as needed.",
-          "status": "pending"
+          "details": "Incorporate exponential backoff or similar strategies to automatically retry failed uploads, logging errors as needed.\n<info added on 2025-10-10T11:13:41.097Z>\nUpload retry logic with exponential backoff implemented.\n\n**Key features implemented**:\n\n1. **Created src/storage/retry.py module**:\n   - `RetryConfig` class for configurable retry behavior\n   - Exponential backoff with jitter algorithm\n   - Configurable max attempts, delays, and retryable exceptions\n   - `with_retry()` decorator for adding retry to any function\n   - `retry_operation()` functional approach for runtime retry\n   - Preset configurations (CONSERVATIVE, AGGRESSIVE, PATIENT)\n\n2. **Retry configuration options**:\n   - max_attempts: Number of retry attempts\n   - initial_delay: Starting delay before first retry\n   - max_delay: Maximum delay cap\n   - exponential_base: Growth rate (typically 2.0)\n   - jitter: Adds ±50% randomness to prevent thundering herd\n\n3. **Retryable exceptions**:\n   - TooManyRequests (429 rate limiting)\n   - ServiceUnavailable (503 transient errors)\n   - ConnectionError (network issues)\n   - TimeoutError (request timeouts)\n\n4. **Integration with AudioStorageManager**:\n   - Added retry_config parameter to constructor\n   - Uses CONSERVATIVE_CONFIG by default (3 attempts, moderate delays)\n   - Created `_upload_file_with_retry()` private method\n   - Both audio and thumbnail uploads now use retry logic\n   - Detailed logging of retry attempts and failures\n\n**Formula**:\n- Delay = min(initial_delay * (exponential_base ** attempt), max_delay)\n- With jitter: delay * random(0.5, 1.5)\n\n**Example delays (CONSERVATIVE)**:\n- Attempt 1: ~1.0s (±50%)\n- Attempt 2: ~2.0s (±50%)  \n- Attempt 3: ~4.0s (±50%)\n\nThis ensures reliable uploads even with transient network or service issues.\n</info added on 2025-10-10T11:13:41.097Z>",
+          "status": "done"
         },
         {
           "id": 6,
