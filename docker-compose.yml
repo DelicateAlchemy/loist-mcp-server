@@ -1,0 +1,90 @@
+version: '3.9'
+
+services:
+  # Music Library MCP Server
+  mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: music-library-mcp
+    ports:
+      - "8080:8080"
+    environment:
+      # Server Configuration
+      - SERVER_NAME=Music Library MCP
+      - SERVER_VERSION=0.1.0
+      - SERVER_HOST=0.0.0.0
+      - SERVER_PORT=8080
+      - SERVER_TRANSPORT=http  # http for local testing with CORS
+      
+      # Logging
+      - LOG_LEVEL=DEBUG  # Verbose logging for development
+      - LOG_FORMAT=text  # Human-readable for development
+      
+      # Authentication (disabled for local dev)
+      - AUTH_ENABLED=false
+      - BEARER_TOKEN=dev-token-not-for-production
+      
+      # CORS (permissive for local development)
+      - ENABLE_CORS=true
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:8000,http://localhost:5173
+      - CORS_ALLOW_CREDENTIALS=true
+      
+      # Feature Flags
+      - ENABLE_HEALTHCHECK=true
+      
+      # Database Configuration
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=loist_mvp
+      - DB_USER=loist_user
+      - DB_PASSWORD=dev_password
+      - DATABASE_URL=postgresql://loist_user:dev_password@postgres:5432/loist_mvp
+      
+      # Python
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+    
+    volumes:
+      # Mount source code for live development (hot reload)
+      - ./src:/app/src:ro
+      # Mount database migrations and config
+      - ./database:/app/database:ro
+      # Mount for local storage (when implementing file features)
+      - ./storage:/app/storage
+    
+    restart: unless-stopped
+    
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.path.insert(0, 'src'); from server import mcp; print('healthy')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    
+    networks:
+      - mcp-network
+
+  # PostgreSQL for metadata storage
+  postgres:
+    image: postgres:16-alpine
+    container_name: music-library-db
+    environment:
+      - POSTGRES_DB=loist_mvp
+      - POSTGRES_USER=loist_user
+      - POSTGRES_PASSWORD=dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - mcp-network
+
+networks:
+  mcp-network:
+    driver: bridge
+
+# Volumes for persistent data
+volumes:
+  postgres_data:
+

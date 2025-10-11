@@ -9,8 +9,44 @@ dev-debug.log
 # Dependency directories
 node_modules/
 
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# PyCharm
+.idea/
+
 # Environment variables
 .env
+.env.local
+.env.gcs
 
 # Editor directories and files
 .idea
@@ -27,3 +63,12 @@ node_modules/
 # Task files
 # tasks.json
 # tasks/ 
+
+# Google Cloud credentials
+service-account-key.json
+*-service-account*.json
+github-actions-key.json
+gcloud.json
+
+# Database credentials
+.env.database
