@@ -113,6 +113,19 @@ class ExternalServiceError(MusicLibraryError):
     pass
 
 
+class DatabaseOperationError(MusicLibraryError):
+    """
+    Raised when database operations fail
+    
+    Examples:
+    - Insert/update/delete failure
+    - Constraint violation
+    - Transaction rollback
+    - Connection pool exhausted
+    """
+    pass
+
+
 # Error code mapping for MCP protocol
 ERROR_CODES = {
     AudioProcessingError: "AUDIO_PROCESSING_FAILED",
@@ -123,6 +136,7 @@ ERROR_CODES = {
     AuthenticationError: "AUTHENTICATION_FAILED",
     RateLimitError: "RATE_LIMIT_EXCEEDED",
     ExternalServiceError: "EXTERNAL_SERVICE_ERROR",
+    DatabaseOperationError: "DATABASE_OPERATION_ERROR",
     MusicLibraryError: "INTERNAL_ERROR",
 }
 

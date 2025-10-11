@@ -223,6 +223,55 @@ gcloud run deploy music-library-mcp \
   --set-env-vars "SERVER_TRANSPORT=http,LOG_LEVEL=INFO"
 ```
 
+## GitHub Actions CI/CD
+
+The project includes automated workflows for database provisioning and testing.
+
+### Quick Setup
+
+Configure GitHub Secrets for database workflows:
+
+```bash
+# 1. Create service account and key
+gcloud iam service-accounts create github-actions \
+    --display-name="GitHub Actions CI/CD" \
+    --project=loist-music-library
+
+gcloud iam service-accounts keys create github-actions-key.json \
+    --iam-account=github-actions@loist-music-library.iam.gserviceaccount.com
+
+# 2. Add to GitHub Secrets:
+# - GCLOUD_SERVICE_KEY (contents of github-actions-key.json)
+# - DB_USER (music_library_user)
+# - DB_PASSWORD (from .env.database)
+
+# 3. Clean up local key
+rm github-actions-key.json
+```
+
+📚 **Full Documentation:**
+- [GitHub Actions Setup Guide](docs/github-actions-setup.md) - Detailed setup instructions
+- [Quick Setup Guide](docs/github-secrets-quick-setup.md) - 5-minute quick start
+
+### Available Workflows
+
+The **Database Provisioning** workflow supports four actions:
+
+| Action | Description | Trigger |
+|--------|-------------|---------|
+| `provision` | Create Cloud SQL instance | Manual dispatch |
+| `migrate` | Run database migrations | Manual dispatch / Push to main |
+| `test` | Run database tests | Manual dispatch / Pull requests |
+| `health-check` | Verify instance health | Manual dispatch |
+
+### Running Workflows
+
+1. Go to **Actions** tab in GitHub
+2. Select **Database Provisioning** workflow
+3. Click **Run workflow**
+4. Choose action (provision, migrate, test, health-check)
+5. Click **Run workflow**
+
 ## Development
 
 ### Install Development Dependencies
