@@ -93,6 +93,10 @@ def health_check() -> dict:
         return error_response
 
 
+# ============================================================================
+# Task 7: Audio Processing Tool
+# ============================================================================
+
 @mcp.tool()
 async def process_audio_complete(
     source: dict,
@@ -142,6 +146,90 @@ async def process_audio_complete(
     # Call the async processing function
     return await process_audio_func(input_data)
 
+
+# ============================================================================
+# Task 8: Query/Retrieval Tools
+# ============================================================================
+
+@mcp.tool()
+async def get_audio_metadata(audioId: str) -> dict:
+    """
+    Retrieve metadata for a previously processed audio track.
+    
+    This tool fetches complete metadata for an audio track that has been
+    previously processed and stored in the system.
+    
+    Args:
+        audioId: UUID of the audio track to retrieve
+        
+    Returns:
+        dict: Success response with complete metadata and resource URIs,
+              or error response if track not found
+        
+    Example:
+        >>> result = await get_audio_metadata(audioId="550e8400-e29b-41d4-a716-446655440000")
+        >>> print(result["metadata"]["Product"]["Title"])
+        "Hey Jude"
+    """
+    from tools.query_tools import get_audio_metadata as get_metadata_func
+    
+    # Call the async function
+    return await get_metadata_func({"audioId": audioId})
+
+
+@mcp.tool()
+async def search_library(
+    query: str,
+    filters: dict = None,
+    limit: int = 20,
+    offset: int = 0,
+    sortBy: str = "relevance",
+    sortOrder: str = "desc"
+) -> dict:
+    """
+    Search across all processed audio in the library.
+    
+    Performs full-text search across audio metadata (title, artist, album, genre)
+    with optional advanced filters.
+    
+    Args:
+        query: Search query string (1-500 characters)
+        filters: Optional filters (genre, year, duration, format, artist, album)
+            Example: {"genre": ["Rock"], "year": {"min": 1960, "max": 1970}}
+        limit: Maximum results to return (1-100, default: 20)
+        offset: Number of results to skip (default: 0, max: 10000)
+        sortBy: Field to sort by (relevance, title, artist, year, duration, created_at)
+        sortOrder: Sort order (asc or desc, default: desc)
+        
+    Returns:
+        dict: Success response with search results, relevance scores, and pagination info,
+              or error response if search fails
+        
+    Example:
+        >>> result = await search_library(
+        ...     query="beatles",
+        ...     filters={"genre": ["Rock"], "year": {"min": 1960, "max": 1970}},
+        ...     limit=20
+        ... )
+        >>> print(f"Found {result['total']} results")
+        Found 150 results
+    """
+    from tools.query_tools import search_library as search_func
+    
+    # Build input data
+    input_data = {
+        "query": query,
+        "filters": filters,
+        "limit": limit,
+        "offset": offset,
+        "sortBy": sortBy,
+        "sortOrder": sortOrder
+    }
+    
+    # Call the async function
+    return await search_func(input_data)
+
+
 def create_http_app():
     """
     Create HTTP application with CORS middleware for iframe embedding
@@ -174,5 +262,3 @@ if __name__ == "__main__":
     # Run the FastMCP server
     # CORS is automatically applied when using HTTP/SSE transport
     mcp.run()
-
-
