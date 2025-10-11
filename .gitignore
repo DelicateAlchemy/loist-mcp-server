@@ -63,5 +63,12 @@ env/
 # Task files
 # tasks.json
 # tasks/ 
+
+# Google Cloud credentials
 service-account-key.json
+*-service-account*.json
+github-actions-key.json
+gcloud.json
+
+# Database credentials
 .env.database
