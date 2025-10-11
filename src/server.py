@@ -230,6 +230,82 @@ async def search_library(
     return await search_func(input_data)
 
 
+# ============================================================================
+# Task 9: MCP Resources
+# ============================================================================
+
+@mcp.resource("music-library://audio/{audioId}/stream")
+async def audio_stream_resource(uri: str) -> str:
+    """
+    MCP resource for streaming audio files.
+    
+    Returns a signed GCS URL for secure audio streaming with support for:
+    - HTTP Range requests (seeking)
+    - Proper Content-Type headers
+    - Caching for performance
+    
+    URI Format: music-library://audio/{audioId}/stream
+    
+    Args:
+        uri: Resource URI containing audioId
+        
+    Returns:
+        str: MCP resource response with signed streaming URL
+        
+    Example:
+        URI: music-library://audio/550e8400-e29b-41d4-a716-446655440000/stream
+        Returns: Signed GCS URL for audio file
+    """
+    from resources.audio_stream import get_audio_stream_resource
+    return await get_audio_stream_resource(uri)
+
+
+@mcp.resource("music-library://audio/{audioId}/metadata")
+async def metadata_resource(uri: str) -> str:
+    """
+    MCP resource for audio metadata.
+    
+    Returns complete metadata as JSON including Product and Format information.
+    
+    URI Format: music-library://audio/{audioId}/metadata
+    
+    Args:
+        uri: Resource URI containing audioId
+        
+    Returns:
+        str: MCP resource response with JSON metadata
+        
+    Example:
+        URI: music-library://audio/550e8400-e29b-41d4-a716-446655440000/metadata
+        Returns: JSON with complete track metadata
+    """
+    from resources.metadata import get_metadata_resource
+    return await get_metadata_resource(uri)
+
+
+@mcp.resource("music-library://audio/{audioId}/thumbnail")
+async def thumbnail_resource(uri: str) -> str:
+    """
+    MCP resource for audio thumbnails/artwork.
+    
+    Returns a signed GCS URL for thumbnail image with caching.
+    
+    URI Format: music-library://audio/{audioId}/thumbnail
+    
+    Args:
+        uri: Resource URI containing audioId
+        
+    Returns:
+        str: MCP resource response with signed image URL
+        
+    Example:
+        URI: music-library://audio/550e8400-e29b-41d4-a716-446655440000/thumbnail
+        Returns: Signed GCS URL for thumbnail image
+    """
+    from resources.thumbnail import get_thumbnail_resource
+    return await get_thumbnail_resource(uri)
+
+
 def create_http_app():
     """
     Create HTTP application with CORS middleware for iframe embedding
