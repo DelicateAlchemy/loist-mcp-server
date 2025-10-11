@@ -587,7 +587,7 @@
         6,
         7
       ],
-      "status": "pending",
+      "status": "done",
       "subtasks": [
         {
           "id": 1,
@@ -595,7 +595,7 @@
           "description": "Build a tool to extract comprehensive metadata from audio files including technical specs (sample rate, bit depth, duration, channels) and embedded tags (title, artist, album, genre). Support multiple formats (MP3, WAV, FLAC, OGG) using libraries like Mutagen, pydub, or FFprobe.",
           "dependencies": [],
           "details": "Use Mutagen for parsing ID3 tags in MP3 files and Vorbis comments in FLAC/OGG. Implement FFprobe integration for technical metadata extraction. Handle format-specific parsing (WAV INFO chunks, BWF extensions). Return structured data with standardized field names across formats. Include content-based metadata extraction capabilities using Librosa for tempo, key, and spectral features if needed.",
-          "status": "pending"
+          "status": "done"
         },
         {
           "id": 2,
@@ -605,7 +605,7 @@
             1
           ],
           "details": "Design query interface supporting exact match, partial match, and range queries. Implement filters for technical specs (sample rate, bit rate) and tag-based metadata. Include sorting options by various fields. Handle case-insensitive searches and wildcard patterns. Return results with full metadata and file paths.",
-          "status": "pending"
+          "status": "done"
         },
         {
           "id": 3,
@@ -616,7 +616,7 @@
             2
           ],
           "details": "Define response schemas for success and error cases. Standardize metadata field names (e.g., TALB vs ALBUM) to consistent naming convention. Include pagination metadata for search results. Add response validation to ensure output consistency. Implement formatting helpers for different data types (durations, file sizes, sample rates).",
-          "status": "pending"
+          "status": "done"
         },
         {
           "id": 4,
@@ -626,7 +626,7 @@
             1
           ],
           "details": "Design database schema with tables for audio files, metadata tags, and technical specs. Implement indexing strategy for frequently queried fields. Create data access objects (DAOs) for metadata operations. Add transaction handling for batch operations. Include metadata caching strategy to reduce database queries. Support both relational (PostgreSQL/MySQL) and document databases (MongoDB) as options.",
-          "status": "pending"
+          "status": "done"
         },
         {
           "id": 5,
@@ -638,7 +638,7 @@
             4
           ],
           "details": "Define error categories (FileNotFound, UnsupportedFormat, CorruptedFile, DatabaseError, QueryError). Implement try-catch blocks with specific exception handling. Add logging for debugging and monitoring. Create fallback mechanisms for partial metadata extraction when full extraction fails. Include retry logic for transient database failures. Return user-friendly error messages with actionable guidance.",
-          "status": "pending"
+          "status": "done"
         },
         {
           "id": 6,
@@ -649,7 +649,7 @@
             2
           ],
           "details": "Validate file paths for existence, accessibility, and allowed extensions. Sanitize search query parameters to prevent SQL/NoSQL injection. Implement schema validation for metadata updates. Add type checking and range validation for numeric inputs. Create allowlists for permitted metadata field names. Validate pagination parameters (page size limits, offset ranges). Include rate limiting considerations for API usage.",
-          "status": "pending"
+          "status": "done"
         }
       ]
     },
@@ -665,7 +665,7 @@
         6,
         7
       ],
-      "status": "pending",
+      "status": "done",
       "subtasks": [
         {
           "id": 1,
@@ -673,7 +673,7 @@
           "description": "Develop an endpoint to securely serve audio streams, ensuring proper authentication, signed URL validation, and efficient delivery.",
           "dependencies": [],
           "details": "This handler should validate incoming requests, check signed URL authenticity, and stream audio content with appropriate headers for performance and security.",
-          "status": "pending"
+          "status": "done"
         },
         {
           "id": 2,
@@ -681,7 +681,7 @@
           "description": "Create an endpoint to provide metadata for audio resources, ensuring accurate and secure data retrieval.",
           "dependencies": [],
           "details": "The handler should fetch and return metadata (e.g., title, artist, duration) for requested audio resources, enforcing access controls as needed.",
-          "status": "pending"
+          "status": "done"
         },
         {
           "id": 3,
@@ -689,7 +689,7 @@
           "description": "Develop an endpoint to serve thumbnail images associated with audio resources, handling signed URLs and caching.",
           "dependencies": [],
           "details": "This handler should validate signed URLs, serve image content efficiently, and support browser or CDN caching strategies.",
-          "status": "pending"
+          "status": "done"
         },
         {
           "id": 4,
@@ -700,7 +700,7 @@
             3
           ],
           "details": "Implement content-based caching (e.g., using ETag or object path) to ensure cache hits even when signed URLs change, and manage cache expiration and eviction policies.",
-          "status": "pending"
+          "status": "done"
         },
         {
           "id": 5,
@@ -712,7 +712,7 @@
             3
           ],
           "details": "Define and apply CORS policies and ensure accurate content-type headers for audio, metadata, and image responses.",
-          "status": "pending"
+          "status": "done"
         },
         {
           "id": 6,
@@ -726,7 +726,7 @@
             5
           ],
           "details": "Handle common errors such as invalid signatures, expired URLs, missing resources, and internal server errors, returning appropriate HTTP status codes and messages.",
-          "status": "pending"
+          "status": "done"
         },
         {
           "id": 7,
@@ -738,7 +738,7 @@
             6
           ],
           "details": "Implement search logic, input validation, pagination, and ensure that search results respect access controls and return correct metadata and resource links.",
-          "status": "pending"
+          "status": "done"
         }
       ]
     },
