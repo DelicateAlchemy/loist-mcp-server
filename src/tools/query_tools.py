@@ -214,8 +214,218 @@ async def get_audio_metadata(input_data: Dict[str, Any]) -> Dict[str, Any]:
         return error_response.model_dump()
 
 
+async def search_library(input_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Search across all processed audio in the library.
+    
+    Performs full-text search with optional filters for:
+    - Genre, year, duration, format
+    - Artist, album (partial match)
+    
+    Supports pagination and sorting.
+    
+    Args:
+        input_data: Dictionary containing query, filters, pagination, and sort options
+        
+    Returns:
+        Dictionary with success status and search results, or error response
+        
+    Example:
+        >>> result = await search_library({
+        ...     "query": "beatles",
+        ...     "filters": {"genre": ["Rock"], "year": {"min": 1960, "max": 1970"}},
+        ...     "limit": 20
+        ... })
+        >>> print(len(result["results"]))
+        15
+    """
+    logger.info("Searching audio library")
+    start_time = time.time()
+    
+    try:
+        # Validate input
+        try:
+            validated_input = SearchLibraryInput(**input_data)
+        except Exception as e:
+            logger.error(f"Input validation failed: {e}")
+            raise QueryException(
+                error_code=QueryErrorCode.INVALID_QUERY,
+                message=f"Invalid search input: {str(e)}",
+                details={"validation_errors": str(e)}
+            )
+        
+        query = validated_input.query
+        filters = validated_input.filters
+        limit = validated_input.limit
+        offset = validated_input.offset
+        sort_by = validated_input.sortBy
+        sort_order = validated_input.sortOrder
+        
+        logger.debug(f"Searching for: '{query}' with limit={limit}, offset={offset}")
+        
+        # Build filter parameters for database query
+        filter_params = {}
+        
+        if filters:
+            # Status filter (only show completed tracks)
+            filter_params["status"] = "COMPLETED"
+            
+            # Genre filter
+            if filters.genre:
+                filter_params["genres"] = filters.genre
+            
+            # Year range filter
+            if filters.year:
+                if filters.year.min is not None:
+                    filter_params["year_min"] = filters.year.min
+                if filters.year.max is not None:
+                    filter_params["year_max"] = filters.year.max
+            
+            # Duration range filter
+            if filters.duration:
+                if filters.duration.min is not None:
+                    filter_params["duration_min"] = filters.duration.min
+                if filters.duration.max is not None:
+                    filter_params["duration_max"] = filters.duration.max
+            
+            # Format filter
+            if filters.format:
+                filter_params["formats"] = [f.value for f in filters.format]
+            
+            # Artist filter (partial match)
+            if filters.artist:
+                filter_params["artist"] = filters.artist
+            
+            # Album filter (partial match)
+            if filters.album:
+                filter_params["album"] = filters.album
+        else:
+            # Default: only show completed tracks
+            filter_params["status"] = "COMPLETED"
+        
+        # Determine sort field mapping
+        sort_field_map = {
+            "relevance": "score",  # Default from search
+            "title": "title",
+            "artist": "artist",
+            "year": "year",
+            "duration": "duration",
+            "created_at": "created_at"
+        }
+        
+        db_sort_field = sort_field_map.get(sort_by.value, "score")
+        db_sort_order = sort_order.value  # "asc" or "desc"
+        
+        # Execute search query
+        try:
+            search_results = search_audio_tracks_advanced(
+                query=query,
+                limit=limit + 1,  # Fetch one extra to check if more results exist
+                offset=offset,
+                min_rank=0.01,  # Minimum relevance threshold
+                **filter_params
+            )
+        except DatabaseOperationError as e:
+            logger.error(f"Database error during search: {e}")
+            raise QueryException(
+                error_code=QueryErrorCode.DATABASE_ERROR,
+                message=f"Search failed: {str(e)}",
+                details={"query": query}
+            )
+        except Exception as e:
+            logger.error(f"Unexpected error during search: {e}")
+            raise QueryException(
+                error_code=QueryErrorCode.DATABASE_ERROR,
+                message=f"Unexpected search error: {str(e)}",
+                details={"query": query, "exception_type": type(e).__name__}
+            )
+        
+        # Check if more results exist (pagination)
+        has_more = len(search_results) > limit
+        if has_more:
+            search_results = search_results[:limit]  # Remove the extra result
+        
+        logger.info(f"Found {len(search_results)} results for '{query}'")
+        
+        # Format results
+        formatted_results = []
+        for result in search_results:
+            try:
+                # Get metadata from result
+                db_metadata = {
+                    "id": result.get("id"),
+                    "artist": result.get("artist", ""),
+                    "title": result.get("title", "Untitled"),
+                    "album": result.get("album", ""),
+                    "genre": result.get("genre"),
+                    "year": result.get("year"),
+                    "duration": result.get("duration", 0.0),
+                    "channels": result.get("channels", 2),
+                    "sample_rate": result.get("sample_rate", 44100),
+                    "bitrate": result.get("bitrate", 0),
+                    "format": result.get("format", ""),
+                    "thumbnail_path": result.get("thumbnail_path")
+                }
+                
+                # Format metadata
+                formatted_metadata = format_metadata_response(db_metadata)
+                
+                # Get relevance score
+                score = float(result.get("score", 0.0))
+                
+                # Create search result
+                search_result = SearchResult(
+                    audioId=result.get("id"),
+                    metadata=formatted_metadata,
+                    score=score
+                )
+                
+                formatted_results.append(search_result)
+                
+            except Exception as e:
+                logger.warning(f"Error formatting search result: {e}")
+                continue  # Skip this result and continue with others
+        
+        # Calculate total (this is approximate - real implementation would need COUNT query)
+        # For MVP, we'll use the number of results + offset + has_more flag
+        total = len(formatted_results) + offset
+        if has_more:
+            total += 1  # At least one more exists
+        
+        # Build response
+        response = SearchLibraryOutput(
+            success=True,
+            results=formatted_results,
+            total=total,
+            limit=limit,
+            offset=offset,
+            hasMore=has_more
+        )
+        
+        search_time = time.time() - start_time
+        logger.info(f"Search completed in {search_time:.3f}s: {len(formatted_results)} results")
+        
+        return response.model_dump()
+        
+    except QueryException as e:
+        # Known query error
+        logger.error(f"Query error: {e.message}")
+        error_response = e.to_error_response()
+        return error_response.model_dump()
+        
+    except Exception as e:
+        # Unexpected error
+        logger.exception(f"Unexpected error during search: {e}")
+        error_response = QueryException(
+            error_code=QueryErrorCode.DATABASE_ERROR,
+            message=f"Unexpected error: {str(e)}",
+            details={"exception_type": type(e).__name__}
+        ).to_error_response()
+        return error_response.model_dump()
+
+
 # ============================================================================
-# Synchronous Wrapper (if needed)
+# Synchronous Wrappers (if needed)
 # ============================================================================
 
 def get_audio_metadata_sync(input_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -226,4 +436,14 @@ def get_audio_metadata_sync(input_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     import asyncio
     return asyncio.run(get_audio_metadata(input_data))
+
+
+def search_library_sync(input_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Synchronous wrapper for search_library.
+    
+    FastMCP supports async tools, but this is available if needed.
+    """
+    import asyncio
+    return asyncio.run(search_library(input_data))
 
