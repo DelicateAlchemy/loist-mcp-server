@@ -10,6 +10,9 @@ from typing import Dict, Any
 import re
 import json
 
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).parent.parent.parent))
 from database import get_audio_metadata_by_id
 from src.exceptions import ResourceNotFoundError, ValidationError
 
@@ -108,8 +111,3 @@ async def get_metadata_resource(uri: str) -> Dict[str, Any]:
         logger.exception(f"Unexpected error in metadata resource: {e}")
         raise
 
-<<<<<<< HEAD
-=======
-
-
->>>>>>> task-10-html5-audio-player

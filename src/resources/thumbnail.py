@@ -9,6 +9,9 @@ import logging
 from typing import Dict, Any
 import re
 
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).parent.parent.parent))
 from database import get_audio_metadata_by_id
 from src.exceptions import ResourceNotFoundError, ValidationError
 from .cache import get_cache
@@ -126,8 +129,3 @@ def get_content_headers_for_thumbnail() -> Dict[str, str]:
         "Access-Control-Expose-Headers": "Content-Length, Content-Type",
     }
 
-<<<<<<< HEAD
-=======
-
-
->>>>>>> task-10-html5-audio-player

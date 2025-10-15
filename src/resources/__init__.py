@@ -25,8 +25,3 @@ __all__ = [
     "SignedURLCache",
 ]
 
-<<<<<<< HEAD
-=======
-
-
->>>>>>> task-10-html5-audio-player
