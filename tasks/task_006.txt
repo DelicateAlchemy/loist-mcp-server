@@ -1,6 +1,6 @@
 # Task ID: 6
 # Title: Implement Database Operations for Audio Metadata
-# Status: pending
+# Status: done
 # Dependencies: 2, 4
 # Priority: medium
 # Description: Create a module to store and retrieve audio metadata in PostgreSQL with full-text search capabilities.
@@ -143,39 +143,246 @@ def update_processing_status(audio_id, status):
 8. Validate search ranking and relevance
 
 # Subtasks:
-## 1. Implement Save Metadata Function [pending]
+## 1. Implement Save Metadata Function [done]
 ### Dependencies: None
 ### Description: Develop a function to persist metadata records into the database, ensuring schema validation and transactional integrity.
 ### Details:
 Define the metadata schema, validate input, and use database transactions to guarantee atomicity. Handle potential errors during the save operation and ensure rollback on failure.
+<info added on 2025-10-10T14:19:52.872Z>
+Implementation completed for save metadata function with comprehensive database operations. Created `/database/operations.py` with save_audio_metadata() and save_audio_metadata_batch() functions, which include input validation, UUID handling, parameterized queries, transaction management, and error handling. Modified `/database/__init__.py` to export new functions and added DatabaseOperationError to `/src/exceptions.py`. 
 
-## 2. Implement Retrieve Metadata by ID [pending]
+The implementation follows best practices including parameterized queries, context managers, explicit transaction control, comprehensive error handling, connection pooling, input validation, detailed logging, and type hints with docstrings. All fields align with the database schema from 001_initial_schema.sql, with triggers automatically populating search_vector, created_at, and updated_at fields.
+
+Both functions handle single and batch metadata persistence with atomic transactions, returning complete saved records with timestamps. The batch function provides detailed results including success status, count, track IDs, and any errors encountered.
+</info added on 2025-10-10T14:19:52.872Z>
+
+## 2. Implement Retrieve Metadata by ID [done]
 ### Dependencies: 6.1
 ### Description: Create a function to fetch metadata records from the database using a unique identifier.
 ### Details:
 Ensure efficient querying by ID, handle cases where the record does not exist, and return appropriate error messages or null responses.
+<info added on 2025-10-10T14:21:25.509Z>
+Implementation completed for retrieve metadata functions with the following details:
 
-## 3. Implement Full-Text Search for Metadata [pending]
+**Functions Implemented:**
+1. **get_audio_metadata_by_id()**: Single track retrieval by UUID
+   - Primary key index for O(1) lookup performance
+   - Graceful handling: returns None if track not found (no exception)
+   - UUID format validation before query
+   - Parameterized query for SQL injection prevention
+   - Returns complete track record including error fields and timestamps
+
+2. **get_audio_metadata_by_ids()**: Batch retrieval for multiple tracks
+   - Efficient single-query operation using PostgreSQL's ANY operator
+   - Validates all UUIDs before querying
+   - Returns only found tracks (graceful handling of missing IDs)
+   - Order not guaranteed (can add ORDER BY if needed later)
+
+3. **get_all_audio_metadata()**: Paginated listing with filtering
+   - Supports pagination (limit/offset) with max 1000 records per page
+   - Optional status filtering (PENDING, PROCESSING, COMPLETED, FAILED)
+   - Configurable ordering by multiple fields (created_at, updated_at, title, artist, album, year)
+   - Returns total count and has_more flag for pagination UI
+   - Column name whitelisting to prevent SQL injection in ORDER BY
+   - Uses psycopg2.sql module for safe dynamic column names
+
+**Security & Best Practices:**
+- ✅ Parameterized queries throughout
+- ✅ UUID validation before database operations
+- ✅ Whitelist validation for dynamic ORDER BY columns
+- ✅ psycopg2.sql.Identifier for safe column name injection
+- ✅ Comprehensive error handling with specific exceptions
+- ✅ Connection pool management via context managers
+- ✅ Detailed logging at debug level
+
+**Performance Considerations:**
+- Primary key index used for single ID lookups
+- ANY operator for efficient batch queries
+- Pagination prevents large result sets
+- Optional status filtering uses indexed column
+
+**Files Modified:**
+- `/database/operations.py`: Added 3 retrieve functions
+- `/database/__init__.py`: Exported new functions
+</info added on 2025-10-10T14:21:25.509Z>
+
+## 3. Implement Full-Text Search for Metadata [done]
 ### Dependencies: 6.1
 ### Description: Develop a full-text search capability to allow users to search metadata records based on keywords or phrases.
 ### Details:
 Leverage database indexing and search features to enable performant and accurate full-text search across relevant metadata fields.
+<info added on 2025-10-10T14:23:08.969Z>
+Implementation completed for full-text search functions with comprehensive features. Two main functions were developed: search_audio_tracks() providing basic full-text search with ranking using PostgreSQL's tsvector/tsquery with GIN index, and search_audio_tracks_advanced() offering enhanced search with structured filters for status, year range, format, and relevance threshold.
 
-## 4. Develop Status Update Logic [pending]
+The implementation leverages PostgreSQL's full-text search capabilities including weighted search vectors (A for title/artist, B for album, C for genre), ts_rank() for relevance scoring, and automatic trigger updates of search_vector on INSERT/UPDATE operations.
+
+Search query processing includes validation for empty strings, conversion of multi-word queries to AND logic, preservation of query operators, and error handling for invalid syntax. Performance optimizations include GIN index utilization for fast lookups, pagination with limit/offset, secondary ordering by created_at, and optional min_rank filtering.
+
+Security and best practices implemented include parameterized queries for SQL injection prevention, comprehensive input validation, graceful error handling with specific exceptions, detailed logging, connection pool management, and type hints with comprehensive docstrings.
+
+Modified files include /database/operations.py with the two new search functions and /database/__init__.py for function exports.
+</info added on 2025-10-10T14:23:08.969Z>
+
+## 4. Develop Status Update Logic [done]
 ### Dependencies: 6.2
 ### Description: Implement logic to update the status field of metadata records, ensuring changes are tracked and validated.
 ### Details:
 Support status transitions, validate allowed status changes, and ensure updates are atomic and logged for auditability.
+<info added on 2025-10-10T14:24:50.957Z>
+Implementation completed for status update operations with comprehensive functionality for track processing status management. Core functions include update_processing_status() for atomic individual updates with validation and error handling, and update_processing_status_batch() for transaction-based batch processing with rollback capabilities. Convenience functions were added for common transitions (mark_as_failed(), mark_as_completed(), mark_as_processing()). 
 
-## 5. Implement Error and Transaction Management [pending]
+Database operations implement atomic updates with RETURNING clauses, conditional retry count increments, and proper transaction management. Robust error handling includes UUID validation, status enum validation, error message truncation, and appropriate error types (ResourceNotFoundError, DatabaseOperationError). 
+
+Best practices implemented throughout the code: parameterized queries, explicit transaction control, context managers, comprehensive docstrings with examples, type hints, and convenience wrappers. Modified files include /database/operations.py with 5 new status update functions and /database/__init__.py with updated exports.
+</info added on 2025-10-10T14:24:50.957Z>
+
+## 5. Implement Error and Transaction Management [done]
 ### Dependencies: 6.1, 6.2, 6.3, 6.4
 ### Description: Design robust error handling and transaction management for all metadata operations to ensure data consistency and reliability.
 ### Details:
 Use try/catch blocks, database transactions, and standardized error responses. Ensure rollback on failure and log errors for monitoring.
+<info added on 2025-10-10T14:25:33.655Z>
+**Transaction Management (Implemented):**
+1. **Context Managers**: All operations use `with get_connection()` for automatic resource cleanup
+2. **Explicit Commits**: conn.commit() after successful operations
+3. **Rollback on Failure**: Automatic rollback via context manager exception handling
+4. **Atomic Operations**: All UPDATE/INSERT use transactions
+5. **Batch Operations**: All-or-nothing semantics in batch functions
 
-## 6. Configure Database Connection Pooling [pending]
+**Error Handling (Implemented):**
+1. **Validation Errors**: 
+   - UUID format validation
+   - Status enum validation
+   - Year range checks (1800-2100)
+   - Channels validation (1-16)
+   - GCS path format validation
+   - Query parameter validation
+   - Raises ValidationError before database operations
+
+2. **Database Errors**:
+   - IntegrityError for constraint violations
+   - DatabaseError for general database failures
+   - OperationalError for connection issues
+   - All caught and re-raised as DatabaseOperationError
+
+3. **Resource Errors**:
+   - ResourceNotFoundError when tracks don't exist
+   - Graceful None returns for optional lookups
+
+4. **Query Errors**:
+   - tsquery syntax error detection
+   - Re-raised as ValidationError
+
+**Logging (Implemented):**
+- Info level: Successful operations with counts/IDs
+- Debug level: Individual record operations
+- Warning level: Data truncation, validation adjustments
+- Error level: All exceptions with context
+
+**Exception Hierarchy:**
+```
+MusicLibraryError (base)
+├── ValidationError (input validation)
+├── DatabaseOperationError (database ops)
+├── ResourceNotFoundError (missing records)
+├── StorageError (GCS operations)
+└── ... (other exception types)
+```
+
+**Best Practices Applied Throughout:**
+- Try/except/finally blocks
+- Specific exception catching (not bare except)
+- Exception re-raising with context
+- Connection pool error handling
+- Query parameter validation
+- Graceful degradation where appropriate
+- Detailed error messages
+- Error code mapping in ERROR_CODES dict
+
+**Coverage Across All Operations:**
+- Save operations (6.1): Full validation + transaction + error handling
+- Retrieve operations (6.2): Validation + graceful missing records + error handling
+- Search operations (6.3): Query validation + syntax errors + error handling
+- Status updates (6.4): Validation + ResourceNotFoundError + error handling
+</info added on 2025-10-10T14:25:33.655Z>
+
+## 6. Configure Database Connection Pooling [done]
 ### Dependencies: 6.1, 6.2, 6.3, 6.4, 6.5
 ### Description: Set up and tune database connection pooling to optimize performance and resource utilization for metadata operations.
 ### Details:
 Choose an appropriate connection pool library, configure pool size and timeout settings, and monitor pool health under load.
+<info added on 2025-10-10T14:26:05.813Z>
+# Database Connection Pooling Implementation Documentation
+
+**Connection Pool Configuration (Implemented in `/database/pool.py`):**
+1. **DatabasePool Class**: Thread-safe connection pool manager
+   - Uses psycopg2.pool.ThreadedConnectionPool
+   - Configurable min/max connections (default: 2-10)
+   - Supports both direct and Cloud SQL Proxy connections
+   - Global singleton instance pattern via get_connection_pool()
+
+2. **Connection Management:**
+   - Context manager pattern: `with get_connection() as conn:`
+   - Automatic connection acquisition and release
+   - Connection validation before use
+   - Automatic retry logic (up to 3 attempts with backoff)
+   - Health check validation (SELECT 1)
+
+3. **Configuration Sources (in priority order):**
+   - Direct parameter (database_url)
+   - Application config (src.config)
+   - Environment variables:
+     * DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
+     * DB_CONNECTION_NAME (for Cloud SQL Proxy)
+
+4. **Health Monitoring:**
+   - health_check() method returns:
+     * healthy status
+     * database version
+     * pool configuration
+     * statistics
+     * timestamp
+   - Connection validation before each use
+   - Automatic reconnection on stale connections
+
+5. **Statistics Tracking:**
+   - connections_created
+   - connections_closed
+   - connections_failed
+   - queries_executed
+   - last_health_check timestamp
+   - get_stats() method for monitoring
+
+6. **Error Handling:**
+   - OperationalError for connection failures
+   - DatabaseError for general issues
+   - Automatic retry with exponential backoff
+   - Connection validation and cleanup
+
+**Best Practices Applied:**
+- psycopg2.pool.ThreadedConnectionPool for thread safety
+- Context managers for automatic cleanup
+- Connection validation before use
+- Retry logic with backoff
+- Health checks
+- Statistics tracking
+- Graceful error handling
+- Resource cleanup (close_pool())
+
+**Integration:**
+All database operations in operations.py use the pool via:
+```python
+with get_connection() as conn:
+    with conn.cursor() as cur:
+        # Database operations
+```
+
+**Performance:**
+- Reuses connections to minimize overhead
+- Configurable pool size for workload tuning
+- Connection validation prevents stale connections
+- Thread-safe for concurrent operations
+
+Note: No additional configuration needed as connection pooling is fully operational and integrated with all database operations.
+</info added on 2025-10-10T14:26:05.813Z>
 

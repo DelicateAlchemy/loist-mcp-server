@@ -1,0 +1,321 @@
+---
+description: Git branching and commit workflow for Task-Master task implementation
+globs: **/*
+alwaysApply: true
+---
+
+# Git Workflow for Task-Master Tasks
+
+**Always follow this Git workflow when implementing Task-Master tasks.**
+
+## Branch Structure
+
+- **`main`**: Production-ready deployment branch
+  - Never commit directly to main
+  - Only accepts merges from dev via pull request
+  
+- **`dev`**: Development integration branch
+  - Receives completed feature branches
+  - All task branches merge here first
+  
+- **`task-X`**: Feature branches for individual tasks
+  - Create one branch per root task ID
+  - Branch name format: `task-{taskId}` (e.g., `task-5`, `task-12`)
+  - Created from `dev` branch
+
+## Workflow Process
+
+### 1. Starting a New Task
+
+When beginning work on a new Task-Master task:
+
+```bash
+# Ensure you're on dev and it's up to date
+git checkout dev
+git pull origin dev
+
+# Create new branch for the task
+git checkout -b task-{taskId}
+```
+
+**Example:**
+```bash
+git checkout dev
+git pull origin dev
+git checkout -b task-5
+```
+
+### 2. Working on Subtasks
+
+**One commit per subtask:**
+
+- Mark subtask as `in-progress` using `set_task_status`
+- Implement the subtask
+- Stage relevant changes: `git add <files>`
+- Commit with descriptive message referencing subtask ID
+- Mark subtask as `done` using `set_task_status`
+
+**Commit Message Format:**
+```
+feat(module): Implement [subtask title] (Task {taskId}.{subtaskId})
+
+- Implementation detail 1
+- Implementation detail 2
+- Any relevant notes
+```
+
+**Example:**
+```bash
+# After completing subtask 5.1
+git add src/storage/gcs_client.py tests/test_gcs_integration.py
+git commit -m "feat(storage): Implement GCS client initialization (Task 5.1)
+
+- Add GCS client with service account authentication
+- Implement bucket validation
+- Add comprehensive error handling
+- Include integration tests"
+```
+
+### 3. Completing the Task
+
+Once all subtasks are complete:
+
+```bash
+# Ensure all changes are committed
+git status
+
+# Push the task branch
+git push origin task-{taskId}
+
+# Switch to dev and merge (or create PR)
+git checkout dev
+git pull origin dev
+git merge task-{taskId}
+git push origin dev
+
+# Optionally delete the task branch
+git branch -d task-{taskId}
+git push origin --delete task-{taskId}
+```
+
+### 4. Using Pull Requests (Recommended)
+
+For better code review and tracking:
+
+```bash
+# After pushing task branch
+git push origin task-{taskId}
+
+# Create PR via GitHub CLI or web interface
+gh pr create --base dev --head task-{taskId} --title "Complete Task {taskId}: [Task Title]" --body "Implements task {taskId} with all subtasks complete"
+
+# After PR approval
+gh pr merge {pr-number} --squash  # or --merge, depending on preference
+```
+
+## AI Assistant Responsibilities
+
+When working with Task-Master tasks, the AI should:
+
+### Before Starting a Task
+
+1. **Check current branch and status:**
+   ```bash
+   git branch --show-current
+   git status
+   ```
+
+2. **If not on correct task branch, create it:**
+   ```bash
+   git checkout dev
+   git pull origin dev
+   git checkout -b task-{taskId}
+   ```
+
+3. **Inform user of branch creation:**
+   - "Created branch `task-{taskId}` from `dev` for this work."
+
+### During Subtask Implementation
+
+1. **Before implementing a subtask:**
+   - Set status to `in-progress`: `set_task_status --id={taskId}.{subtaskId} --status=in-progress`
+
+2. **After completing a subtask:**
+   - Set status to `done`: `set_task_status --id={taskId}.{subtaskId} --status=done`
+   - **Prompt user about committing:**
+     - "Subtask {taskId}.{subtaskId} is complete. Ready to commit these changes?"
+   - **If user agrees, stage and commit:**
+     ```bash
+     git add <relevant-files>
+     git commit -m "feat(module): Implement [subtask title] (Task {taskId}.{subtaskId})
+     
+     - Detail 1
+     - Detail 2"
+     ```
+
+3. **Always show commit summary:**
+   - Display what files were staged
+   - Show the commit message
+   - Confirm commit was created
+
+### After Completing All Subtasks
+
+1. **Verify all subtasks are done:**
+   ```bash
+   task-master show {taskId}
+   ```
+
+2. **Ensure all changes are committed:**
+   ```bash
+   git status
+   ```
+
+3. **Prompt user for next steps:**
+   - "All subtasks for Task {taskId} are complete! Ready to push and merge to dev?"
+   - Offer options:
+     - Push branch and create PR
+     - Push branch (manual PR creation)
+     - Continue working (if user wants to review)
+
+4. **If user wants to merge:**
+   ```bash
+   # Push the branch
+   git push origin task-{taskId}
+   
+   # Inform user about PR creation
+   # They can either:
+   # - Create PR via GitHub web interface
+   # - Use GitHub CLI: gh pr create --base dev --head task-{taskId}
+   ```
+
+## Commit Message Guidelines
+
+### Format Structure
+
+```
+<type>(<scope>): <subject> (Task {taskId}.{subtaskId})
+
+<body>
+```
+
+### Types
+
+- `feat`: New feature or enhancement
+- `fix`: Bug fix
+- `refactor`: Code refactoring without functionality change
+- `test`: Adding or updating tests
+- `docs`: Documentation changes
+- `chore`: Maintenance tasks, dependency updates
+- `perf`: Performance improvements
+
+### Examples
+
+**Good commits:**
+```
+feat(storage): Implement GCS bucket initialization (Task 5.1)
+
+- Add service account authentication
+- Implement bucket existence validation
+- Add retry logic for transient failures
+- Include comprehensive error handling
+
+feat(metadata): Add ID3 tag extraction (Task 4.1)
+
+- Extract basic metadata (title, artist, album)
+- Handle multiple ID3 versions (v2.3, v2.4)
+- Add support for common character encodings
+- Include validation for required fields
+
+test(downloader): Add SSRF protection tests (Task 3.3)
+
+- Test private IP range blocking
+- Verify localhost protection
+- Add cloud metadata endpoint tests
+- Include redirect chain validation
+```
+
+**Bad commits (avoid):**
+```
+# Too vague
+git commit -m "update code"
+
+# No task reference
+git commit -m "add feature"
+
+# Multiple unrelated changes
+git commit -m "feat: add storage and fix downloader and update docs"
+```
+
+## Best Practices
+
+### ✅ DO
+
+- Create task branch before starting any work
+- Commit after each subtask completion
+- Write descriptive commit messages with context
+- Reference task and subtask IDs in commits
+- Push regularly to back up work
+- Use PRs for code review (recommended)
+- Delete task branches after merging
+- Keep dev branch up to date
+
+### ❌ DON'T
+
+- Commit directly to `main` or `dev`
+- Mix work from multiple tasks in one branch
+- Create commits without task references
+- Leave task branches unmerged for extended periods
+- Force push to shared branches
+- Skip commit messages or use generic ones
+- Work on multiple tasks in the same branch
+
+## Troubleshooting
+
+### Forgot to Create Task Branch
+
+```bash
+# If you started working on dev, move changes to new branch
+git checkout -b task-{taskId}
+git add <files>
+git commit -m "..."
+```
+
+### Need to Switch Tasks Mid-Work
+
+```bash
+# Commit or stash current work
+git add .
+git commit -m "wip: partial work on task {taskId}.{subtaskId}"
+# or
+git stash
+
+# Switch to other task
+git checkout task-{otherId}
+```
+
+### Task Branch Out of Date with Dev
+
+```bash
+# Update task branch with latest dev changes
+git checkout task-{taskId}
+git fetch origin
+git merge origin/dev
+# Resolve any conflicts
+```
+
+## Integration with Task-Master Workflow
+
+This Git workflow integrates seamlessly with the Task-Master development process:
+
+1. **Task Selection**: Use `next_task` or `get_task` to identify work
+2. **Branch Creation**: Create `task-{id}` branch from `dev`
+3. **Subtask Implementation**: Follow iterative implementation (see [dev_workflow.mdc](mdc:.cursor/rules/dev_workflow.mdc))
+4. **Commits**: One commit per completed subtask
+5. **Task Completion**: Merge task branch to `dev` via PR
+6. **Deployment**: Merge `dev` to `main` when ready for production
+
+Refer to [dev_workflow.mdc](mdc:.cursor/rules/dev_workflow.mdc) for detailed Task-Master workflow and [taskmaster.mdc](mdc:.cursor/rules/taskmaster.mdc) for command reference.
+
+---
+
+**Remember:** This workflow ensures clean, traceable history that maps directly to Task-Master tasks, making it easy to understand what was implemented, when, and why.

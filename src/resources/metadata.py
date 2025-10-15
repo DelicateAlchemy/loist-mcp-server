@@ -108,3 +108,5 @@ async def get_metadata_resource(uri: str) -> Dict[str, Any]:
         logger.exception(f"Unexpected error in metadata resource: {e}")
         raise
 
+
+

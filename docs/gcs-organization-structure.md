@@ -197,3 +197,5 @@ Manages organizational structure:
 - [Google Cloud Storage Best Practices](https://cloud.google.com/storage/docs/best-practices)
 - [GCS Naming Guidelines](https://cloud.google.com/storage/docs/naming-objects)
 
+
+

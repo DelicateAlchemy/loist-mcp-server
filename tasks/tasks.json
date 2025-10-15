@@ -825,70 +825,114 @@
       "id": 11,
       "title": "Implement oEmbed and Open Graph Integration",
       "description": "Create oEmbed endpoint and Open Graph tags for social sharing and platform embedding.",
-      "details": "1. Implement oEmbed JSON endpoint\n2. Add Open Graph meta tags to embed page\n3. Add Twitter Card meta tags\n4. Test with various platforms (Notion, Slack, Discord)\n5. Implement proper content negotiation\n\n```python\nfrom flask import jsonify, request, url_for\nimport os\n\n@app.route('/oembed')\ndef oembed_endpoint():\n    \"\"\"oEmbed endpoint for platform embedding.\"\"\"\n    # Get URL parameter\n    url = request.args.get('url')\n    if not url or not url.startswith('https://loist.io/embed/'):\n        return jsonify({\n            \"error\": \"Invalid URL parameter\"\n        }), 400\n    \n    # Extract UUID from URL\n    uuid = url.split('/')[-1]\n    \n    # Get metadata from database\n    metadata = get_audio_metadata(uuid)\n    if not metadata:\n        return jsonify({\n            \"error\": \"Audio not found\"\n        }), 404\n    \n    # Get optional width/height parameters\n    max_width = request.args.get('maxwidth', 500, type=int)\n    max_height = request.args.get('maxheight', 200, type=int)\n    \n    # Adjust dimensions to respect maxwidth/maxheight\n    width = min(500, max_width)\n    height = min(200, max_height)\n    \n    # Generate thumbnail URL\n    thumbnail_url = None\n    if metadata.get(\"thumbnail_path\"):\n        _, thumbnail_bucket_blob = metadata[\"thumbnail_path\"].split(\"gs://\", 1)\n        thumbnail_bucket_name, thumbnail_blob_name = thumbnail_bucket_blob.split(\"/\", 1)\n        thumbnail_url = generate_signed_url(thumbnail_bucket_name, thumbnail_blob_name)\n    \n    # Format oEmbed response\n    response = {\n        \"version\": \"1.0\",\n        \"type\": \"rich\",\n        \"title\": metadata.get(\"title\", \"Untitled\"),\n        \"author_name\": metadata.get(\"artist\", \"\"),\n        \"provider_name\": \"Loist\",\n        \"provider_url\": \"https://loist.io\",\n        \"html\": f'<iframe src=\"https://loist.io/embed/{uuid}\" width=\"{width}\" height=\"{height}\" frameborder=\"0\"></iframe>',\n        \"width\": width,\n        \"height\": height\n    }\n    \n    # Add thumbnail if available\n    if thumbnail_url:\n        response[\"thumbnail_url\"] = thumbnail_url\n        response[\"thumbnail_width\"] = 600\n        response[\"thumbnail_height\"] = 600\n    \n    return jsonify(response)\n\n# Add route for discovery\n@app.route('/.well-known/oembed.json')\ndef oembed_discovery():\n    \"\"\"oEmbed discovery endpoint.\"\"\"\n    return jsonify({\n        \"provider_name\": \"Loist Music Library\",\n        \"provider_url\": \"https://loist.io\",\n        \"endpoints\": [\n            {\n                \"url\": \"https://loist.io/oembed\",\n                \"formats\": [\"json\"],\n                \"discovery\": True\n            }\n        ]\n    })\n```\n\n```html\n<!-- Additional Open Graph tags for embed.html template -->\n<meta property=\"og:site_name\" content=\"Loist Music Library\" />\n<meta property=\"og:description\" content=\"Listen to {{ metadata.title }} by {{ metadata.artist }}{% if metadata.album %} from the album {{ metadata.album }}{% endif %}\" />\n\n<!-- Additional Twitter Card tags -->\n<meta name=\"twitter:title\" content=\"{{ metadata.title }}\" />\n<meta name=\"twitter:description\" content=\"{{ metadata.artist }}{% if metadata.album %} - {{ metadata.album }}{% endif %}\" />\n<meta name=\"twitter:image\" content=\"{{ signed_thumbnail_url }}\" />\n```",
-      "testStrategy": "1. Test oEmbed endpoint with valid and invalid URLs\n2. Verify oEmbed response format is correct\n3. Test with various maxwidth/maxheight parameters\n4. Validate Open Graph tags are correctly rendered\n5. Test Twitter Card tags are correctly rendered\n6. Test embedding in Notion, Slack, and Discord\n7. Verify discovery endpoint works correctly\n8. Test with and without thumbnail images",
-      "priority": "medium",
+      "status": "in-progress",
       "dependencies": [
         10
       ],
-      "status": "pending",
+      "priority": "medium",
+      "details": "1. Build Docker image locally with the implementation\n2. Set up Cloud SQL Proxy for local database connection\n3. Create .env.local file with appropriate configuration\n4. Test with real GCS bucket for thumbnails and audio files\n5. Validate all MCP tools work in the local Docker environment\n6. Test oEmbed and Open Graph functionality in local environment\n7. Debug any issues before proceeding to deployment\n\n```python\nfrom flask import jsonify, request, url_for\nimport os\n\n# UPDATED: Using correct FastMCP decorator\n@mcp.custom_route('/oembed')\ndef oembed_endpoint():\n    \"\"\"oEmbed endpoint for platform embedding.\"\"\"\n    # Get URL parameter\n    url = request.args.get('url')\n    if not url or not url.startswith('https://loist.io/embed/'):\n        return jsonify({\n            \"error\": \"Invalid URL parameter\"\n        }), 400\n    \n    # Extract UUID from URL\n    uuid = url.split('/')[-1]\n    \n    # Get metadata from database\n    metadata = get_audio_metadata(uuid)\n    if not metadata:\n        return jsonify({\n            \"error\": \"Audio not found\"\n        }), 404\n    \n    # Get optional width/height parameters\n    max_width = request.args.get('maxwidth', 500, type=int)\n    max_height = request.args.get('maxheight', 200, type=int)\n    \n    # Adjust dimensions to respect maxwidth/maxheight\n    width = min(500, max_width)\n    height = min(200, max_height)\n    \n    # Generate thumbnail URL\n    thumbnail_url = None\n    if metadata.get(\"thumbnail_path\"):\n        _, thumbnail_bucket_blob = metadata[\"thumbnail_path\"].split(\"gs://\", 1)\n        thumbnail_bucket_name, thumbnail_blob_name = thumbnail_bucket_blob.split(\"/\", 1)\n        thumbnail_url = generate_signed_url(thumbnail_bucket_name, thumbnail_blob_name)\n    \n    # Format oEmbed response\n    response = {\n        \"version\": \"1.0\",\n        \"type\": \"rich\",\n        \"title\": metadata.get(\"title\", \"Untitled\"),\n        \"author_name\": metadata.get(\"artist\", \"\"),\n        \"provider_name\": \"Loist\",\n        \"provider_url\": \"https://loist.io\",\n        \"html\": f'<iframe src=\"https://loist.io/embed/{uuid}\" width=\"{width}\" height=\"{height}\" frameborder=\"0\"></iframe>',\n        \"width\": width,\n        \"height\": height\n    }\n    \n    # Add thumbnail if available\n    if thumbnail_url:\n        response[\"thumbnail_url\"] = thumbnail_url\n        response[\"thumbnail_width\"] = 600\n        response[\"thumbnail_height\"] = 600\n    \n    return jsonify(response)\n\n# Add route for discovery - UPDATED: Using correct FastMCP decorator\n@mcp.custom_route('/.well-known/oembed.json')\ndef oembed_discovery():\n    \"\"\"oEmbed discovery endpoint.\"\"\"\n    return jsonify({\n        \"provider_name\": \"Loist Music Library\",\n        \"provider_url\": \"https://loist.io\",\n        \"endpoints\": [\n            {\n                \"url\": \"https://loist.io/oembed\",\n                \"formats\": [\"json\"],\n                \"discovery\": True\n            }\n        ]\n    })\n```\n\n```html\n<!-- Additional Open Graph tags for embed.html template -->\n<meta property=\"og:site_name\" content=\"Loist Music Library\" />\n<meta property=\"og:description\" content=\"Listen to {{ metadata.title }} by {{ metadata.artist }}{% if metadata.album %} from the album {{ metadata.album }}{% endif %}\" />\n\n<!-- Additional Twitter Card tags -->\n<meta name=\"twitter:title\" content=\"{{ metadata.title }}\" />\n<meta name=\"twitter:description\" content=\"{{ metadata.artist }}{% if metadata.album %} - {{ metadata.album }}{% endif %}\" />\n<meta name=\"twitter:image\" content=\"{{ signed_thumbnail_url }}\" />\n```",
+      "testStrategy": "1. Build and test Docker image locally with the implementation\n2. Set up Cloud SQL Proxy for local database connection\n3. Create and configure .env.local file with appropriate settings\n4. Test with real GCS bucket for thumbnails and audio files\n5. Validate all MCP tools work in the local Docker environment\n6. Test oEmbed endpoint with valid and invalid URLs\n7. Verify oEmbed response format is correct\n8. Test with various maxwidth/maxheight parameters\n9. Validate Open Graph tags are correctly rendered\n10. Test Twitter Card tags are correctly rendered\n11. Verify discovery endpoint works correctly\n12. Test with and without thumbnail images\n13. Debug any issues before proceeding to deployment",
       "subtasks": [
         {
           "id": 1,
-          "title": "Implement oEmbed Endpoint",
-          "description": "Develop and expose an oEmbed API endpoint that returns embeddable representations of resources according to the oEmbed specification.",
+          "title": "Build Docker Image Locally",
+          "description": "Create a local Docker image with the oEmbed and Open Graph implementation.",
           "dependencies": [],
-          "details": "Ensure the endpoint supports required parameters (e.g., url, format) and returns valid JSON or XML responses. Follow standards for provider configuration and response structure.",
-          "status": "pending"
+          "details": "Use the Dockerfile to build a local image. Ensure all dependencies are correctly installed and the application starts properly in the container.\n<info added on 2025-10-15T12:00:02.135Z>\n✅ COMPLETED: Successfully built Docker image locally\n- Created loist-mcp-server:local Docker image using multi-stage build\n- Image includes all dependencies and follows security best practices\n- Multi-stage build optimized for production with non-root user\n- All Python dependencies properly installed via wheels\n- Image size optimized and ready for deployment\n</info added on 2025-10-15T12:00:02.135Z>",
+          "status": "done"
         },
         {
           "id": 2,
-          "title": "Add Open Graph Meta Tags",
-          "description": "Integrate Open Graph meta tags into resource pages to improve link previews and sharing across platforms.",
-          "dependencies": [],
-          "details": "Include essential tags such as og:title, og:description, og:image, and og:url. Validate tag values for accuracy and completeness.",
-          "status": "pending"
-        },
-        {
-          "id": 3,
-          "title": "Add Twitter Card Tags",
-          "description": "Implement Twitter Card meta tags to enable rich content previews when links are shared on Twitter.",
-          "dependencies": [],
-          "details": "Support card types like summary and summary_large_image. Ensure tags like twitter:card, twitter:title, twitter:description, and twitter:image are present and correct.",
-          "status": "pending"
-        },
-        {
-          "id": 4,
-          "title": "Implement Content Negotiation",
-          "description": "Enable the oEmbed endpoint to respond with different formats (JSON or XML) based on request parameters or HTTP headers.",
+          "title": "Set Up Cloud SQL Proxy",
+          "description": "Configure Cloud SQL Proxy for local database connection.",
           "dependencies": [
             1
           ],
-          "details": "Support the 'format' query parameter and/or Accept headers. Ensure responses conform to the requested format and handle invalid requests gracefully.",
+          "details": "Download and set up Cloud SQL Proxy. Configure it to connect to the development or staging database. Verify database connectivity from the Docker container.\n<info added on 2025-10-15T12:00:04.614Z>\n✅ COMPLETED: Cloud SQL Proxy successfully configured and running\n- Created comprehensive setup script for Cloud SQL Proxy\n- Successfully started cloud-sql-proxy-local container\n- Proxy running on 127.0.0.1:5432 for secure database connections\n- Connected to loist-music-library:us-central1:loist-music-library-db\n- Container logs show: \"The proxy has started successfully and is ready for new connections!\"\n</info added on 2025-10-15T12:00:04.614Z>",
+          "status": "done"
+        },
+        {
+          "id": 3,
+          "title": "Create .env.local Configuration",
+          "description": "Set up local environment variables for testing.",
+          "dependencies": [],
+          "details": "Create a .env.local file with all necessary configuration variables. Include database connection strings, GCS bucket names, and any API keys or secrets needed for local testing.\n<info added on 2025-10-15T12:00:06.554Z>\nLocal environment configuration created and validated:\n- Created comprehensive .env.local file with all necessary variables\n- Fixed environment variable types (removed quotes from numeric values to fix Pydantic validation)\n- Organized configuration into logical sections (Server, GCS, Database, CORS, etc.)\n- Created setup verification script to check local development environment\n- All components verified: Docker image, service account, Cloud SQL Proxy\n</info added on 2025-10-15T12:00:06.554Z>",
+          "status": "done"
+        },
+        {
+          "id": 9,
+          "title": "Fix FastMCP Decorator Bug",
+          "description": "Resolve critical bug with FastMCP decorator usage",
+          "dependencies": [
+            1,
+            2,
+            3
+          ],
+          "details": "- Identified that @mcp.get() is not a valid FastMCP decorator\n- Researched correct FastMCP API using Perplexity\n- Fixed by replacing @mcp.get() with @mcp.custom_route()\n- Verified server now starts successfully without errors\n- Updated all route definitions to use the correct decorator pattern",
+          "status": "done"
+        },
+        {
+          "id": 4,
+          "title": "Test with Real GCS Buckets",
+          "description": "Verify functionality with actual Google Cloud Storage buckets.",
+          "dependencies": [
+            1,
+            3,
+            9
+          ],
+          "details": "Configure the application to use real GCS buckets for thumbnails and audio files. Test uploading, retrieving, and generating signed URLs for these resources. Ensure the fixed FastMCP decorators work correctly with GCS operations.",
           "status": "pending"
         },
         {
           "id": 5,
-          "title": "Implement Discovery Endpoint",
-          "description": "Expose a discovery mechanism for consumers to locate the oEmbed endpoint for supported resources.",
-          "dependencies": [
-            1
-          ],
-          "details": "Add <link rel=\"alternate\" type=\"application/json+oembed\"> and <link rel=\"alternate\" type=\"text/xml+oembed\"> tags to resource pages, pointing to the oEmbed endpoint.",
-          "status": "pending"
-        },
-        {
-          "id": 6,
-          "title": "Test Integration on Platforms (Notion, Slack, Discord)",
-          "description": "Verify that embedding and link previews work correctly on major platforms using the implemented standards.",
+          "title": "Validate MCP Tools Functionality",
+          "description": "Ensure all Music Content Platform tools work in the local Docker environment.",
           "dependencies": [
             1,
             2,
             3,
             4,
-            5
+            9
           ],
-          "details": "Share resource URLs on Notion, Slack, and Discord to confirm correct rendering of embeds and previews. Document any platform-specific issues and resolve them.",
+          "details": "Test each MCP tool and feature to verify they function correctly in the local Docker environment. Address any issues that arise during testing. Confirm that the FastMCP decorator fix works for all routes.",
+          "status": "pending"
+        },
+        {
+          "id": 6,
+          "title": "Test oEmbed Endpoint Locally",
+          "description": "Verify the oEmbed endpoint functions correctly in the local environment.",
+          "dependencies": [
+            1,
+            2,
+            3,
+            9
+          ],
+          "details": "Test the oEmbed endpoint with various valid and invalid URLs. Verify response format, error handling, and parameter processing. Ensure the @mcp.custom_route() decorator is working correctly for the oEmbed endpoint.",
+          "status": "pending"
+        },
+        {
+          "id": 7,
+          "title": "Test Open Graph and Twitter Card Tags",
+          "description": "Validate that meta tags are correctly rendered in the local environment.",
+          "dependencies": [
+            1,
+            2,
+            3,
+            9
+          ],
+          "details": "Inspect HTML responses to verify Open Graph and Twitter Card meta tags are correctly included and populated with appropriate values. Test with various metadata combinations to ensure proper rendering.",
+          "status": "pending"
+        },
+        {
+          "id": 8,
+          "title": "Debug and Fix Issues",
+          "description": "Identify and resolve any problems before deployment.",
+          "dependencies": [
+            5,
+            6,
+            7
+          ],
+          "details": "Document and fix any issues discovered during local testing. Ensure all functionality works correctly before proceeding to deployment. Verify that the FastMCP decorator fix is working consistently across all routes.",
           "status": "pending"
         }
       ]

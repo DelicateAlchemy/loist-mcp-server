@@ -1,21 +1,24 @@
 # Task ID: 11
 # Title: Implement oEmbed and Open Graph Integration
-# Status: pending
+# Status: in-progress
 # Dependencies: 10
 # Priority: medium
 # Description: Create oEmbed endpoint and Open Graph tags for social sharing and platform embedding.
 # Details:
-1. Implement oEmbed JSON endpoint
-2. Add Open Graph meta tags to embed page
-3. Add Twitter Card meta tags
-4. Test with various platforms (Notion, Slack, Discord)
-5. Implement proper content negotiation
+1. Build Docker image locally with the implementation
+2. Set up Cloud SQL Proxy for local database connection
+3. Create .env.local file with appropriate configuration
+4. Test with real GCS bucket for thumbnails and audio files
+5. Validate all MCP tools work in the local Docker environment
+6. Test oEmbed and Open Graph functionality in local environment
+7. Debug any issues before proceeding to deployment
 
 ```python
 from flask import jsonify, request, url_for
 import os
 
-@app.route('/oembed')
+# UPDATED: Using correct FastMCP decorator
+@mcp.custom_route('/oembed')
 def oembed_endpoint():
     """oEmbed endpoint for platform embedding."""
     # Get URL parameter
@@ -71,8 +74,8 @@ def oembed_endpoint():
     
     return jsonify(response)
 
-# Add route for discovery
-@app.route('/.well-known/oembed.json')
+# Add route for discovery - UPDATED: Using correct FastMCP decorator
+@mcp.custom_route('/.well-known/oembed.json')
 def oembed_discovery():
     """oEmbed discovery endpoint."""
     return jsonify({
@@ -100,49 +103,100 @@ def oembed_discovery():
 ```
 
 # Test Strategy:
-1. Test oEmbed endpoint with valid and invalid URLs
-2. Verify oEmbed response format is correct
-3. Test with various maxwidth/maxheight parameters
-4. Validate Open Graph tags are correctly rendered
-5. Test Twitter Card tags are correctly rendered
-6. Test embedding in Notion, Slack, and Discord
-7. Verify discovery endpoint works correctly
-8. Test with and without thumbnail images
+1. Build and test Docker image locally with the implementation
+2. Set up Cloud SQL Proxy for local database connection
+3. Create and configure .env.local file with appropriate settings
+4. Test with real GCS bucket for thumbnails and audio files
+5. Validate all MCP tools work in the local Docker environment
+6. Test oEmbed endpoint with valid and invalid URLs
+7. Verify oEmbed response format is correct
+8. Test with various maxwidth/maxheight parameters
+9. Validate Open Graph tags are correctly rendered
+10. Test Twitter Card tags are correctly rendered
+11. Verify discovery endpoint works correctly
+12. Test with and without thumbnail images
+13. Debug any issues before proceeding to deployment
 
 # Subtasks:
-## 1. Implement oEmbed Endpoint [pending]
+## 1. Build Docker Image Locally [done]
 ### Dependencies: None
-### Description: Develop and expose an oEmbed API endpoint that returns embeddable representations of resources according to the oEmbed specification.
+### Description: Create a local Docker image with the oEmbed and Open Graph implementation.
 ### Details:
-Ensure the endpoint supports required parameters (e.g., url, format) and returns valid JSON or XML responses. Follow standards for provider configuration and response structure.
+Use the Dockerfile to build a local image. Ensure all dependencies are correctly installed and the application starts properly in the container.
+<info added on 2025-10-15T12:00:02.135Z>
+✅ COMPLETED: Successfully built Docker image locally
+- Created loist-mcp-server:local Docker image using multi-stage build
+- Image includes all dependencies and follows security best practices
+- Multi-stage build optimized for production with non-root user
+- All Python dependencies properly installed via wheels
+- Image size optimized and ready for deployment
+</info added on 2025-10-15T12:00:02.135Z>
 
-## 2. Add Open Graph Meta Tags [pending]
-### Dependencies: None
-### Description: Integrate Open Graph meta tags into resource pages to improve link previews and sharing across platforms.
-### Details:
-Include essential tags such as og:title, og:description, og:image, and og:url. Validate tag values for accuracy and completeness.
-
-## 3. Add Twitter Card Tags [pending]
-### Dependencies: None
-### Description: Implement Twitter Card meta tags to enable rich content previews when links are shared on Twitter.
-### Details:
-Support card types like summary and summary_large_image. Ensure tags like twitter:card, twitter:title, twitter:description, and twitter:image are present and correct.
-
-## 4. Implement Content Negotiation [pending]
+## 2. Set Up Cloud SQL Proxy [done]
 ### Dependencies: 11.1
-### Description: Enable the oEmbed endpoint to respond with different formats (JSON or XML) based on request parameters or HTTP headers.
+### Description: Configure Cloud SQL Proxy for local database connection.
 ### Details:
-Support the 'format' query parameter and/or Accept headers. Ensure responses conform to the requested format and handle invalid requests gracefully.
+Download and set up Cloud SQL Proxy. Configure it to connect to the development or staging database. Verify database connectivity from the Docker container.
+<info added on 2025-10-15T12:00:04.614Z>
+✅ COMPLETED: Cloud SQL Proxy successfully configured and running
+- Created comprehensive setup script for Cloud SQL Proxy
+- Successfully started cloud-sql-proxy-local container
+- Proxy running on 127.0.0.1:5432 for secure database connections
+- Connected to loist-music-library:us-central1:loist-music-library-db
+- Container logs show: "The proxy has started successfully and is ready for new connections!"
+</info added on 2025-10-15T12:00:04.614Z>
 
-## 5. Implement Discovery Endpoint [pending]
-### Dependencies: 11.1
-### Description: Expose a discovery mechanism for consumers to locate the oEmbed endpoint for supported resources.
+## 3. Create .env.local Configuration [done]
+### Dependencies: None
+### Description: Set up local environment variables for testing.
 ### Details:
-Add <link rel="alternate" type="application/json+oembed"> and <link rel="alternate" type="text/xml+oembed"> tags to resource pages, pointing to the oEmbed endpoint.
+Create a .env.local file with all necessary configuration variables. Include database connection strings, GCS bucket names, and any API keys or secrets needed for local testing.
+<info added on 2025-10-15T12:00:06.554Z>
+Local environment configuration created and validated:
+- Created comprehensive .env.local file with all necessary variables
+- Fixed environment variable types (removed quotes from numeric values to fix Pydantic validation)
+- Organized configuration into logical sections (Server, GCS, Database, CORS, etc.)
+- Created setup verification script to check local development environment
+- All components verified: Docker image, service account, Cloud SQL Proxy
+</info added on 2025-10-15T12:00:06.554Z>
 
-## 6. Test Integration on Platforms (Notion, Slack, Discord) [pending]
-### Dependencies: 11.1, 11.2, 11.3, 11.4, 11.5
-### Description: Verify that embedding and link previews work correctly on major platforms using the implemented standards.
+## 9. Fix FastMCP Decorator Bug [done]
+### Dependencies: 11.1, 11.2, 11.3
+### Description: Resolve critical bug with FastMCP decorator usage
 ### Details:
-Share resource URLs on Notion, Slack, and Discord to confirm correct rendering of embeds and previews. Document any platform-specific issues and resolve them.
+- Identified that @mcp.get() is not a valid FastMCP decorator
+- Researched correct FastMCP API using Perplexity
+- Fixed by replacing @mcp.get() with @mcp.custom_route()
+- Verified server now starts successfully without errors
+- Updated all route definitions to use the correct decorator pattern
+
+## 4. Test with Real GCS Buckets [pending]
+### Dependencies: 11.1, 11.3, 11.9
+### Description: Verify functionality with actual Google Cloud Storage buckets.
+### Details:
+Configure the application to use real GCS buckets for thumbnails and audio files. Test uploading, retrieving, and generating signed URLs for these resources. Ensure the fixed FastMCP decorators work correctly with GCS operations.
+
+## 5. Validate MCP Tools Functionality [pending]
+### Dependencies: 11.1, 11.2, 11.3, 11.4, 11.9
+### Description: Ensure all Music Content Platform tools work in the local Docker environment.
+### Details:
+Test each MCP tool and feature to verify they function correctly in the local Docker environment. Address any issues that arise during testing. Confirm that the FastMCP decorator fix works for all routes.
+
+## 6. Test oEmbed Endpoint Locally [pending]
+### Dependencies: 11.1, 11.2, 11.3, 11.9
+### Description: Verify the oEmbed endpoint functions correctly in the local environment.
+### Details:
+Test the oEmbed endpoint with various valid and invalid URLs. Verify response format, error handling, and parameter processing. Ensure the @mcp.custom_route() decorator is working correctly for the oEmbed endpoint.
+
+## 7. Test Open Graph and Twitter Card Tags [pending]
+### Dependencies: 11.1, 11.2, 11.3, 11.9
+### Description: Validate that meta tags are correctly rendered in the local environment.
+### Details:
+Inspect HTML responses to verify Open Graph and Twitter Card meta tags are correctly included and populated with appropriate values. Test with various metadata combinations to ensure proper rendering.
+
+## 8. Debug and Fix Issues [pending]
+### Dependencies: 11.5, 11.6, 11.7
+### Description: Identify and resolve any problems before deployment.
+### Details:
+Document and fix any issues discovered during local testing. Ensure all functionality works correctly before proceeding to deployment. Verify that the FastMCP decorator fix is working consistently across all routes.
 

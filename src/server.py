@@ -242,7 +242,7 @@ async def search_library(
 # ============================================================================
 
 @mcp.resource("music-library://audio/{audioId}/stream")
-async def audio_stream_resource(uri: str) -> str:
+async def audio_stream_resource(audioId: str) -> str:
     """
     MCP resource for streaming audio files.
     
@@ -254,7 +254,7 @@ async def audio_stream_resource(uri: str) -> str:
     URI Format: music-library://audio/{audioId}/stream
     
     Args:
-        uri: Resource URI containing audioId
+        audioId: Audio file identifier
         
     Returns:
         str: MCP resource response with signed streaming URL
@@ -264,11 +264,11 @@ async def audio_stream_resource(uri: str) -> str:
         Returns: Signed GCS URL for audio file
     """
     from resources.audio_stream import get_audio_stream_resource
-    return await get_audio_stream_resource(uri)
+    return await get_audio_stream_resource(audioId)
 
 
 @mcp.resource("music-library://audio/{audioId}/metadata")
-async def metadata_resource(uri: str) -> str:
+async def metadata_resource(audioId: str) -> str:
     """
     MCP resource for audio metadata.
     
@@ -277,7 +277,7 @@ async def metadata_resource(uri: str) -> str:
     URI Format: music-library://audio/{audioId}/metadata
     
     Args:
-        uri: Resource URI containing audioId
+        audioId: Audio file identifier
         
     Returns:
         str: MCP resource response with JSON metadata
@@ -287,11 +287,11 @@ async def metadata_resource(uri: str) -> str:
         Returns: JSON with complete track metadata
     """
     from resources.metadata import get_metadata_resource
-    return await get_metadata_resource(uri)
+    return await get_metadata_resource(audioId)
 
 
 @mcp.resource("music-library://audio/{audioId}/thumbnail")
-async def thumbnail_resource(uri: str) -> str:
+async def thumbnail_resource(audioId: str) -> str:
     """
     MCP resource for audio thumbnails/artwork.
     
@@ -300,7 +300,7 @@ async def thumbnail_resource(uri: str) -> str:
     URI Format: music-library://audio/{audioId}/thumbnail
     
     Args:
-        uri: Resource URI containing audioId
+        audioId: Audio file identifier
         
     Returns:
         str: MCP resource response with signed image URL
@@ -310,15 +310,15 @@ async def thumbnail_resource(uri: str) -> str:
         Returns: Signed GCS URL for thumbnail image
     """
     from resources.thumbnail import get_thumbnail_resource
-    return await get_thumbnail_resource(uri)
+    return await get_thumbnail_resource(audioId)
 
 
 # ============================================================================
 # Task 10: HTML5 Audio Player Embed Page
 # ============================================================================
 
-@mcp.get("/embed/{audioId}")
-async def embed_page(audioId: str):
+@mcp.custom_route("/embed/{audioId}", methods=["GET"])
+async def embed_page(request):
     """
     Serve HTML5 audio player embed page.
     
@@ -332,7 +332,7 @@ async def embed_page(audioId: str):
     - Responsive design
     
     Args:
-        audioId: UUID of the audio track
+        request: Starlette Request object with path parameters
         
     Returns:
         HTMLResponse: Rendered HTML page with audio player
@@ -345,6 +345,8 @@ async def embed_page(audioId: str):
     from database import get_audio_metadata_by_id
     from resources.cache import get_cache
     
+    # Extract audioId from path parameters
+    audioId = request.path_params['audioId']
     logger.info(f"Embed page requested for audio ID: {audioId}")
     
     try:
@@ -496,4 +498,23 @@ def create_http_app():
 if __name__ == "__main__":
     # Run the FastMCP server
     # CORS is automatically applied when using HTTP/SSE transport
-    mcp.run()
+    
+    # Check transport mode and run accordingly
+    if config.server_transport == "http":
+        logger.info(f"🌐 Starting HTTP server on {config.server_host}:{config.server_port}")
+        mcp.run(
+            transport="http",
+            host=config.server_host,
+            port=config.server_port
+        )
+    elif config.server_transport == "sse":
+        logger.info(f"📡 Starting SSE server on {config.server_host}:{config.server_port}")
+        mcp.run(
+            transport="sse",
+            host=config.server_host,
+            port=config.server_port
+        )
+    else:
+        # Default to stdio for MCP clients
+        logger.info("📡 Starting STDIO server for MCP client communication")
+        mcp.run()
