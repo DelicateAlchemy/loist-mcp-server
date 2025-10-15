@@ -5,13 +5,20 @@ FastMCP-based server for audio ingestion and embedding
 import logging
 from contextlib import asynccontextmanager
 from typing import Optional
+from pathlib import Path
 from fastmcp import FastMCP
+from starlette.templating import Jinja2Templates
+from starlette.responses import HTMLResponse
 from config import config
 from auth import SimpleBearerAuth
 
 # Configure logging
 config.configure_logging()
 logger = logging.getLogger(__name__)
+
+# Configure Jinja2 templates
+TEMPLATE_DIR = Path(__file__).parent.parent / "templates"
+templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
 
 
 @asynccontextmanager
@@ -235,7 +242,7 @@ async def search_library(
 # ============================================================================
 
 @mcp.resource("music-library://audio/{audioId}/stream")
-async def audio_stream_resource(uri: str) -> str:
+async def audio_stream_resource(audioId: str) -> str:
     """
     MCP resource for streaming audio files.
     
@@ -247,7 +254,7 @@ async def audio_stream_resource(uri: str) -> str:
     URI Format: music-library://audio/{audioId}/stream
     
     Args:
-        uri: Resource URI containing audioId
+        audioId: Audio file identifier
         
     Returns:
         str: MCP resource response with signed streaming URL
@@ -257,11 +264,11 @@ async def audio_stream_resource(uri: str) -> str:
         Returns: Signed GCS URL for audio file
     """
     from resources.audio_stream import get_audio_stream_resource
-    return await get_audio_stream_resource(uri)
+    return await get_audio_stream_resource(audioId)
 
 
 @mcp.resource("music-library://audio/{audioId}/metadata")
-async def metadata_resource(uri: str) -> str:
+async def metadata_resource(audioId: str) -> str:
     """
     MCP resource for audio metadata.
     
@@ -270,7 +277,7 @@ async def metadata_resource(uri: str) -> str:
     URI Format: music-library://audio/{audioId}/metadata
     
     Args:
-        uri: Resource URI containing audioId
+        audioId: Audio file identifier
         
     Returns:
         str: MCP resource response with JSON metadata
@@ -280,11 +287,11 @@ async def metadata_resource(uri: str) -> str:
         Returns: JSON with complete track metadata
     """
     from resources.metadata import get_metadata_resource
-    return await get_metadata_resource(uri)
+    return await get_metadata_resource(audioId)
 
 
 @mcp.resource("music-library://audio/{audioId}/thumbnail")
-async def thumbnail_resource(uri: str) -> str:
+async def thumbnail_resource(audioId: str) -> str:
     """
     MCP resource for audio thumbnails/artwork.
     
@@ -293,7 +300,7 @@ async def thumbnail_resource(uri: str) -> str:
     URI Format: music-library://audio/{audioId}/thumbnail
     
     Args:
-        uri: Resource URI containing audioId
+        audioId: Audio file identifier
         
     Returns:
         str: MCP resource response with signed image URL
@@ -303,7 +310,161 @@ async def thumbnail_resource(uri: str) -> str:
         Returns: Signed GCS URL for thumbnail image
     """
     from resources.thumbnail import get_thumbnail_resource
-    return await get_thumbnail_resource(uri)
+    return await get_thumbnail_resource(audioId)
+
+
+# ============================================================================
+# Task 10: HTML5 Audio Player Embed Page
+# ============================================================================
+
+@mcp.custom_route("/embed/{audioId}", methods=["GET"])
+async def embed_page(request):
+    """
+    Serve HTML5 audio player embed page.
+    
+    This route provides a standalone audio player page that can be embedded
+    in iframes or accessed directly. It includes:
+    - Custom audio player UI
+    - Metadata display
+    - Open Graph and Twitter Card tags
+    - oEmbed discovery
+    - Keyboard shortcuts
+    - Responsive design
+    
+    Args:
+        request: Starlette Request object with path parameters
+        
+    Returns:
+        HTMLResponse: Rendered HTML page with audio player
+        
+    Example:
+        GET /embed/550e8400-e29b-41d4-a716-446655440000
+        Returns: HTML page with embedded audio player
+    """
+    from starlette.requests import Request
+    from database import get_audio_metadata_by_id
+    from resources.cache import get_cache
+    
+    # Extract audioId from path parameters
+    audioId = request.path_params['audioId']
+    logger.info(f"Embed page requested for audio ID: {audioId}")
+    
+    try:
+        # Get metadata from database
+        metadata = get_audio_metadata_by_id(audioId)
+        
+        if not metadata:
+            logger.warning(f"Audio track not found: {audioId}")
+            return HTMLResponse(
+                content="<h1>Audio Not Found</h1><p>The requested audio track could not be found.</p>",
+                status_code=404
+            )
+        
+        # Get GCS paths
+        audio_path = metadata.get("audio_path")
+        thumbnail_path = metadata.get("thumbnail_path")
+        
+        if not audio_path:
+            logger.error(f"No audio path for {audioId}")
+            return HTMLResponse(
+                content="<h1>Error</h1><p>Audio file not available.</p>",
+                status_code=500
+            )
+        
+        # Generate signed URLs using cache
+        cache = get_cache()
+        
+        try:
+            stream_url = cache.get(audio_path, url_expiration_minutes=15)
+        except Exception as e:
+            logger.error(f"Failed to generate signed URL for audio: {e}")
+            return HTMLResponse(
+                content="<h1>Error</h1><p>Failed to generate audio stream.</p>",
+                status_code=500
+            )
+        
+        # Generate thumbnail URL if available
+        thumbnail_url = None
+        if thumbnail_path:
+            try:
+                thumbnail_url = cache.get(thumbnail_path, url_expiration_minutes=15)
+            except Exception as e:
+                logger.warning(f"Failed to generate signed URL for thumbnail: {e}")
+                # Continue without thumbnail
+        
+        # Format metadata for template
+        template_metadata = {
+            "Product": {
+                "Title": metadata.get("title", "Untitled"),
+                "Artist": metadata.get("artist", "Unknown Artist"),
+                "Album": metadata.get("album"),
+                "Year": metadata.get("year"),
+            },
+            "Format": {
+                "Duration": metadata.get("duration", 0.0),
+                "Channels": metadata.get("channels", 2),
+                "SampleRate": metadata.get("sample_rate", 44100),
+                "Bitrate": metadata.get("bitrate", 0),
+                "Format": metadata.get("format", "MP3"),
+            }
+        }
+        
+        # Format duration for display
+        duration_seconds = metadata.get("duration", 0)
+        minutes = int(duration_seconds // 60)
+        seconds = int(duration_seconds % 60)
+        duration_formatted = f"{minutes}:{seconds:02d}"
+        
+        # Determine MIME type
+        audio_format = metadata.get("format", "MP3").upper()
+        mime_types = {
+            "MP3": "audio/mpeg",
+            "FLAC": "audio/flac",
+            "M4A": "audio/mp4",
+            "OGG": "audio/ogg",
+            "WAV": "audio/wav",
+            "AAC": "audio/aac",
+        }
+        mime_type = mime_types.get(audio_format, "audio/mpeg")
+        
+        logger.info(f"Rendering embed page for: {template_metadata['Product']['Title']}")
+        
+        # Render template
+        # Create a mock request object for Jinja2Templates
+        from starlette.requests import Request
+        from starlette.datastructures import Headers, URL
+        
+        # Create minimal request object
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "headers": [],
+            "query_string": b"",
+        }
+        request = Request(scope)
+        
+        response = templates.TemplateResponse("embed.html", {
+            "request": request,
+            "audio_id": audioId,
+            "metadata": template_metadata,
+            "stream_url": stream_url,
+            "thumbnail_url": thumbnail_url,
+            "mime_type": mime_type,
+            "duration_formatted": duration_formatted
+        })
+        
+        # Add security headers for iframe embedding
+        response.headers["X-Frame-Options"] = "ALLOWALL"
+        response.headers["Content-Security-Policy"] = "frame-ancestors *"
+        
+        return response
+        
+    except Exception as e:
+        logger.exception(f"Error rendering embed page: {e}")
+        return HTMLResponse(
+            content=f"<h1>Error</h1><p>An unexpected error occurred: {str(e)}</p>",
+            status_code=500
+        )
 
 
 def create_http_app():
@@ -337,4 +498,23 @@ def create_http_app():
 if __name__ == "__main__":
     # Run the FastMCP server
     # CORS is automatically applied when using HTTP/SSE transport
-    mcp.run()
+    
+    # Check transport mode and run accordingly
+    if config.server_transport == "http":
+        logger.info(f"🌐 Starting HTTP server on {config.server_host}:{config.server_port}")
+        mcp.run(
+            transport="http",
+            host=config.server_host,
+            port=config.server_port
+        )
+    elif config.server_transport == "sse":
+        logger.info(f"📡 Starting SSE server on {config.server_host}:{config.server_port}")
+        mcp.run(
+            transport="sse",
+            host=config.server_host,
+            port=config.server_port
+        )
+    else:
+        # Default to stdio for MCP clients
+        logger.info("📡 Starting STDIO server for MCP client communication")
+        mcp.run()

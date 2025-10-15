@@ -777,3 +777,8 @@ except Exception as e:
 **Version:** 1.0  
 **Status:** Production Ready
 
+<<<<<<< HEAD
+=======
+
+
+>>>>>>> task-10-html5-audio-player

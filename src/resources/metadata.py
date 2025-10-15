@@ -108,3 +108,8 @@ async def get_metadata_resource(uri: str) -> Dict[str, Any]:
         logger.exception(f"Unexpected error in metadata resource: {e}")
         raise
 
+<<<<<<< HEAD
+=======
+
+
+>>>>>>> task-10-html5-audio-player

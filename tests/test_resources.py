@@ -389,3 +389,8 @@ async def test_all_resources_for_track(
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
 
+<<<<<<< HEAD
+=======
+
+
+>>>>>>> task-10-html5-audio-player

@@ -457,3 +457,5 @@ class QueryException(Exception):
             details=self.details if self.details else None
         )
 
+
+

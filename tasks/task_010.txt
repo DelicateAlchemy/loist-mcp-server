@@ -1,6 +1,6 @@
 # Task ID: 10
 # Title: Implement HTML5 Audio Player and Embed Page
-# Status: pending
+# Status: done
 # Dependencies: 9
 # Priority: high
 # Description: Create a simple HTML5 audio player and embed page with metadata display and basic controls.
@@ -352,43 +352,43 @@ def embed_page(uuid):
 8. Validate embed page loads correctly with valid and invalid UUIDs
 
 # Subtasks:
-## 1. HTML5 Audio Player UI Design [pending]
+## 1. HTML5 Audio Player UI Design [done]
 ### Dependencies: None
 ### Description: Design and implement a visually appealing, custom HTML5 audio player interface that matches the site's design language, including play/pause, seek, volume, and mute controls.
 ### Details:
 Apply CSS for styling, ensure visual hierarchy, use appropriate icons, and maintain consistency with the overall website design. Support responsive layouts for different devices[1][2][3].
 
-## 2. Embed Page Routing [pending]
+## 2. Embed Page Routing [done]
 ### Dependencies: None
 ### Description: Implement client-side routing to allow embedding the audio player on different pages or views without full page reloads.
 ### Details:
 Use a frontend routing library (e.g., React Router, Vue Router) to manage navigation between pages/views containing the audio player, ensuring the player state persists during navigation.
 
-## 3. Metadata Display [pending]
+## 3. Metadata Display [done]
 ### Dependencies: 10.1
 ### Description: Display track metadata (title, artist, album, cover art) dynamically within the player UI.
 ### Details:
 Fetch and render metadata from the backend or audio file, update the UI in real-time as tracks change, and ensure the display is visually integrated with the player design[1].
 
-## 4. Playback Controls Implementation [pending]
+## 4. Playback Controls Implementation [done]
 ### Dependencies: 10.1
 ### Description: Develop functional playback controls (play, pause, seek, volume, mute) using the HTML5 Audio API and custom UI elements.
 ### Details:
 Use JavaScript to interface with the <audio> element, handle user interactions, and synchronize the custom UI with the native audio API[1][2][3].
 
-## 5. Responsive Layout [pending]
+## 5. Responsive Layout [done]
 ### Dependencies: 10.1
 ### Description: Ensure the audio player UI adapts seamlessly to various screen sizes and devices.
 ### Details:
 Implement responsive CSS (media queries, flexible layouts) so the player is usable and visually consistent on mobile, tablet, and desktop[1].
 
-## 6. Keyboard Accessibility [pending]
+## 6. Keyboard Accessibility [done]
 ### Dependencies: 10.1, 10.4
 ### Description: Make all player controls fully accessible via keyboard, supporting screen readers and users who rely on keyboard navigation.
 ### Details:
 Implement keyboard event handlers for all controls, ensure focus management, and provide ARIA attributes for screen reader compatibility[1][5].
 
-## 7. Signed URL Integration [pending]
+## 7. Signed URL Integration [done]
 ### Dependencies: None
 ### Description: Integrate backend-signed URLs for secure audio file access, ensuring that only authorized users can stream protected content.
 ### Details:

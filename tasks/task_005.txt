@@ -1,6 +1,6 @@
 # Task ID: 5
 # Title: Implement Audio Storage and Management
-# Status: pending
+# Status: done
 # Dependencies: 2, 4
 # Priority: medium
 # Description: Create a module to store processed audio files in Google Cloud Storage and manage their lifecycle.
@@ -70,39 +70,254 @@ def store_audio_file(local_audio_path, local_thumbnail_path=None):
 7. Test with large files to ensure proper handling
 
 # Subtasks:
-## 1. Generate Unique Filenames for Uploads [pending]
+## 1. Generate Unique Filenames for Uploads [done]
 ### Dependencies: None
 ### Description: Create a mechanism to generate unique filenames for both audio and thumbnail files to prevent naming collisions in GCS.
 ### Details:
 Implement a function that combines elements such as UUIDs, timestamps, or user identifiers to ensure each uploaded file has a unique name.
+<info added on 2025-10-10T11:07:11.042Z>
+Implementation complete for unique filename generation.
 
-## 2. Define GCS Organization Structure [pending]
+Created src/storage/manager.py with two main classes:
+
+1. **FilenameGenerator class**:
+   - `generate_audio_id()`: Generates UUID v4 for unique identifiers (122 bits of randomness)
+   - `generate_blob_name()`: Creates GCS blob names with format "audio/{uuid}/{type}.{ext}"
+   - `generate_thumbnail_blob_name()`: Specialized method for thumbnail naming
+   - `parse_audio_id_from_blob_name()`: Extracts UUID from blob path
+   - `validate_uuid()`: Validates UUID strings
+
+2. **FileOrganizer class**:
+   - Defines organizational constants (AUDIO_ROOT, AUDIO_FILENAME, THUMBNAIL_FILENAME)
+   - `get_folder_structure()`: Returns folder paths for an audio ID
+   - `get_expected_files()`: Returns expected file paths for validation
+   - `format_gcs_uri()`: Formats proper gs:// URIs
+
+**Design decisions**:
+- UUID v4 chosen for security (non-sequential, prevents enumeration attacks)
+- Preserves original file extensions for proper content-type handling
+- Organized structure: audio/{uuid}/ folder per upload for easy management
+- Collision probability is negligible (~5.3×10^36 possible values)
+- All methods are well-documented with examples
+</info added on 2025-10-10T11:07:11.042Z>
+
+## 2. Define GCS Organization Structure [done]
 ### Dependencies: 5.1
 ### Description: Design and document the folder and naming conventions for storing audio and thumbnail files in Google Cloud Storage.
 ### Details:
 Establish a logical directory structure (e.g., by user, date, or file type) and ensure the unique filenames are incorporated into this structure.
+<info added on 2025-10-10T11:08:29.414Z>
+The GCS organization structure has been defined and implemented in the FileOrganizer class with the following hierarchy:
+- Root folder: `audio/`
+- Per-upload folder: `audio/{uuid}/`
+- Audio file pattern: `audio/{uuid}/audio.{ext}`
+- Thumbnail pattern: `audio/{uuid}/thumbnail.{ext}`
 
-## 3. Implement Audio File Upload to GCS [pending]
+Comprehensive documentation has been created in `docs/gcs-organization-structure.md` covering:
+- Design principles (scalability, organization, traceability, flexibility, cleanup)
+- Folder structure with visual examples
+- UUID v4 rationale and collision probability
+- File extension handling for supported formats
+- Example workflows for common operations
+- GCS URI formatting
+- Future extensibility options
+- Implementation references
+- Best practices
+
+This structure provides several advantages:
+- Scalability for millions of files without directory limitations
+- Simplified cleanup through folder-based deletion
+- Security through non-sequential UUID implementation
+- Efficient GCS operations using prefix-based listing
+- Extensibility to accommodate future file types
+</info added on 2025-10-10T11:08:29.414Z>
+
+## 3. Implement Audio File Upload to GCS [done]
 ### Dependencies: 5.2
 ### Description: Develop the logic to upload audio files to the designated GCS bucket and path using the unique filename and organization structure.
 ### Details:
 Use server-side code to securely upload audio files, handle errors, and confirm successful uploads.
+<info added on 2025-10-10T11:09:50.881Z>
+# Audio Upload Implementation Details
 
-## 4. Implement Thumbnail Upload to GCS [pending]
+## AudioStorageManager Class
+The AudioStorageManager class has been implemented to handle the complete audio file upload workflow. It coordinates all aspects of the upload process including:
+- Initializing GCSClient with proper configuration
+- Using FilenameGenerator and FileOrganizer for structured uploads
+
+## upload_audio_file() Method
+This core method provides the following functionality:
+- Validates file existence before upload
+- Validates file format (supports .mp3, .wav, .flac, .ogg, .m4a, .aac)
+- Generates or validates UUID for audio ID
+- Determines correct content-type from file extension
+- Attaches metadata (audio_id, original_filename, file_size)
+- Uploads to GCS using organized structure
+- Returns StorageResult with all upload details
+
+## Error Handling
+Comprehensive error handling has been implemented:
+- FileNotFoundError if source doesn't exist
+- ValueError for unsupported formats or invalid UUIDs
+- GoogleCloudError for upload failures
+- Comprehensive logging at each step
+
+## Metadata Tracking
+The implementation includes robust metadata management:
+- Stores audio_id, original_filename, file_size as custom metadata
+- Returns blob metadata (size, content_type, md5_hash, generation)
+- Supports custom metadata extension
+
+## Design Decisions
+Key design decisions include:
+- Optional audio_id parameter allows pre-generated UUIDs
+- Comprehensive validation before upload to fail fast
+- Detailed logging for debugging and auditing
+- Structured StorageResult for easy downstream processing
+</info added on 2025-10-10T11:09:50.881Z>
+
+## 4. Implement Thumbnail Upload to GCS [done]
 ### Dependencies: 5.2
 ### Description: Develop the logic to upload thumbnail images to the appropriate GCS location using the same naming and organization conventions.
 ### Details:
 Ensure thumbnail uploads follow the same security and reliability standards as audio file uploads.
+<info added on 2025-10-10T11:11:08.512Z>
+Thumbnail upload functionality implemented.
 
-## 5. Implement Upload Retry Logic [pending]
+**Key features implemented**:
+
+1. **upload_thumbnail_file() method**:
+   - Validates file existence and audio_id UUID format
+   - Supports multiple image formats (.jpg, .jpeg, .png, .webp)
+   - Determines correct content-type from file extension
+   - Uses thumbnail naming convention (audio/{uuid}/thumbnail.{ext})
+   - Attaches metadata (audio_id, file_type, original_filename, file_size)
+   - Returns StorageResult with thumbnail paths
+
+2. **upload_audio_with_thumbnail() convenience method**:
+   - Uploads both audio and thumbnail in single operation
+   - Ensures same audio_id used for both files
+   - Combines results into unified StorageResult
+   - Handles optional thumbnail (gracefully works without)
+   - Tracks has_thumbnail flag in metadata
+
+3. **Image format support**:
+   - JPEG (.jpg, .jpeg) - image/jpeg
+   - PNG (.png) - image/png
+   - WebP (.webp) - image/webp
+
+4. **Error handling**:
+   - FileNotFoundError if source doesn't exist
+   - ValueError for unsupported formats or invalid audio_id
+   - Comprehensive logging
+
+**Design decisions**:
+- Requires valid audio_id (prevents orphaned thumbnails)
+- Consistent metadata structure with audio uploads
+- Dedicated method for combined uploads (recommended approach)
+- Flexible enough to upload thumbnail separately if needed
+</info added on 2025-10-10T11:11:08.512Z>
+
+## 5. Implement Upload Retry Logic [done]
 ### Dependencies: 5.3, 5.4
 ### Description: Add robust retry mechanisms to both audio and thumbnail upload processes to handle transient failures and improve reliability.
 ### Details:
 Incorporate exponential backoff or similar strategies to automatically retry failed uploads, logging errors as needed.
+<info added on 2025-10-10T11:13:41.097Z>
+Upload retry logic with exponential backoff implemented.
 
-## 6. Temporary File Cleanup [pending]
+**Key features implemented**:
+
+1. **Created src/storage/retry.py module**:
+   - `RetryConfig` class for configurable retry behavior
+   - Exponential backoff with jitter algorithm
+   - Configurable max attempts, delays, and retryable exceptions
+   - `with_retry()` decorator for adding retry to any function
+   - `retry_operation()` functional approach for runtime retry
+   - Preset configurations (CONSERVATIVE, AGGRESSIVE, PATIENT)
+
+2. **Retry configuration options**:
+   - max_attempts: Number of retry attempts
+   - initial_delay: Starting delay before first retry
+   - max_delay: Maximum delay cap
+   - exponential_base: Growth rate (typically 2.0)
+   - jitter: Adds ±50% randomness to prevent thundering herd
+
+3. **Retryable exceptions**:
+   - TooManyRequests (429 rate limiting)
+   - ServiceUnavailable (503 transient errors)
+   - ConnectionError (network issues)
+   - TimeoutError (request timeouts)
+
+4. **Integration with AudioStorageManager**:
+   - Added retry_config parameter to constructor
+   - Uses CONSERVATIVE_CONFIG by default (3 attempts, moderate delays)
+   - Created `_upload_file_with_retry()` private method
+   - Both audio and thumbnail uploads now use retry logic
+   - Detailed logging of retry attempts and failures
+
+**Formula**:
+- Delay = min(initial_delay * (exponential_base ** attempt), max_delay)
+- With jitter: delay * random(0.5, 1.5)
+
+**Example delays (CONSERVATIVE)**:
+- Attempt 1: ~1.0s (±50%)
+- Attempt 2: ~2.0s (±50%)  
+- Attempt 3: ~4.0s (±50%)
+
+This ensures reliable uploads even with transient network or service issues.
+</info added on 2025-10-10T11:13:41.097Z>
+
+## 6. Temporary File Cleanup [done]
 ### Dependencies: 5.3, 5.4, 5.5
 ### Description: Ensure any temporary files created during the upload process are deleted after successful upload or upon failure.
 ### Details:
 Implement cleanup routines to remove temporary files from the server or local environment to prevent resource leaks.
+<info added on 2025-10-10T11:15:20.931Z>
+Temporary file cleanup functionality implemented.
+
+**Key features implemented**:
+
+1. **_cleanup_file() private method**:
+   - Safely deletes files with comprehensive error handling
+   - Handles PermissionError gracefully
+   - Logs success, warnings, and failures appropriately
+   - Returns boolean indicating success/failure
+   - Takes file_description parameter for better logging
+
+2. **Cleanup parameter added to all upload methods**:
+   - upload_audio_file(cleanup=False)
+   - upload_thumbnail_file(cleanup=False)
+   - upload_audio_with_thumbnail(cleanup=False)
+   - Defaults to False (opt-in behavior)
+
+3. **Safe cleanup behavior**:
+   - Only runs after successful upload (not on failure)
+   - Failed cleanup doesn't break upload operation
+   - Logs cleanup operations for auditing
+   - Checks file existence before deletion
+
+4. **Error handling**:
+   - PermissionError: Warns but continues
+   - Other exceptions: Warns but continues
+   - File already deleted: Logs debug message
+   - Never throws exception from cleanup
+
+**Usage example**:
+```python
+manager = AudioStorageManager()
+# Upload and clean up automatically
+result = manager.upload_audio_with_thumbnail(
+    "/tmp/song.mp3",
+    "/tmp/artwork.jpg",
+    cleanup=True  # Both files deleted after upload
+)
+```
+
+**Design decisions**:
+- Opt-in behavior (cleanup=False default) for safety
+- Non-blocking cleanup (warnings, not errors)
+- Cleanup only after successful upload
+- Works for both individual and combined uploads
+</info added on 2025-10-10T11:15:20.931Z>
 
