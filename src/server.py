@@ -314,6 +314,158 @@ async def thumbnail_resource(audioId: str) -> str:
 
 
 # ============================================================================
+# Task 11: oEmbed and Open Graph Integration
+# ============================================================================
+
+@mcp.custom_route("/oembed", methods=["GET"])
+async def oembed_endpoint(request):
+    """
+    oEmbed endpoint for platform embedding.
+    
+    Provides oEmbed-compliant JSON responses for audio content embedding.
+    Supports maxwidth and maxheight parameters for responsive embedding.
+    
+    Args:
+        request: Starlette Request object with query parameters
+        
+    Returns:
+        JSONResponse: oEmbed-compliant response or error response
+        
+    Example:
+        GET /oembed?url=https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000&maxwidth=500
+        Returns: oEmbed JSON response with iframe HTML
+    """
+    from starlette.responses import JSONResponse
+    from database import get_audio_metadata_by_id
+    from resources.cache import get_cache
+    
+    # Get URL parameter
+    url = request.query_params.get('url')
+    if not url or not url.startswith('https://loist.io/embed/'):
+        logger.warning(f"Invalid oEmbed URL parameter: {url}")
+        return JSONResponse(
+            {"error": "Invalid URL parameter. URL must start with https://loist.io/embed/"},
+            status_code=400
+        )
+    
+    # Extract UUID from URL
+    try:
+        uuid = url.split('/')[-1]
+        if not uuid or len(uuid) != 36:  # Basic UUID validation
+            raise ValueError("Invalid UUID format")
+    except (IndexError, ValueError) as e:
+        logger.warning(f"Failed to extract UUID from URL {url}: {e}")
+        return JSONResponse(
+            {"error": "Invalid URL format"},
+            status_code=400
+        )
+    
+    logger.info(f"oEmbed request for audio ID: {uuid}")
+    
+    try:
+        # Get metadata from database
+        metadata = get_audio_metadata_by_id(uuid)
+        
+        if not metadata:
+            logger.warning(f"Audio track not found for oEmbed: {uuid}")
+            return JSONResponse(
+                {"error": "Audio not found"},
+                status_code=404
+            )
+        
+        # Get optional width/height parameters
+        max_width = request.query_params.get('maxwidth', '500')
+        max_height = request.query_params.get('maxheight', '200')
+        
+        try:
+            max_width = int(max_width)
+            max_height = int(max_height)
+        except ValueError:
+            max_width = 500
+            max_height = 200
+        
+        # Adjust dimensions to respect maxwidth/maxheight
+        width = min(500, max_width)
+        height = min(200, max_height)
+        
+        # Generate thumbnail URL if available
+        thumbnail_url = None
+        thumbnail_path = metadata.get("thumbnail_path")
+        if thumbnail_path:
+            try:
+                cache = get_cache()
+                thumbnail_url = cache.get(thumbnail_path, url_expiration_minutes=15)
+            except Exception as e:
+                logger.warning(f"Failed to generate signed URL for thumbnail: {e}")
+                # Continue without thumbnail
+        
+        # Format oEmbed response
+        response = {
+            "version": "1.0",
+            "type": "rich",
+            "title": metadata.get("title", "Untitled"),
+            "author_name": metadata.get("artist", ""),
+            "provider_name": "Loist Music Library",
+            "provider_url": "https://loist.io",
+            "html": f'<iframe src="https://loist.io/embed/{uuid}" width="{width}" height="{height}" frameborder="0" allowfullscreen></iframe>',
+            "width": width,
+            "height": height
+        }
+        
+        # Add thumbnail if available
+        if thumbnail_url:
+            response["thumbnail_url"] = thumbnail_url
+            response["thumbnail_width"] = 600
+            response["thumbnail_height"] = 600
+        
+        logger.info(f"oEmbed response generated for: {metadata.get('title', 'Untitled')}")
+        return JSONResponse(response)
+        
+    except Exception as e:
+        logger.exception(f"Error generating oEmbed response: {e}")
+        return JSONResponse(
+            {"error": "Internal server error"},
+            status_code=500
+        )
+
+
+@mcp.custom_route("/.well-known/oembed.json", methods=["GET"])
+async def oembed_discovery(request):
+    """
+    oEmbed discovery endpoint.
+    
+    Provides oEmbed provider discovery information for automatic
+    oEmbed client configuration.
+    
+    Args:
+        request: Starlette Request object
+        
+    Returns:
+        JSONResponse: oEmbed provider discovery information
+        
+    Example:
+        GET /.well-known/oembed.json
+        Returns: Provider discovery JSON
+    """
+    from starlette.responses import JSONResponse
+    
+    discovery_info = {
+        "provider_name": "Loist Music Library",
+        "provider_url": "https://loist.io",
+        "endpoints": [
+            {
+                "url": "https://loist.io/oembed",
+                "formats": ["json"],
+                "discovery": True
+            }
+        ]
+    }
+    
+    logger.info("oEmbed discovery endpoint accessed")
+    return JSONResponse(discovery_info)
+
+
+# ============================================================================
 # Task 10: HTML5 Audio Player Embed Page
 # ============================================================================
 
