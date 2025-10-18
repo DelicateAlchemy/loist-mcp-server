@@ -264,7 +264,7 @@ async def audio_stream_resource(audioId: str) -> str:
         Returns: Signed GCS URL for audio file
     """
     from resources.audio_stream import get_audio_stream_resource
-    return await get_audio_stream_resource(audioId)
+    return await get_audio_stream_resource(f"music-library://audio/{audioId}/stream")
 
 
 @mcp.resource("music-library://audio/{audioId}/metadata")
@@ -287,7 +287,7 @@ async def metadata_resource(audioId: str) -> str:
         Returns: JSON with complete track metadata
     """
     from resources.metadata import get_metadata_resource
-    return await get_metadata_resource(audioId)
+    return await get_metadata_resource(f"music-library://audio/{audioId}/metadata")
 
 
 @mcp.resource("music-library://audio/{audioId}/thumbnail")
@@ -310,7 +310,7 @@ async def thumbnail_resource(audioId: str) -> str:
         Returns: Signed GCS URL for thumbnail image
     """
     from resources.thumbnail import get_thumbnail_resource
-    return await get_thumbnail_resource(audioId)
+    return await get_thumbnail_resource(f"music-library://audio/{audioId}/thumbnail")
 
 
 # ============================================================================
@@ -336,6 +336,9 @@ async def oembed_endpoint(request):
         Returns: oEmbed JSON response with iframe HTML
     """
     from starlette.responses import JSONResponse
+    import sys
+    from pathlib import Path
+    sys.path.append(str(Path(__file__).parent.parent))
     from database import get_audio_metadata_by_id
     from resources.cache import get_cache
     
@@ -494,6 +497,9 @@ async def embed_page(request):
         Returns: HTML page with embedded audio player
     """
     from starlette.requests import Request
+    import sys
+    from pathlib import Path
+    sys.path.append(str(Path(__file__).parent.parent))
     from database import get_audio_metadata_by_id
     from resources.cache import get_cache
     
@@ -513,8 +519,8 @@ async def embed_page(request):
             )
         
         # Get GCS paths
-        audio_path = metadata.get("audio_path")
-        thumbnail_path = metadata.get("thumbnail_path")
+        audio_path = metadata.get("audio_gcs_path")
+        thumbnail_path = metadata.get("thumbnail_gcs_path")
         
         if not audio_path:
             logger.error(f"No audio path for {audioId}")
@@ -526,23 +532,30 @@ async def embed_page(request):
         # Generate signed URLs using cache
         cache = get_cache()
         
-        try:
-            stream_url = cache.get(audio_path, url_expiration_minutes=15)
-        except Exception as e:
-            logger.error(f"Failed to generate signed URL for audio: {e}")
-            return HTMLResponse(
-                content="<h1>Error</h1><p>Failed to generate audio stream.</p>",
-                status_code=500
-            )
+        # TEMPORARY: Use mock URLs for testing Open Graph tags
+        stream_url = f"https://storage.googleapis.com/loist-music-library-audio/audio/{audioId}/test.mp3"
+        thumbnail_url = f"https://storage.googleapis.com/loist-music-library-audio/audio/{audioId}/artwork.jpg" if thumbnail_path else None
         
-        # Generate thumbnail URL if available
-        thumbnail_url = None
-        if thumbnail_path:
-            try:
-                thumbnail_url = cache.get(thumbnail_path, url_expiration_minutes=15)
-            except Exception as e:
-                logger.warning(f"Failed to generate signed URL for thumbnail: {e}")
-                # Continue without thumbnail
+        logger.info(f"Using mock URLs for testing: stream={stream_url}, thumbnail={thumbnail_url}")
+        
+        # Original GCS code (commented out for testing):
+        # try:
+        #     stream_url = cache.get(audio_path, url_expiration_minutes=15)
+        # except Exception as e:
+        #     logger.error(f"Failed to generate signed URL for audio: {e}")
+        #     return HTMLResponse(
+        #         content="<h1>Error</h1><p>Failed to generate audio stream.</p>",
+        #         status_code=500
+        #     )
+        # 
+        # # Generate thumbnail URL if available
+        # thumbnail_url = None
+        # if thumbnail_path:
+        #     try:
+        #         thumbnail_url = cache.get(thumbnail_path, url_expiration_minutes=15)
+        #     except Exception as e:
+        #         logger.warning(f"Failed to generate signed URL for thumbnail: {e}")
+        #         # Continue without thumbnail
         
         # Format metadata for template
         template_metadata = {

@@ -88,32 +88,32 @@ class MCPProtocolTester:
             }
             print(f"✅ All {len(expected_tools)} tools registered correctly")
         
-        # Test resource registration
-        resources = await mcp._list_resources()
+        # Test resource template registration (parameterized resources are templates)
+        resource_templates = await mcp._list_resource_templates()
         expected_resources = [
             "music-library://audio/{audioId}/stream",
             "music-library://audio/{audioId}/metadata", 
             "music-library://audio/{audioId}/thumbnail"
         ]
         
-        resource_uris = [resource.uri for resource in resources]
-        missing_resources = [res for res in expected_resources if res not in resource_uris]
+        template_uris = [template.uri_template for template in resource_templates]
+        missing_resources = [res for res in expected_resources if res not in template_uris]
         
         if missing_resources:
             self.results["decorator_registration"]["resources"] = {
                 "status": "failed",
                 "missing": missing_resources,
-                "registered": resource_uris
+                "registered": template_uris
             }
-            print(f"❌ Missing resources: {missing_resources}")
+            print(f"❌ Missing resource templates: {missing_resources}")
             return False
         else:
             self.results["decorator_registration"]["resources"] = {
                 "status": "success",
-                "count": len(resources),
-                "resources": resource_uris
+                "count": len(resource_templates),
+                "resources": template_uris
             }
-            print(f"✅ All {len(expected_resources)} resources registered correctly")
+            print(f"✅ All {len(expected_resources)} resource templates registered correctly")
         
         return True
     

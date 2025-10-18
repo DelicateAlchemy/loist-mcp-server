@@ -11,13 +11,13 @@
       ]
     },
     "resources": {
-      "status": "failed",
-      "missing": [
+      "status": "success",
+      "count": 3,
+      "resources": [
         "music-library://audio/{audioId}/stream",
         "music-library://audio/{audioId}/metadata",
         "music-library://audio/{audioId}/thumbnail"
-      ],
-      "registered": []
+      ]
     }
   },
   "tool_execution": {
@@ -48,15 +48,15 @@
   "resource_access": {
     "audio_stream": {
       "status": "error",
-      "error": "Error reading resource from template 'music-library://audio/00000000-0000-0000-0000-000000000000/stream': Invalid URI format: 00000000-0000-0000-0000-000000000000"
+      "error": "Error reading resource from template 'music-library://audio/00000000-0000-0000-0000-000000000000/stream': Failed to retrieve metadata: Database URL must be provided via parameter, config, or environment variables"
     },
     "metadata": {
       "status": "error",
-      "error": "Error reading resource from template 'music-library://audio/00000000-0000-0000-0000-000000000000/metadata': Invalid URI format: 00000000-0000-0000-0000-000000000000"
+      "error": "Error reading resource from template 'music-library://audio/00000000-0000-0000-0000-000000000000/metadata': Failed to retrieve metadata: Database URL must be provided via parameter, config, or environment variables"
     },
     "thumbnail": {
       "status": "error",
-      "error": "Error reading resource from template 'music-library://audio/00000000-0000-0000-0000-000000000000/thumbnail': Invalid URI format: 00000000-0000-0000-0000-000000000000"
+      "error": "Error reading resource from template 'music-library://audio/00000000-0000-0000-0000-000000000000/thumbnail': Failed to retrieve metadata: Database URL must be provided via parameter, config, or environment variables"
     }
   },
   "error_handling": {

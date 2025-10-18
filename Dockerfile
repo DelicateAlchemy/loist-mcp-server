@@ -51,6 +51,9 @@ RUN pip install --no-cache-dir --find-links=/wheels -r requirements.txt && \
 # Copy application code
 COPY --chown=fastmcpuser:fastmcpuser src/ ./src/
 
+# Copy templates directory
+COPY --chown=fastmcpuser:fastmcpuser templates/ ./templates/
+
 # Switch to non-root user
 USER fastmcpuser
 
