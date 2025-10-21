@@ -9,8 +9,8 @@ from pathlib import Path
 from fastmcp import FastMCP
 from starlette.templating import Jinja2Templates
 from starlette.responses import HTMLResponse
-from config import config
-from auth import SimpleBearerAuth
+from src.config import config
+from src.auth import SimpleBearerAuth
 
 # Configure logging
 config.configure_logging()
@@ -466,6 +466,177 @@ async def oembed_discovery(request):
     
     logger.info("oEmbed discovery endpoint accessed")
     return JSONResponse(discovery_info)
+
+
+@mcp.custom_route("/health", methods=["GET"])
+async def health_endpoint(request):
+    """
+    HTTP health check endpoint for Cloud Run probes.
+    
+    Provides a lightweight health check endpoint that Cloud Run can use
+    for startup and liveness probes. This endpoint performs minimal checks
+    to verify the application is running and ready to serve traffic.
+    
+    Args:
+        request: Starlette Request object
+        
+    Returns:
+        JSONResponse: Health status with HTTP status codes
+        
+    Example:
+        GET /health
+        Returns: {"status": "healthy", "service": "loist-mcp-server", ...}
+    """
+    from starlette.responses import JSONResponse
+    
+    try:
+        logger.debug("Health check endpoint requested")
+        
+        # Perform basic health checks
+        health_status = {
+            "status": "healthy",
+            "service": config.server_name,
+            "version": config.server_version,
+            "transport": config.server_transport,
+            "timestamp": __import__("datetime").datetime.utcnow().isoformat() + "Z"
+        }
+        
+        # Add database connectivity check if enabled (non-blocking)
+        try:
+            import sys
+            from pathlib import Path
+            sys.path.append(str(Path(__file__).parent.parent))
+            from database.pool import get_connection
+            with get_connection() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("SELECT 1")
+                    health_status["database"] = "connected"
+        except Exception as e:
+            logger.warning(f"Database health check failed: {e}")
+            health_status["database"] = "disconnected"
+            # Don't degrade status for database issues in health check
+        
+        # Add GCS connectivity check if enabled (non-blocking)
+        try:
+            from storage.gcs_client import create_gcs_client
+            client = create_gcs_client()
+            # Simple bucket access test
+            client.bucket.exists()
+            health_status["storage"] = "connected"
+        except Exception as e:
+            logger.warning(f"Storage health check failed: {e}")
+            health_status["storage"] = "disconnected"
+            # Don't degrade status for storage issues in health check
+        
+        # Determine HTTP status code
+        status_code = 200 if health_status["status"] == "healthy" else 503
+        
+        logger.info(f"Health check completed: {health_status['status']}")
+        return JSONResponse(health_status, status_code=status_code)
+        
+    except Exception as e:
+        logger.error(f"Health check endpoint failed: {e}")
+        error_response = {
+            "status": "unhealthy",
+            "service": config.server_name,
+            "error": str(e),
+            "timestamp": __import__("datetime").datetime.utcnow().isoformat() + "Z"
+        }
+        return JSONResponse(error_response, status_code=503)
+
+
+@mcp.custom_route("/ready", methods=["GET"])
+async def readiness_endpoint(request):
+    """
+    HTTP readiness endpoint for Cloud Run startup probes.
+    
+    Provides a readiness check that verifies the application is fully
+    initialized and ready to accept traffic. This is more comprehensive
+    than the basic health check and includes dependency verification.
+    
+    Args:
+        request: Starlette Request object
+        
+    Returns:
+        JSONResponse: Readiness status with dependency checks
+        
+    Example:
+        GET /ready
+        Returns: {"status": "ready", "dependencies": {...}}
+    """
+    from starlette.responses import JSONResponse
+    
+    try:
+        logger.debug("Readiness check requested")
+        
+        readiness_status = {
+            "status": "ready",
+            "service": config.server_name,
+            "version": config.server_version,
+            "dependencies": {}
+        }
+        
+        # Check database readiness (non-blocking for startup)
+        try:
+            import sys
+            from pathlib import Path
+            sys.path.append(str(Path(__file__).parent.parent))
+            from database.pool import get_connection
+            with get_connection() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("SELECT version()")
+                    result = cursor.fetchone()
+                    readiness_status["dependencies"]["database"] = {
+                        "status": "ready",
+                        "version": result[0] if result else "unknown"
+                    }
+        except Exception as e:
+            logger.warning(f"Database readiness check failed: {e}")
+            readiness_status["dependencies"]["database"] = {
+                "status": "not_ready",
+                "error": str(e)
+            }
+            # Don't fail readiness for database issues during startup
+        
+        # Check storage readiness (non-blocking for startup)
+        try:
+            from storage.gcs_client import create_gcs_client
+            client = create_gcs_client()
+            bucket = client.bucket
+            if bucket.exists():
+                readiness_status["dependencies"]["storage"] = {
+                    "status": "ready",
+                    "bucket": config.gcs_bucket_name
+                }
+            else:
+                readiness_status["dependencies"]["storage"] = {
+                    "status": "not_ready",
+                    "error": f"Bucket {config.gcs_bucket_name} not found"
+                }
+                # Don't fail readiness for storage issues during startup
+        except Exception as e:
+            logger.warning(f"Storage readiness check failed: {e}")
+            readiness_status["dependencies"]["storage"] = {
+                "status": "not_ready",
+                "error": str(e)
+            }
+            # Don't fail readiness for storage issues during startup
+        
+        # Determine HTTP status code
+        status_code = 200 if readiness_status["status"] == "ready" else 503
+        
+        logger.info(f"Readiness check completed: {readiness_status['status']}")
+        return JSONResponse(readiness_status, status_code=status_code)
+        
+    except Exception as e:
+        logger.error(f"Readiness check endpoint failed: {e}")
+        error_response = {
+            "status": "not_ready",
+            "service": config.server_name,
+            "error": str(e),
+            "timestamp": __import__("datetime").datetime.utcnow().isoformat() + "Z"
+        }
+        return JSONResponse(error_response, status_code=503)
 
 
 # ============================================================================

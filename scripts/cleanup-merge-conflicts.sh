@@ -43,3 +43,6 @@ echo "3. Stage the cleaned files: git add ."
 echo "4. Commit the cleanup: git commit -m 'Clean up merge conflict markers'"
 echo ""
 echo "⚠️  Backup files created with .backup extension"
+
+
+

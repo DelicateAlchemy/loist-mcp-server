@@ -74,10 +74,14 @@ loist-mcp-server/
 │   └── auth/              # Authentication module
 │       ├── __init__.py
 │       └── bearer.py      # Bearer token authentication
+├── templates/
+│   └── embed.html         # HTML5 audio player with social sharing
 ├── tests/                  # Test files
 ├── docs/                   # Documentation
+│   └── enhanced-social-sharing.md  # Social media integration guide
 ├── scripts/                # Utility scripts
 ├── tasks/                  # Task management files
+├── test_social_preview.html # Social media preview testing tool
 ├── requirements.txt        # Python dependencies
 ├── pyproject.toml         # Project configuration
 ├── .env.example           # Example environment variables
@@ -134,21 +138,35 @@ SERVER_PORT=8080
 - ✅ Centralized error handling & logging
 - ✅ CORS configuration for iframe embedding
 - ✅ Health check tool with extended status
+- ✅ HTTP health check endpoints (`/health`, `/ready`)
+- ✅ Cloud Run health probes configuration
+- ✅ Monitoring and alerting setup
 - ✅ Structured logging (JSON/text formats)
 - ✅ Duplicate handling policies
 - ✅ Environment variable support
 - ✅ Multiple transport modes (STDIO, HTTP, SSE)
 - ✅ Python 3.11+ support
+- ✅ **Audio Processing Pipeline** - Complete audio ingestion, metadata extraction, and storage
+- ✅ **Database Integration** - PostgreSQL with full-text search and connection pooling
+- ✅ **Google Cloud Storage** - Audio file storage with signed URLs and lifecycle management
+- ✅ **MCP Tools** - process_audio_complete, get_audio_metadata, search_library
+- ✅ **MCP Resources** - Audio streams, metadata, and thumbnails with authentication
+- ✅ **HTML5 Audio Player** - Custom embeddable player with full controls
+- ✅ **oEmbed Support** - Platform embedding with discovery and rich media
+- ✅ **Enhanced Social Media Sharing** - Optimized Open Graph tags, Twitter Cards, and interactive sharing
+- ✅ **Schema.org Structured Data** - Rich snippets for search engines
+- ✅ **Social Sharing Buttons** - Twitter, Facebook, LinkedIn, and copy-to-clipboard
+- ✅ **Testing Utilities** - Comprehensive social media preview testing tools
+- ✅ **Production Deployment** - Cloud Run with custom domain and SSL
 
 ### Planned Features
 
 - 🔄 Advanced OAuth providers (GitHub, Google, etc.)
 - 🔄 JWT token support
-- 🔄 Audio file ingestion tools
-- 🔄 Embedding generation
-- 🔄 Docker containerization
-- 🔄 PostgreSQL integration
-- 🔄 Google Cloud Storage integration
+- 🔄 Advanced analytics and metrics
+- 🔄 Playlist management
+- 🔄 User authentication and authorization
+- 🔄 API rate limiting and quotas
 
 ## Docker
 
@@ -200,27 +218,55 @@ Services:
 
 ### Cloud Run Deployment
 
-Build and push to Google Container Registry:
+The service is deployed using Google Cloud Build with automated CI/CD:
 
 ```bash
-# Configure gcloud
-gcloud config set project YOUR_PROJECT_ID
+# Deploy using Cloud Build (recommended)
+gcloud builds submit --config cloudbuild.yaml
 
-# Build for Cloud Run
-docker build -t gcr.io/YOUR_PROJECT_ID/music-library-mcp:latest .
-
-# Push to GCR
-docker push gcr.io/YOUR_PROJECT_ID/music-library-mcp:latest
-
-# Deploy to Cloud Run
-gcloud run deploy music-library-mcp \
-  --image gcr.io/YOUR_PROJECT_ID/music-library-mcp:latest \
+# Manual deployment (if needed)
+gcloud run deploy loist-mcp-server \
+  --image gcr.io/loist-music-library/loist-mcp-server:latest \
   --platform managed \
   --region us-central1 \
-  --allow-unauthenticated \
   --memory 2Gi \
   --timeout 600s \
-  --set-env-vars "SERVER_TRANSPORT=http,LOG_LEVEL=INFO"
+  --service-account loist-music-library-sa@loist-music-library.iam.gserviceaccount.com \
+  --set-env-vars "SERVER_TRANSPORT=http,ENABLE_CORS=true,CORS_ORIGINS=https://loist.io,https://api.loist.io,GCS_PROJECT_ID=loist-music-library,GCS_REGION=us-central1" \
+  --set-secrets "GCS_BUCKET_NAME=gcs-bucket-name:latest,DB_HOST=db-host:latest,DB_PASSWORD=db-password:latest,DB_NAME=db-name:latest,DB_USER=db-user:latest,BEARER_TOKEN=mcp-bearer-token:latest" \
+  --add-cloudsql-instances loist-music-library:us-central1:loist-music-library-db \
+  --startup-probe "httpGet.path=/ready,httpGet.port=8080,initialDelaySeconds=10,timeoutSeconds=5,periodSeconds=10,failureThreshold=30" \
+  --liveness-probe "httpGet.path=/health,httpGet.port=8080,initialDelaySeconds=30,timeoutSeconds=5,periodSeconds=30,failureThreshold=3" \
+  --no-invoker-iam-check
+```
+
+**Service URL:** `https://api.loist.io`
+
+**Health Endpoints:**
+- Health Check: `https://api.loist.io/health`
+- Readiness Check: `https://api.loist.io/ready`
+
+### Monitoring & Health Checks
+
+The service includes comprehensive monitoring capabilities:
+
+#### Cloud Run Health Probes
+- **Startup Probe:** `/ready` endpoint with 30 failure threshold
+- **Liveness Probe:** `/health` endpoint with 3 failure threshold
+- **Probe Configuration:** Optimized for container startup and health monitoring
+
+#### Health Check Endpoints
+- **`/health`**: Lightweight health check for liveness monitoring
+- **`/ready`**: Comprehensive readiness check for startup monitoring
+- **Response Format**: JSON with service status, dependencies, and timestamps
+
+#### Monitoring Setup
+```bash
+# Run monitoring setup script
+./scripts/setup-monitoring.sh
+
+# Set up uptime checks
+./scripts/setup-uptime-checks.sh
 ```
 
 ## GitHub Actions CI/CD
@@ -570,11 +616,43 @@ Access-Control-Allow-Methods: GET, POST, OPTIONS
 Access-Control-Allow-Headers: Authorization, Content-Type, Range, ...
 ```
 
+## Social Media Integration
+
+The platform includes comprehensive social media sharing capabilities optimized for 2025 best practices:
+
+### Enhanced Open Graph Tags
+- **Dynamic Content**: Unique meta tags for each audio track
+- **Optimal Sizing**: Images sized to 1200x630px for perfect social media display
+- **Rich Metadata**: Artist, title, album, and audio stream information
+- **Accessibility**: Proper alt text and descriptive content
+
+### Twitter Card Support
+- **Player Cards**: Interactive audio players embedded in tweets
+- **Rich Previews**: Album artwork and track information
+- **Stream Integration**: Direct audio streaming from social media
+
+### Interactive Sharing
+- **Share Buttons**: One-click sharing to Twitter, Facebook, LinkedIn
+- **Copy to Clipboard**: Modern clipboard API with fallback support
+- **User Feedback**: Success messages and error handling
+
+### Testing & Validation
+- **Preview Tool**: `/test_social_preview.html` for testing social media previews
+- **Platform Tools**: Links to official Facebook, Twitter, and LinkedIn testing tools
+- **Validation Checklist**: Complete meta tag requirements guide
+
+### Schema.org Structured Data
+- **MusicRecording**: Proper structured data for search engines
+- **Rich Snippets**: Enhanced search result appearance
+- **SEO Optimization**: Better discoverability and ranking
+
 ## API Documentation
 
 ### Health Check
 
-**Tool:** `health_check`
+The server provides both MCP tool and HTTP endpoints for health monitoring:
+
+#### MCP Tool: `health_check`
 
 Returns the current status of the server.
 
@@ -584,6 +662,31 @@ Returns the current status of the server.
   "status": "healthy",
   "service": "Music Library MCP",
   "version": "0.1.0"
+}
+```
+
+#### HTTP Endpoints
+
+**Health Check:** `GET /health`
+- Lightweight health check for Cloud Run probes
+- Returns service status and basic connectivity info
+- Used by Cloud Run liveness probes
+
+**Readiness Check:** `GET /ready`
+- Comprehensive readiness check for startup probes
+- Verifies all dependencies are ready
+- Used by Cloud Run startup probes
+
+**Example Response:**
+```json
+{
+  "status": "healthy",
+  "service": "Music Library MCP",
+  "version": "0.1.0",
+  "transport": "http",
+  "timestamp": "2025-10-21T11:27:26.835358Z",
+  "database": "disconnected",
+  "storage": "disconnected"
 }
 ```
 

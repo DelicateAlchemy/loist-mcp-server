@@ -17,6 +17,7 @@ from src.exceptions import (
     StorageError,
     ValidationError,
     DatabaseOperationError,
+    ResourceNotFoundError,
 )
 
 logger = logging.getLogger(__name__)

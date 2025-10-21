@@ -83,6 +83,12 @@ class DatabasePool:
         """Build database URL from environment variables."""
         import os
         
+        # First check for direct DATABASE_URL
+        database_url = os.getenv("DATABASE_URL")
+        if database_url:
+            return database_url
+        
+        # Fallback to individual components
         db_host = os.getenv("DB_HOST")
         db_port = os.getenv("DB_PORT", "5432")
         db_name = os.getenv("DB_NAME")

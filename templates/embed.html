@@ -10,28 +10,84 @@
           href="https://loist.io/oembed?url=https://loist.io/embed/{{ audio_id }}&format=json" 
           title="{{ metadata.Product.Title }}" />
     
-    <!-- Open Graph Meta Tags -->
+    <!-- Enhanced Open Graph Meta Tags -->
     <meta property="og:type" content="music.song" />
-    <meta property="og:title" content="{{ metadata.Product.Title }}" />
-    <meta property="og:description" content="{{ metadata.Product.Artist }}{% if metadata.Product.Album %} - {{ metadata.Product.Album }}{% endif %}" />
+    <meta property="og:title" content="{{ metadata.Product.Title }} by {{ metadata.Product.Artist }}" />
+    <meta property="og:description" content="Listen to {{ metadata.Product.Title }} by {{ metadata.Product.Artist }}{% if metadata.Product.Album %} from the album {{ metadata.Product.Album }}{% endif %} on Loist Music Library" />
     <meta property="og:audio" content="{{ stream_url }}" />
     <meta property="og:audio:type" content="{{ mime_type }}" />
+    <meta property="og:audio:title" content="{{ metadata.Product.Title }}" />
+    <meta property="og:audio:artist" content="{{ metadata.Product.Artist }}" />
+    {% if metadata.Product.Album %}
+    <meta property="og:audio:album" content="{{ metadata.Product.Album }}" />
+    {% endif %}
     {% if thumbnail_url %}
     <meta property="og:image" content="{{ thumbnail_url }}" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Album artwork for {{ metadata.Product.Title }} by {{ metadata.Product.Artist }}" />
     {% endif %}
     <meta property="og:url" content="https://loist.io/embed/{{ audio_id }}" />
     <meta property="og:site_name" content="Loist Music Library" />
+    <meta property="og:locale" content="en_US" />
     
-    <!-- Twitter Card Meta Tags -->
+    <!-- Enhanced Twitter Card Meta Tags -->
     <meta name="twitter:card" content="player" />
-    <meta name="twitter:title" content="{{ metadata.Product.Title }}" />
-    <meta name="twitter:description" content="{{ metadata.Product.Artist }}{% if metadata.Product.Album %} - {{ metadata.Product.Album }}{% endif %}" />
+    <meta name="twitter:site" content="@loistmusic" />
+    <meta name="twitter:creator" content="@loistmusic" />
+    <meta name="twitter:title" content="{{ metadata.Product.Title }} by {{ metadata.Product.Artist }}" />
+    <meta name="twitter:description" content="Listen to {{ metadata.Product.Title }} by {{ metadata.Product.Artist }}{% if metadata.Product.Album %} from the album {{ metadata.Product.Album }}{% endif %}" />
     {% if thumbnail_url %}
     <meta name="twitter:image" content="{{ thumbnail_url }}" />
+    <meta name="twitter:image:alt" content="Album artwork for {{ metadata.Product.Title }} by {{ metadata.Product.Artist }}" />
     {% endif %}
     <meta name="twitter:player" content="https://loist.io/embed/{{ audio_id }}" />
     <meta name="twitter:player:width" content="500" />
     <meta name="twitter:player:height" content="200" />
+    <meta name="twitter:player:stream" content="{{ stream_url }}" />
+    <meta name="twitter:player:stream:content_type" content="{{ mime_type }}" />
+    
+    <!-- Additional Meta Tags for Better SEO and Social Sharing -->
+    <meta name="description" content="Listen to {{ metadata.Product.Title }} by {{ metadata.Product.Artist }}{% if metadata.Product.Album %} from the album {{ metadata.Product.Album }}{% endif %} on Loist Music Library" />
+    <meta name="keywords" content="music, audio, {{ metadata.Product.Artist }}, {{ metadata.Product.Title }}{% if metadata.Product.Album %}, {{ metadata.Product.Album }}{% endif %}, streaming, loist" />
+    <meta name="author" content="Loist Music Library" />
+    <meta name="robots" content="index, follow" />
+    
+    <!-- Schema.org JSON-LD for Rich Snippets -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "MusicRecording",
+        "name": "{{ metadata.Product.Title }}",
+        "byArtist": {
+            "@type": "MusicGroup",
+            "name": "{{ metadata.Product.Artist }}"
+        },
+        {% if metadata.Product.Album %}
+        "inAlbum": {
+            "@type": "MusicAlbum",
+            "name": "{{ metadata.Product.Album }}"
+        },
+        {% endif %}
+        {% if metadata.Product.Year %}
+        "datePublished": "{{ metadata.Product.Year }}",
+        {% endif %}
+        "audio": {
+            "@type": "AudioObject",
+            "contentUrl": "{{ stream_url }}",
+            "encodingFormat": "{{ mime_type }}"
+        },
+        {% if thumbnail_url %}
+        "image": "{{ thumbnail_url }}",
+        {% endif %}
+        "url": "https://loist.io/embed/{{ audio_id }}",
+        "publisher": {
+            "@type": "Organization",
+            "name": "Loist Music Library",
+            "url": "https://loist.io"
+        }
+    }
+    </script>
     
     <!-- Security Headers (for iframe embedding) -->
     <meta http-equiv="X-Frame-Options" content="ALLOWALL" />
@@ -198,6 +254,72 @@
             display: flex;
             align-items: center;
             gap: 8px;
+        }
+        
+        .social-sharing {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+        
+        .share-button {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            transition: all 0.2s ease;
+        }
+        
+        .share-button:hover {
+            color: var(--primary-color);
+            background-color: rgba(74, 144, 226, 0.1);
+        }
+        
+        .share-button:focus {
+            outline: 2px solid var(--primary-color);
+            outline-offset: 2px;
+        }
+        
+        .share-menu {
+            position: absolute;
+            bottom: 100%;
+            right: 0;
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            box-shadow: 0 4px 20px var(--shadow);
+            padding: 8px 0;
+            min-width: 160px;
+            z-index: 1000;
+        }
+        
+        .share-option {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+            padding: 8px 16px;
+            background: none;
+            border: none;
+            color: var(--text-primary);
+            cursor: pointer;
+            font-size: 14px;
+            text-align: left;
+            transition: background-color 0.2s ease;
+        }
+        
+        .share-option:hover {
+            background-color: var(--border-color);
+        }
+        
+        .share-option:focus {
+            outline: 2px solid var(--primary-color);
+            outline-offset: -2px;
         }
         
         .volume-button {
@@ -409,6 +531,45 @@
                            aria-label="Volume"
                            title="Volume">
                     <span class="sr-only" id="volume-percentage" aria-live="polite">100%</span>
+                </div>
+                
+                <!-- Social Sharing Buttons -->
+                <div class="social-sharing">
+                    <button id="share-button" 
+                            class="share-button" 
+                            aria-label="Share"
+                            title="Share this track">
+                        <!-- Share Icon (SVG) -->
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z"/>
+                        </svg>
+                    </button>
+                    <div id="share-menu" class="share-menu" style="display: none;" role="menu" aria-label="Share options">
+                        <button class="share-option" data-platform="twitter" aria-label="Share on Twitter">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M23.953 4.57a10 10 0 01-2.825.775 4.958 4.958 0 002.163-2.723c-.951.555-2.005.959-3.127 1.184a4.92 4.92 0 00-8.384 4.482C7.69 8.095 4.067 6.13 1.64 3.162a4.822 4.822 0 00-.666 2.475c0 1.71.87 3.213 2.188 4.096a4.904 4.904 0 01-2.228-.616v.06a4.923 4.923 0 003.946 4.827 4.996 4.996 0 01-2.212.085 4.936 4.936 0 004.604 3.417 9.867 9.867 0 01-6.102 2.105c-.39 0-.779-.023-1.17-.067a13.995 13.995 0 007.557 2.209c9.053 0 13.998-7.496 13.998-13.985 0-.21 0-.42-.015-.63A9.935 9.935 0 0024 4.59z"/>
+                            </svg>
+                            Twitter
+                        </button>
+                        <button class="share-option" data-platform="facebook" aria-label="Share on Facebook">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                            </svg>
+                            Facebook
+                        </button>
+                        <button class="share-option" data-platform="linkedin" aria-label="Share on LinkedIn">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                            </svg>
+                            LinkedIn
+                        </button>
+                        <button class="share-option" data-platform="copy" aria-label="Copy link">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                            </svg>
+                            Copy Link
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -628,6 +789,143 @@
                         break;
                 }
             });
+            
+            // Social Sharing Functionality
+            const shareButton = document.getElementById('share-button');
+            const shareMenu = document.getElementById('share-menu');
+            const shareOptions = document.querySelectorAll('.share-option');
+            
+            // Toggle share menu
+            shareButton.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const isVisible = shareMenu.style.display !== 'none';
+                shareMenu.style.display = isVisible ? 'none' : 'block';
+                if (!isVisible) {
+                    shareMenu.setAttribute('aria-expanded', 'true');
+                } else {
+                    shareMenu.setAttribute('aria-expanded', 'false');
+                }
+            });
+            
+            // Close share menu when clicking outside
+            document.addEventListener('click', function(e) {
+                if (!shareButton.contains(e.target) && !shareMenu.contains(e.target)) {
+                    shareMenu.style.display = 'none';
+                    shareMenu.setAttribute('aria-expanded', 'false');
+                }
+            });
+            
+            // Handle share option clicks
+            shareOptions.forEach(option => {
+                option.addEventListener('click', function() {
+                    const platform = this.getAttribute('data-platform');
+                    const trackTitle = '{{ metadata.Product.Title }}';
+                    const trackArtist = '{{ metadata.Product.Artist }}';
+                    const trackUrl = window.location.href;
+                    const shareText = `Check out "${trackTitle}" by ${trackArtist} on Loist Music Library!`;
+                    
+                    let shareUrl = '';
+                    
+                    switch (platform) {
+                        case 'twitter':
+                            shareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(trackUrl)}`;
+                            break;
+                        case 'facebook':
+                            shareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(trackUrl)}`;
+                            break;
+                        case 'linkedin':
+                            shareUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(trackUrl)}`;
+                            break;
+                        case 'copy':
+                            // Copy to clipboard
+                            if (navigator.clipboard && navigator.clipboard.writeText) {
+                                navigator.clipboard.writeText(trackUrl).then(() => {
+                                    showTemporaryMessage('Link copied to clipboard!');
+                                }).catch(() => {
+                                    fallbackCopyToClipboard(trackUrl);
+                                });
+                            } else {
+                                fallbackCopyToClipboard(trackUrl);
+                            }
+                            shareMenu.style.display = 'none';
+                            shareMenu.setAttribute('aria-expanded', 'false');
+                            return;
+                    }
+                    
+                    if (shareUrl) {
+                        window.open(shareUrl, '_blank', 'width=600,height=400');
+                        shareMenu.style.display = 'none';
+                        shareMenu.setAttribute('aria-expanded', 'false');
+                    }
+                });
+            });
+            
+            // Fallback copy to clipboard for older browsers
+            function fallbackCopyToClipboard(text) {
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-999999px';
+                textArea.style.top = '-999999px';
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                
+                try {
+                    document.execCommand('copy');
+                    showTemporaryMessage('Link copied to clipboard!');
+                } catch (err) {
+                    showTemporaryMessage('Unable to copy link. Please copy manually: ' + text);
+                }
+                
+                document.body.removeChild(textArea);
+            }
+            
+            // Show temporary message
+            function showTemporaryMessage(message) {
+                const existingMessage = document.querySelector('.temp-message');
+                if (existingMessage) {
+                    existingMessage.remove();
+                }
+                
+                const tempMessage = document.createElement('div');
+                tempMessage.className = 'temp-message';
+                tempMessage.textContent = message;
+                tempMessage.style.cssText = `
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    background: var(--primary-color);
+                    color: white;
+                    padding: 12px 16px;
+                    border-radius: 6px;
+                    box-shadow: 0 4px 20px var(--shadow);
+                    z-index: 10000;
+                    font-size: 14px;
+                    animation: slideIn 0.3s ease;
+                `;
+                
+                // Add animation keyframes
+                const style = document.createElement('style');
+                style.textContent = `
+                    @keyframes slideIn {
+                        from { transform: translateX(100%); opacity: 0; }
+                        to { transform: translateX(0); opacity: 1; }
+                    }
+                `;
+                document.head.appendChild(style);
+                
+                document.body.appendChild(tempMessage);
+                
+                setTimeout(() => {
+                    tempMessage.style.animation = 'slideIn 0.3s ease reverse';
+                    setTimeout(() => {
+                        if (tempMessage.parentNode) {
+                            tempMessage.parentNode.removeChild(tempMessage);
+                        }
+                    }, 300);
+                }, 2000);
+            }
             
             // Initialize
             updateVolumeIcon();

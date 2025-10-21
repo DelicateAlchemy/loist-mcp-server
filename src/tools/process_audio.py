@@ -207,14 +207,6 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
         pipeline.audio_id = str(uuid.uuid4())
         logger.info(f"Generated audio ID: {pipeline.audio_id}")
         
-        # Mark as processing in database
-        try:
-            mark_as_processing(pipeline.audio_id)
-            logger.debug(f"Marked {pipeline.audio_id} as PROCESSING")
-        except DatabaseOperationError as e:
-            logger.warning(f"Failed to update status to PROCESSING: {e}")
-            # Continue anyway - this is not critical
-        
         # ====================================================================
         # Stage 2: HTTP Download (Subtask 7.2)
         # ====================================================================
@@ -228,11 +220,11 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
             validate_ssrf(str(source.url))
             
             # Download to temporary file
-            pipeline.temp_audio_path = await download_from_url(
+            pipeline.temp_audio_path = download_from_url(
                 url=str(source.url),
                 headers=source.headers,
                 max_size_mb=options.maxSizeMB,
-                timeout=options.timeout
+                timeout_seconds=options.timeout
             )
             
             logger.info(f"Downloaded audio to: {pipeline.temp_audio_path}")
@@ -314,20 +306,22 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
             filename = source.filename or f"{pipeline.audio_id}.{metadata_dict.get('format', 'mp3').lower()}"
             
             # Upload audio file
-            pipeline.gcs_audio_path = await upload_audio_file(
-                local_file_path=pipeline.temp_audio_path,
+            blob = upload_audio_file(
+                source_path=pipeline.temp_audio_path,
                 destination_blob_name=f"audio/{pipeline.audio_id}/{filename}",
-                content_type=source.mimeType or f"audio/{metadata_dict.get('format', 'mp3').lower()}"
+                metadata={"content_type": source.mimeType or f"audio/{metadata_dict.get('format', 'mp3').lower()}"}
             )
+            pipeline.gcs_audio_path = f"gs://{blob.bucket.name}/{blob.name}"
             logger.info(f"Uploaded audio to GCS: {pipeline.gcs_audio_path}")
             
             # Upload artwork if present
             if pipeline.temp_artwork_path:
-                pipeline.gcs_artwork_path = await upload_audio_file(
-                    local_file_path=pipeline.temp_artwork_path,
+                artwork_blob = upload_audio_file(
+                    source_path=pipeline.temp_artwork_path,
                     destination_blob_name=f"audio/{pipeline.audio_id}/artwork.jpg",
-                    content_type="image/jpeg"
+                    metadata={"content_type": "image/jpeg"}
                 )
+                pipeline.gcs_artwork_path = f"gs://{artwork_blob.bucket.name}/{artwork_blob.name}"
                 logger.info(f"Uploaded artwork to GCS: {pipeline.gcs_artwork_path}")
             
         except StorageError as e:
@@ -345,7 +339,6 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
         try:
             # Prepare database record
             db_metadata = {
-                "id": pipeline.audio_id,
                 "artist": metadata_dict.get("artist", ""),
                 "title": metadata_dict.get("title", "Untitled"),
                 "album": metadata_dict.get("album", ""),
@@ -356,13 +349,20 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
                 "sample_rate": metadata_dict.get("sample_rate", 44100),
                 "bitrate": metadata_dict.get("bitrate", 0),
                 "format": metadata_dict.get("format", ""),
-                "audio_path": pipeline.gcs_audio_path,
-                "thumbnail_path": pipeline.gcs_artwork_path,
             }
             
             # Save to database using transaction
-            saved_record = save_audio_metadata(**db_metadata)
+            saved_record = save_audio_metadata(
+                metadata=db_metadata,
+                audio_gcs_path=str(pipeline.gcs_audio_path),
+                thumbnail_gcs_path=str(pipeline.gcs_artwork_path) if pipeline.gcs_artwork_path else None,
+                track_id=pipeline.audio_id
+            )
             pipeline.db_committed = True
+            
+            # Mark as processing first, then completed
+            mark_as_processing(pipeline.audio_id)
+            logger.debug(f"Marked {pipeline.audio_id} as PROCESSING")
             
             # Mark as completed
             mark_as_completed(pipeline.audio_id)

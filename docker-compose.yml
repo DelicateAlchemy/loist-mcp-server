@@ -44,6 +44,9 @@ services:
       # Python
       - PYTHONUNBUFFERED=1
       - PYTHONDONTWRITEBYTECODE=1
+      
+      # Google Cloud credentials
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/application_default_credentials.json
     
     volumes:
       # Mount source code for live development (hot reload)
@@ -52,6 +55,10 @@ services:
       - ./database:/app/database:ro
       # Mount for local storage (when implementing file features)
       - ./storage:/app/storage
+      # Mount templates directory
+      - ./templates:/app/templates:ro
+      # Mount GCS credentials for local testing
+      - ~/.config/gcloud/application_default_credentials.json:/app/application_default_credentials.json:ro
     
     restart: unless-stopped
     

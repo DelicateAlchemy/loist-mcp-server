@@ -1,0 +1,8 @@
+bindings:
+- members:
+  - serviceAccount:loist-music-library-sa@loist-music-library.iam.gserviceaccount.com
+  - user:info@loist.io
+  - allUsers
+  role: roles/run.invoker
+etag: BwZBXSGlDUg=
+version: 1

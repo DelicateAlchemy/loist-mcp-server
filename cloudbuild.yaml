@@ -1,0 +1,47 @@
+# Cloud Build configuration for Cloud Run deployment with Secret Manager integration
+steps:
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/loist-mcp-server:latest', '.']
+  
+  # Push the container image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/loist-mcp-server:latest']
+  
+  # Deploy container image to Cloud Run with secrets from Secret Manager
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'loist-mcp-server'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/loist-mcp-server:latest'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--memory'
+      - '2Gi'
+      - '--timeout'
+      - '600s'
+      - '--service-account'
+      - 'loist-music-library-sa@$PROJECT_ID.iam.gserviceaccount.com'
+      - '--set-env-vars'
+      - '^@^SERVER_TRANSPORT=http@ENABLE_CORS=true@CORS_ORIGINS=https://loist.io,https://api.loist.io@GCS_PROJECT_ID=$PROJECT_ID@GCS_REGION=us-central1'
+      - '--set-secrets'
+      - 'GCS_BUCKET_NAME=gcs-bucket-name:latest'
+      - '--set-secrets'
+      - 'DB_HOST=db-host:latest,DB_PASSWORD=db-password:latest,DB_NAME=db-name:latest,DB_USER=db-user:latest'
+      - '--set-secrets'
+      - 'BEARER_TOKEN=mcp-bearer-token:latest'
+      - '--add-cloudsql-instances'
+      - '$PROJECT_ID:us-central1:loist-music-library-db'
+      - '--startup-probe'
+      - 'httpGet.path=/ready,httpGet.port=8080,initialDelaySeconds=10,timeoutSeconds=5,periodSeconds=10,failureThreshold=30'
+      - '--liveness-probe'
+      - 'httpGet.path=/health,httpGet.port=8080,initialDelaySeconds=30,timeoutSeconds=5,periodSeconds=30,failureThreshold=3'
+
+images:
+  - 'gcr.io/$PROJECT_ID/loist-mcp-server:latest'
