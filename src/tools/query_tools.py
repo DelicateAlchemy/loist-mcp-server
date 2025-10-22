@@ -76,8 +76,10 @@ def format_metadata_response(db_metadata: Dict[str, Any]) -> AudioMetadata:
     )
     
     # Format technical metadata
+    # Handle both "duration" and "duration_seconds" field names for compatibility
+    duration = db_metadata.get("duration") or db_metadata.get("duration_seconds", 0.0)
     format_metadata = FormatMetadata(
-        Duration=db_metadata.get("duration", 0.0),
+        Duration=duration,
         Channels=db_metadata.get("channels", 2),
         SampleRate=db_metadata.get("sample_rate", 44100),
         Bitrate=db_metadata.get("bitrate", 0),
@@ -264,16 +266,13 @@ async def search_library(input_data: Dict[str, Any]) -> Dict[str, Any]:
         logger.debug(f"Searching for: '{query}' with limit={limit}, offset={offset}")
         
         # Build filter parameters for database query
+        # Note: Currently only basic filters are supported by search_audio_tracks_advanced
         filter_params = {}
         
+        # Always filter to completed tracks only
+        filter_params["status_filter"] = "COMPLETED"
+        
         if filters:
-            # Status filter (only show completed tracks)
-            filter_params["status"] = "COMPLETED"
-            
-            # Genre filter
-            if filters.genre:
-                filter_params["genres"] = filters.genre
-            
             # Year range filter
             if filters.year:
                 if filters.year.min is not None:
@@ -281,27 +280,17 @@ async def search_library(input_data: Dict[str, Any]) -> Dict[str, Any]:
                 if filters.year.max is not None:
                     filter_params["year_max"] = filters.year.max
             
-            # Duration range filter
-            if filters.duration:
-                if filters.duration.min is not None:
-                    filter_params["duration_min"] = filters.duration.min
-                if filters.duration.max is not None:
-                    filter_params["duration_max"] = filters.duration.max
-            
-            # Format filter
+            # Format filter (only takes first format if multiple provided)
             if filters.format:
-                filter_params["formats"] = [f.value for f in filters.format]
+                # database function expects single format string, not list
+                filter_params["format_filter"] = filters.format[0].value if isinstance(filters.format, list) else filters.format.value
             
-            # Artist filter (partial match)
-            if filters.artist:
-                filter_params["artist"] = filters.artist
-            
-            # Album filter (partial match)
-            if filters.album:
-                filter_params["album"] = filters.album
-        else:
-            # Default: only show completed tracks
-            filter_params["status"] = "COMPLETED"
+            # Note: The following filters are not yet supported by search_audio_tracks_advanced:
+            # - genre (would need to be added to database function)
+            # - duration (would need to be added to database function)
+            # - artist (would need to be added to database function)
+            # - album (would need to be added to database function)
+            # These could be implemented as post-filtering on results if needed
         
         # Determine sort field mapping
         sort_field_map = {
@@ -318,7 +307,7 @@ async def search_library(input_data: Dict[str, Any]) -> Dict[str, Any]:
         
         # Execute search query
         try:
-            search_results = search_audio_tracks_advanced(
+            search_response = search_audio_tracks_advanced(
                 query=query,
                 limit=limit + 1,  # Fetch one extra to check if more results exist
                 offset=offset,
@@ -340,18 +329,25 @@ async def search_library(input_data: Dict[str, Any]) -> Dict[str, Any]:
                 details={"query": query, "exception_type": type(e).__name__}
             )
         
+        # Extract tracks from response
+        search_results = search_response.get('tracks', [])
+        total_matches = search_response.get('total_matches', 0)
+        
         # Check if more results exist (pagination)
         has_more = len(search_results) > limit
         if has_more:
             search_results = search_results[:limit]  # Remove the extra result
         
-        logger.info(f"Found {len(search_results)} results for '{query}'")
+        logger.info(f"Found {len(search_results)} results for '{query}' (total matches: {total_matches})")
         
         # Format results
         formatted_results = []
         for result in search_results:
             try:
                 # Get metadata from result
+                # Note: database returns "duration_seconds" and "thumbnail_gcs_path"
+                # Handle None values with defaults
+                duration_seconds = result.get("duration_seconds") or 0.0
                 db_metadata = {
                     "id": result.get("id"),
                     "artist": result.get("artist", ""),
@@ -359,19 +355,21 @@ async def search_library(input_data: Dict[str, Any]) -> Dict[str, Any]:
                     "album": result.get("album", ""),
                     "genre": result.get("genre"),
                     "year": result.get("year"),
-                    "duration": result.get("duration", 0.0),
+                    "duration": duration_seconds,  # Map duration_seconds to duration
+                    "duration_seconds": duration_seconds,  # Keep both for compatibility
                     "channels": result.get("channels", 2),
                     "sample_rate": result.get("sample_rate", 44100),
                     "bitrate": result.get("bitrate", 0),
                     "format": result.get("format", ""),
-                    "thumbnail_path": result.get("thumbnail_path")
+                    "thumbnail_path": result.get("thumbnail_gcs_path"),  # Map thumbnail_gcs_path to thumbnail_path
+                    "thumbnail_gcs_path": result.get("thumbnail_gcs_path")  # Keep both for compatibility
                 }
                 
                 # Format metadata
                 formatted_metadata = format_metadata_response(db_metadata)
                 
-                # Get relevance score
-                score = float(result.get("score", 0.0))
+                # Get relevance score (database returns as "rank")
+                score = float(result.get("rank", 0.0))
                 
                 # Create search result
                 search_result = SearchResult(
@@ -386,11 +384,8 @@ async def search_library(input_data: Dict[str, Any]) -> Dict[str, Any]:
                 logger.warning(f"Error formatting search result: {e}")
                 continue  # Skip this result and continue with others
         
-        # Calculate total (this is approximate - real implementation would need COUNT query)
-        # For MVP, we'll use the number of results + offset + has_more flag
-        total = len(formatted_results) + offset
-        if has_more:
-            total += 1  # At least one more exists
+        # Use the actual total from the database query
+        total = total_matches
         
         # Build response
         response = SearchLibraryOutput(

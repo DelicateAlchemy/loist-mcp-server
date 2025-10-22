@@ -4,6 +4,100 @@
 
 This guide provides comprehensive testing strategies for the **Music Library MCP Server** built with FastMCP. The server provides audio processing, storage, and embedding capabilities through MCP tools, resources, and custom routes.
 
+## Current Status (Updated: October 2025)
+
+### ✅ **Resolved Issues**
+- **Python Module Import Issues**: Fixed with proper `PYTHONPATH` and `run_server.py` script
+- **Docker Container Configuration**: Updated Dockerfile with correct module paths
+- **GCS Integration**: Successfully tested bucket access, file upload, and signed URL generation
+- **Database Connection**: PostgreSQL integration working with proper environment variables
+
+### 🚀 **Working Components**
+- **GCS Storage**: File upload, download, signed URL generation
+- **Embed Player**: HTML5 audio player with custom controls and social sharing
+- **Social Sharing**: Open Graph, Twitter Cards, oEmbed discovery
+- **Docker Configuration**: Fixed module import issues
+- **Server Runner**: `run_server.py` script for easy startup
+
+### 📝 **Important Notes**
+- **Test Audio URL**: The temporary URL `http://tmpfiles.org/dl/4845257/dcd082_07herotolerance.mp3` will expire. Replace with your own audio files for testing.
+- **GCS Setup**: Use `scripts/setup-gcs-local.sh` to configure Google Cloud Storage
+- **Module Imports**: Use `python run_server.py` instead of `python src/server.py` to avoid import issues
+
+## GCS + Embed Player Testing 🎵
+
+### Complete Setup and Testing
+
+The server now includes full Google Cloud Storage integration and embed player functionality. Here's how to test the complete pipeline:
+
+#### 1. GCS Setup (One-time)
+```bash
+# Run the automated GCS setup script
+chmod +x scripts/setup-gcs-local.sh
+./scripts/setup-gcs-local.sh
+
+# This will:
+# - Create GCS bucket
+# - Set up service account
+# - Configure permissions
+# - Create environment file
+```
+
+#### 2. Test Complete GCS + Embed Player Pipeline
+```bash
+# Set up environment variables
+export GCS_BUCKET_NAME="loist-mvp-audio-files"
+export GCS_PROJECT_ID="loist-music-library"
+export GCS_REGION="us-central1"
+export GOOGLE_APPLICATION_CREDENTIALS="./service-account-key.json"
+export DATABASE_URL="postgresql://loist_user:dev_password@localhost:5432/loist_mvp"
+
+# Run comprehensive demo
+python3 test_gcs_embed_demo.py
+```
+
+#### 3. Start Server with Fixed Module Imports
+```bash
+# Use the fixed server runner (avoids module import issues)
+python run_server.py
+
+# Server will be available at:
+# - HTTP endpoints: http://localhost:8080
+# - Embed player: http://localhost:8080/embed/{audio_id}
+# - oEmbed: http://localhost:8080/oembed?url=https://loist.io/embed/{audio_id}
+```
+
+#### 4. Test with Your Own Audio Files
+```bash
+# Replace the temporary URL with your own audio file
+python3 -c "
+import sys; sys.path.insert(0, 'src')
+from src.tools.process_audio import process_audio_complete_sync
+
+# Use your own audio file URL
+result = process_audio_complete_sync({
+    'source': {'type': 'http_url', 'url': 'YOUR_AUDIO_FILE_URL_HERE'},
+    'options': {'maxSizeMB': 100}
+})
+
+if result.get('success'):
+    audio_id = result.get('track_id')
+    print(f'✅ Audio processed successfully!')
+    print(f'🎵 Audio ID: {audio_id}')
+    print(f'🌐 Embed URL: http://localhost:8080/embed/{audio_id}')
+    print(f'🔗 oEmbed URL: http://localhost:8080/oembed?url=https://loist.io/embed/{audio_id}')
+else:
+    print(f'❌ Processing failed: {result.get(\"error\")}')
+"
+```
+
+### Expected Results
+- ✅ **GCS Storage**: Files uploaded to Google Cloud Storage
+- ✅ **Database**: Metadata saved to PostgreSQL
+- ✅ **Embed Player**: HTML5 audio player with custom controls
+- ✅ **Social Sharing**: Open Graph and Twitter Card meta tags
+- ✅ **oEmbed**: Platform embedding support
+
 ## Quick Start Testing Guide 🚀
 
 ### Most Common Testing Scenarios
@@ -24,6 +118,7 @@ print('✅ Database:', pool.health_check()['healthy'])
 #### 2. Test Complete Audio Processing Pipeline
 ```bash
 # Test with real audio file (database saving works)
+# NOTE: The URL below is temporary and will expire - replace with your own audio file
 python3 -c "
 import sys; sys.path.insert(0, 'src')
 from src.tools.process_audio import process_audio_complete_sync
@@ -255,12 +350,13 @@ export GCS_PROJECT_ID="loist-mvp"               # Optional for database-only tes
 #### 2. Test Complete Audio Processing Pipeline
 ```bash
 # Test with real audio file (database saving works, GCS upload will fail without bucket setup)
+# NOTE: The URL below is temporary and will expire - replace with your own audio file
 python3 -c "
 import sys
 sys.path.insert(0, 'src')
 from src.tools.process_audio import process_audio_complete_sync
 
-# Test with provided audio URL
+# Test with provided audio URL (TEMPORARY - will expire)
 input_data = {
     'source': {
         'type': 'http_url',
@@ -840,20 +936,60 @@ gcloud logging tail "resource.type=cloud_run_revision AND resource.labels.servic
 - Real-time communication
 - Good for streaming responses
 
+## Quick Reference Commands
+
+### GCS + Embed Player Setup
+```bash
+# 1. Set up GCS (one-time)
+./scripts/setup-gcs-local.sh
+
+# 2. Start database
+docker-compose up postgres -d
+
+# 3. Set environment variables
+export DATABASE_URL="postgresql://loist_user:dev_password@localhost:5432/loist_mvp"
+export GCS_BUCKET_NAME="loist-mvp-audio-files"
+export GCS_PROJECT_ID="loist-music-library"
+export GOOGLE_APPLICATION_CREDENTIALS="./service-account-key.json"
+
+# 4. Test complete pipeline
+python3 test_gcs_embed_demo.py
+
+# 5. Start server
+python run_server.py
+```
+
+### Test URLs (After Processing Audio)
+```bash
+# Embed player
+http://localhost:8080/embed/{audio_id}
+
+# oEmbed discovery
+http://localhost:8080/.well-known/oembed.json
+
+# oEmbed endpoint
+http://localhost:8080/oembed?url=https://loist.io/embed/{audio_id}
+```
+
 ## Next Steps for Testing
 
 ### ✅ Completed Steps
 1. **Database Connection** - ✅ RESOLVED and working
 2. **Audio Processing Pipeline** - ✅ Working with database persistence
 3. **MCP Protocol Testing** - ✅ 58.3% success rate achieved
+4. **GCS Integration** - ✅ File upload, download, signed URLs working
+5. **Embed Player** - ✅ HTML5 audio player with social sharing
+6. **Module Import Issues** - ✅ Fixed with run_server.py
 
 ### 🔄 Current Testing Status
 1. **Start with health_check()** - ✅ Verify server is running
 2. **Test with sample audio** - ✅ Use process_audio_complete with test URL
 3. **Verify database storage** - ✅ Audio metadata successfully saved to PostgreSQL
-4. **Test retrieval** - 🔄 Use get_audio_metadata and search_library
-5. **Test embed page** - 🔄 Switch to HTTP transport and test the player
-6. **Set up GCS storage** - 🔄 Configure Google Cloud Storage for file uploads
+4. **Test retrieval** - ✅ Use get_audio_metadata and search_library
+5. **Test embed page** - ✅ Switch to HTTP transport and test the player
+6. **Set up GCS storage** - ✅ Configure Google Cloud Storage for file uploads
+7. **Test social sharing** - ✅ Open Graph and Twitter Card meta tags
+8. **Test oEmbed** - ✅ Platform embedding support
 
 ## Troubleshooting
 
@@ -927,6 +1063,73 @@ except Exception as e:
 
 # Verify database schema and migrations
 python3 database/migrate.py --action=status
+```
+
+#### 6. GCS Connection Issues
+**Problem**: "Bucket name must be provided via parameter, config, or GCS_BUCKET_NAME env var"
+
+**Solution**: Set up GCS environment variables and run the setup script.
+
+```bash
+# Set GCS environment variables
+export GCS_BUCKET_NAME="loist-mvp-audio-files"
+export GCS_PROJECT_ID="loist-music-library"
+export GCS_REGION="us-central1"
+export GOOGLE_APPLICATION_CREDENTIALS="./service-account-key.json"
+
+# Run GCS setup script
+./scripts/setup-gcs-local.sh
+
+# Test GCS connection
+python3 -c "
+import sys; sys.path.insert(0, 'src')
+from src.storage.gcs_client import create_gcs_client
+try:
+    client = create_gcs_client()
+    print('✅ GCS connection successful!')
+    print(f'Bucket: {client.bucket_name}')
+    print(f'Bucket exists: {client.bucket.exists()}')
+except Exception as e:
+    print(f'❌ GCS connection failed: {e}')
+"
+```
+
+#### 7. Module Import Issues ✅ RESOLVED
+**Problem**: "ModuleNotFoundError: No module named 'src'"
+
+**Solution**: Use the fixed server runner script instead of running the server directly.
+
+```bash
+# ❌ Don't use this (causes import issues)
+python src/server.py
+
+# ✅ Use this instead (fixed module imports)
+python run_server.py
+
+# Or set PYTHONPATH manually
+export PYTHONPATH=/path/to/project
+python src/server.py
+```
+
+#### 8. Audio File URL Expiration
+**Problem**: "Connection refused" or "File not found" when testing with audio URLs
+
+**Solution**: The test URL `http://tmpfiles.org/dl/4845257/dcd082_07herotolerance.mp3` is temporary and will expire. Use your own audio files.
+
+```bash
+# Replace with your own audio file URL
+export TEST_AUDIO_URL="https://your-domain.com/your-audio-file.mp3"
+
+# Test with your audio file
+python3 -c "
+import sys; sys.path.insert(0, 'src')
+from src.tools.process_audio import process_audio_complete_sync
+result = process_audio_complete_sync({
+    'source': {'type': 'http_url', 'url': '$TEST_AUDIO_URL'},
+    'options': {'maxSizeMB': 100}
+})
+print('Success:', result.get('success'))
+"
 ```
 
 #### 6. MCP Client Can't Connect

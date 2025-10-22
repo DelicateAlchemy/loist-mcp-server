@@ -45,8 +45,11 @@ services:
       - PYTHONUNBUFFERED=1
       - PYTHONDONTWRITEBYTECODE=1
       
-      # Google Cloud credentials
-      - GOOGLE_APPLICATION_CREDENTIALS=/app/application_default_credentials.json
+      # Google Cloud Storage Configuration
+      - GCS_BUCKET_NAME=loist-mvp-audio-files
+      - GCS_PROJECT_ID=loist-mvp-dev
+      - GCS_REGION=us-central1
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/service-account-key.json
     
     volumes:
       # Mount source code for live development (hot reload)
@@ -57,8 +60,8 @@ services:
       - ./storage:/app/storage
       # Mount templates directory
       - ./templates:/app/templates:ro
-      # Mount GCS credentials for local testing
-      - ~/.config/gcloud/application_default_credentials.json:/app/application_default_credentials.json:ro
+      # Mount GCS service account key for local testing
+      - ./service-account-key.json:/app/service-account-key.json:ro
     
     restart: unless-stopped
     

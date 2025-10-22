@@ -50,6 +50,8 @@ RUN pip install --no-cache-dir --find-links=/wheels -r requirements.txt && \
 
 # Copy application code
 COPY --chown=fastmcpuser:fastmcpuser src/ ./src/
+COPY --chown=fastmcpuser:fastmcpuser database/ ./database/
+COPY --chown=fastmcpuser:fastmcpuser run_server.py ./
 
 # Copy templates directory
 COPY --chown=fastmcpuser:fastmcpuser templates/ ./templates/
@@ -60,6 +62,7 @@ USER fastmcpuser
 # Environment variables (can be overridden at runtime)
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app \
     SERVER_HOST=0.0.0.0 \
     SERVER_PORT=8080 \
     LOG_LEVEL=INFO
@@ -71,6 +74,6 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import sys; sys.path.insert(0, 'src'); from server import mcp; print('healthy')" || exit 1
 
-# Run the FastMCP server
-CMD ["python", "src/server.py"]
+# Run the FastMCP server using the runner script
+CMD ["python", "run_server.py"]
 

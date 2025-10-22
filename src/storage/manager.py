@@ -419,14 +419,21 @@ class AudioStorageManager:
         try:
             # Determine content type from extension
             content_type_map = {
+                # Audio formats
                 '.mp3': 'audio/mpeg',
                 '.wav': 'audio/wav',
                 '.flac': 'audio/flac',
                 '.ogg': 'audio/ogg',
                 '.m4a': 'audio/mp4',
                 '.aac': 'audio/aac',
+                # Image formats
+                '.jpg': 'image/jpeg',
+                '.jpeg': 'image/jpeg',
+                '.png': 'image/png',
+                '.gif': 'image/gif',
+                '.webp': 'image/webp',
             }
-            content_type = content_type_map.get(source_path.suffix.lower(), 'audio/mpeg')
+            content_type = content_type_map.get(source_path.suffix.lower(), 'application/octet-stream')
             
             # Add default metadata
             upload_metadata = {
