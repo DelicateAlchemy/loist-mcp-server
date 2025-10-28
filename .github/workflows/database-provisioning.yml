@@ -130,7 +130,7 @@ jobs:
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
         run: |
-          python -m database.migrate up
+          python database/migrate.py --action=up --database-url="postgresql://${{ secrets.DB_USER }}:${{ secrets.DB_PASSWORD }}@localhost:5432/${{ env.DATABASE_NAME }}"
 
       - name: Verify migration
         env:
@@ -140,7 +140,7 @@ jobs:
           DB_USER: ${{ secrets.DB_USER }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
         run: |
-          python -m database.migrate status
+          python database/migrate.py --action=status --database-url="postgresql://${{ secrets.DB_USER }}:${{ secrets.DB_PASSWORD }}@localhost:5432/${{ env.DATABASE_NAME }}"
 
   test:
     name: Database Tests
