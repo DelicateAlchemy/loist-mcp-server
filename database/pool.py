@@ -83,12 +83,7 @@ class DatabasePool:
         """Build database URL from environment variables."""
         import os
         
-        # First check for direct DATABASE_URL
-        database_url = os.getenv("DATABASE_URL")
-        if database_url:
-            return database_url
-        
-        # Fallback to individual components
+        # Get all database connection components
         db_host = os.getenv("DB_HOST")
         db_port = os.getenv("DB_PORT", "5432")
         db_name = os.getenv("DB_NAME")
@@ -96,11 +91,20 @@ class DatabasePool:
         db_password = os.getenv("DB_PASSWORD")
         db_connection_name = os.getenv("DB_CONNECTION_NAME")
         
+        # PRIORITY 1: Cloud SQL Proxy connection (preferred for Cloud Run)
         if db_connection_name and db_name and db_user and db_password:
-            # Cloud SQL Proxy connection
+            logger.info(f"Using Cloud SQL Proxy connection: {db_connection_name}")
             return f"postgresql://{db_user}:{db_password}@/{db_name}?host=/cloudsql/{db_connection_name}"
-        elif db_host and db_name and db_user and db_password:
-            # Direct connection
+        
+        # PRIORITY 2: Direct DATABASE_URL (for local development)
+        database_url = os.getenv("DATABASE_URL")
+        if database_url:
+            logger.info("Using DATABASE_URL for database connection")
+            return database_url
+        
+        # PRIORITY 3: Direct connection via individual components (fallback)
+        if db_host and db_name and db_user and db_password:
+            logger.info(f"Using direct database connection to: {db_host}:{db_port}")
             return f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
         
         return None
