@@ -587,6 +587,46 @@ Returns the current status of the server.
 }
 ```
 
+## Troubleshooting
+
+### Import Errors
+
+If you encounter `ModuleNotFoundError` or `No module named 'src'` errors:
+
+**Problem:** Python can't find modules during import.
+
+**Solution:** Ensure Python path is set correctly. The `src/server.py` file sets up the path automatically:
+
+```python
+# Add both project root and src directory to Python path
+server_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(server_dir)
+sys.path.insert(0, project_root)
+sys.path.insert(0, server_dir)
+```
+
+**Important:** Import paths in the codebase do not use the `src.` prefix:
+- ✅ `from downloader.http_downloader import download_from_url`
+- ❌ `from src.downloader.http_downloader import download_from_url`
+
+### Docker Container Issues
+
+**Container exits immediately:**
+- Check that `CMD ["tail", "-f", "/dev/null"]` is in Dockerfile
+- Server should be started via `docker exec` for STDIO mode
+
+**Can't connect to database:**
+- Verify service account key is mounted: `./service-account-key.json:/app/service-account-key.json:ro`
+- Check database credentials in `.cursor/mcp.json`
+- Ensure database container is running: `docker ps | grep music-library-db`
+
+**MCP tools not appearing in Cursor:**
+- Reload Cursor window: `Cmd+Shift+P` → "Developer: Reload Window"
+- Check container is running: `docker ps | grep music-library-mcp`
+- View logs: `docker logs music-library-mcp`
+
+See `docs/mcp-tool-discovery-fix.md` for detailed troubleshooting.
+
 ## Contributing
 
 1. Create a feature branch from `main`

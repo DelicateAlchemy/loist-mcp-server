@@ -13,10 +13,11 @@ import psycopg2.extras
 from psycopg2 import DatabaseError, IntegrityError
 
 from .pool import get_connection
-from src.exceptions import (
+from exceptions import (
     StorageError,
     ValidationError,
     DatabaseOperationError,
+    ResourceNotFoundError,
 )
 
 logger = logging.getLogger(__name__)

@@ -6,8 +6,17 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Optional
 from fastmcp import FastMCP
+import sys
+import os
+
+# Add both project root and src directory to Python path
+server_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(server_dir)
+sys.path.insert(0, project_root)
+sys.path.insert(0, server_dir)
+
 from config import config
-from auth import SimpleBearerAuth
+from auth.bearer import SimpleBearerAuth
 
 # Configure logging
 config.configure_logging()
@@ -59,10 +68,15 @@ mcp = FastMCP(
 @mcp.tool()
 def health_check() -> dict:
     """
-    Health check endpoint to verify server is running
+    Health check endpoint to verify server is running and services are connected.
+    
+    Tests connectivity to:
+    - Database (PostgreSQL)
+    - Storage (Google Cloud Storage)
+    - Configuration validation
     
     Returns:
-        dict: Server status information including version and configuration
+        dict: Server status information including service connectivity
         
     Raises:
         Exception: If health check fails (demonstrates error handling)
@@ -73,6 +87,32 @@ def health_check() -> dict:
     try:
         logger.debug("Health check requested")
         
+        # Test database connectivity
+        database_status = "disconnected"
+        try:
+            from database.pool import get_connection
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT 1")
+                    result = cur.fetchone()
+                    if result and result[0] == 1:
+                        database_status = "connected"
+                        logger.debug("Database connectivity verified")
+        except Exception as e:
+            logger.warning(f"Database connectivity check failed: {e}")
+        
+        # Test storage connectivity
+        storage_status = "disconnected"
+        try:
+            from storage.gcs_client import create_gcs_client
+            client = create_gcs_client()
+            # Try to list files to test connectivity
+            files = client.list_files(prefix="test/", max_results=1)
+            storage_status = "connected"
+            logger.debug("Storage connectivity verified")
+        except Exception as e:
+            logger.warning(f"Storage connectivity check failed: {e}")
+        
         # Verify server is operational
         response = {
             "status": "healthy",
@@ -80,10 +120,13 @@ def health_check() -> dict:
             "version": config.server_version,
             "transport": config.server_transport,
             "log_level": config.log_level,
-            "authentication": "enabled" if config.auth_enabled else "disabled"
+            "authentication": "enabled" if config.auth_enabled else "disabled",
+            "database": database_status,
+            "storage": storage_status,
+            "configuration": config.validate_credentials()
         }
         
-        logger.info("Health check passed")
+        logger.info(f"Health check passed - Database: {database_status}, Storage: {storage_status}")
         return response
         
     except Exception as e:
@@ -91,6 +134,46 @@ def health_check() -> dict:
         error_response = handle_tool_error(e, "health_check")
         logger.error(f"Health check failed: {error_response}")
         return error_response
+
+
+# ============================================================================
+# MCP Resources
+# ============================================================================
+
+@mcp.resource("music-library://audio/{id}/stream")
+async def audio_stream_resource(id: str) -> dict:
+    """
+    Audio stream resource for MCP clients.
+    
+    Provides streaming access to audio files stored in GCS.
+    Supports HTTP range requests for efficient audio playback.
+    
+    Args:
+        id: UUID of the audio track
+    
+    Returns:
+        Dictionary with stream information and signed URL
+    """
+    from resources.audio_stream import get_audio_stream_info
+    return await get_audio_stream_info(id)
+
+
+@mcp.resource("music-library://audio/{id}/thumbnail")
+async def thumbnail_resource(id: str) -> dict:
+    """
+    Thumbnail resource for MCP clients.
+    
+    Provides access to artwork/thumbnails for audio tracks.
+    Falls back to default image when no artwork is available.
+    
+    Args:
+        id: UUID of the audio track
+    
+    Returns:
+        Dictionary with thumbnail information and signed URL
+    """
+    from resources.thumbnail import get_thumbnail_info
+    return await get_thumbnail_info(id)
 
 
 # ============================================================================
@@ -261,4 +344,5 @@ def create_http_app():
 if __name__ == "__main__":
     # Run the FastMCP server
     # CORS is automatically applied when using HTTP/SSE transport
-    mcp.run()
+    # Use transport from config (reads from SERVER_TRANSPORT env var)
+    mcp.run(transport=config.server_transport)

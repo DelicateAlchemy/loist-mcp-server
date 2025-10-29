@@ -36,7 +36,7 @@ from database import (
     get_audio_metadata_by_id,
     search_audio_tracks_advanced,
 )
-from src.exceptions import (
+from exceptions import (
     DatabaseOperationError,
     ResourceNotFoundError,
     ValidationError,

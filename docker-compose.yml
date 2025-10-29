@@ -15,7 +15,7 @@ services:
       - SERVER_VERSION=0.1.0
       - SERVER_HOST=0.0.0.0
       - SERVER_PORT=8080
-      - SERVER_TRANSPORT=http  # http for local testing with CORS
+      # SERVER_TRANSPORT set by mcp.json for STDIO mode
       
       # Logging
       - LOG_LEVEL=DEBUG  # Verbose logging for development
@@ -52,8 +52,10 @@ services:
       - ./database:/app/database:ro
       # Mount for local storage (when implementing file features)
       - ./storage:/app/storage
+      # Mount service account key for GCS access
+      - ./service-account-key.json:/app/service-account-key.json:ro
     
-    restart: unless-stopped
+    restart: "no"
     
     healthcheck:
       test: ["CMD", "python", "-c", "import sys; sys.path.insert(0, 'src'); from server import mcp; print('healthy')"]
