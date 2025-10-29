@@ -41,6 +41,11 @@ services:
       - DB_PASSWORD=dev_password
       - DATABASE_URL=postgresql://loist_user:dev_password@postgres:5432/loist_mvp
       
+      # Google Cloud Storage Configuration
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/service-account-key.json
+      - GCS_BUCKET_NAME=${GCS_BUCKET_NAME:-loist-mvp-audio-files}
+      - GCS_PROJECT_ID=${GCS_PROJECT_ID:-}
+      
       # Python
       - PYTHONUNBUFFERED=1
       - PYTHONDONTWRITEBYTECODE=1
@@ -50,8 +55,12 @@ services:
       - ./src:/app/src:ro
       # Mount database migrations and config
       - ./database:/app/database:ro
+      # Mount templates for embed page rendering
+      - ./templates:/app/templates:ro
       # Mount for local storage (when implementing file features)
       - ./storage:/app/storage
+      # Mount GCS service account credentials
+      - ./service-account-key.json:/app/service-account-key.json:ro
     
     restart: unless-stopped
     

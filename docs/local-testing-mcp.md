@@ -79,6 +79,36 @@ Your MCP server is a **Music Library MCP Server** built with FastMCP that provid
   - Keyboard shortcuts
   - Responsive design
 - **Example**: `GET /embed/550e8400-e29b-41d4-a716-446655440000`
+- **Returns**: HTML page with audio player
+
+### 2. `/oembed` (GET)
+- **Purpose**: oEmbed endpoint for rich media previews
+- **Query Parameters**:
+  - `url` (required): Embed URL to generate oEmbed data for
+  - `format` (optional): Response format, 'json' or 'xml' (default: 'json')
+  - `maxwidth` (optional): Maximum width for embed (default: 500)
+  - `maxheight` (optional): Maximum height for embed (default: 200)
+- **Returns**: JSON response following oEmbed v1.0 specification
+- **Example**: 
+  ```bash
+  GET /oembed?url=https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000&maxwidth=800&maxheight=300
+  ```
+- **Response Format**:
+  ```json
+  {
+    "version": "1.0",
+    "type": "rich",
+    "provider_name": "Loist Music Library",
+    "provider_url": "https://loist.io",
+    "title": "Track Title",
+    "author_name": "Artist Name",
+    "html": "<iframe src='...' width='800' height='300' ...></iframe>",
+    "width": 800,
+    "height": 300,
+    "thumbnail_url": "...",
+    "cache_age": 3600
+  }
+  ```
 
 ## Server Configuration
 
@@ -270,7 +300,31 @@ print(f"Found {results['total']} results")
 ```
 
 #### 5. Test Embed Page
-If using HTTP transport, visit: `http://localhost:8080/embed/{audioId}`
+```bash
+# Test embed page (requires valid audioId)
+curl http://localhost:8080/embed/550e8400-e29b-41d4-a716-446655440000
+
+# Or open in browser:
+# http://localhost:8080/embed/{audioId}
+```
+
+#### 6. Test oEmbed Endpoint
+```bash
+# Test oEmbed with required url parameter
+curl "http://localhost:8080/oembed?url=https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000"
+
+# Test with maxwidth and maxheight
+curl "http://localhost:8080/oembed?url=https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000&maxwidth=800&maxheight=300"
+
+# Test with invalid URL (should return 400)
+curl "http://localhost:8080/oembed?url=https://example.com/invalid"
+
+# Test with missing url parameter (should return 400)
+curl "http://localhost:8080/oembed"
+
+# Test with non-existent audio ID (should return 404)
+curl "http://localhost:8080/oembed?url=https://loist.io/embed/00000000-0000-0000-0000-000000000000"
+```
 
 ### Testing with Docker
 
@@ -290,6 +344,9 @@ curl http://localhost:8080/mcp/health_check
 
 # Test embed page (if you have audio)
 curl http://localhost:8080/embed/test-audio-id
+
+# Test oEmbed endpoint
+curl "http://localhost:8080/oembed?url=https://loist.io/embed/test-audio-id&maxwidth=500&maxheight=200"
 ```
 
 ### Testing MCP Resources
