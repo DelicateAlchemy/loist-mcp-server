@@ -24,9 +24,3 @@ __all__ = [
     "get_thumbnail_resource",
     "SignedURLCache",
 ]
-
-<<<<<<< HEAD
-=======
-
-
->>>>>>> task-10-html5-audio-player
