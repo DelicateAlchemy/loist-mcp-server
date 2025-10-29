@@ -63,12 +63,15 @@
         }
         
         .player-container {
-            max-width: 500px;
-            margin: 20px auto;
+            max-width: 100%;
+            width: 100%;
+            margin: 0 auto;
             padding: 20px;
             border-radius: 12px;
             box-shadow: 0 4px 20px var(--shadow);
             background-color: var(--background);
+            /* Responsive: adapts to iframe container size */
+            min-width: 280px; /* Minimum usable width */
         }
         
         .player-header {
