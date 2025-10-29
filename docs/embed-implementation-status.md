@@ -342,11 +342,17 @@ Current design (from `mcp.md` line 741):
    - Custom routes work correctly in HTTP mode
    - CORS configured for iframe embedding
 
-### Testing Required
+### Testing Status
 
-- [ ] Test embed page with real audio ID
-- [ ] Test oEmbed endpoint with valid/invalid URLs
-- [ ] Verify Notion embed functionality
+- [x] **oEmbed endpoint testing** ✅ (2025-10-29)
+  - ✅ Valid URLs return correct JSON response
+  - ✅ maxwidth/maxheight parameters work correctly
+  - ✅ Error handling for invalid URLs (400 response)
+  - ✅ Error handling for missing url parameter (400 response)
+  - ✅ Response format follows oEmbed v1.0 specification
+  - ✅ Iframe HTML includes correct dimensions and attributes
+- [ ] Test embed page with real audio ID (in browser)
+- [ ] Verify Notion embed functionality (requires production URL)
 - [ ] Test mobile responsiveness
 - [ ] Verify CORS headers for iframe embedding
 
