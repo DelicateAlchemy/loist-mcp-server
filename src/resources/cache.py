@@ -104,7 +104,7 @@ class SignedURLCache:
                 signed_url = generate_signed_url(
                     bucket_name=bucket_name,
                     blob_name=blob_name,
-                    expiration=timedelta(minutes=url_expiration_minutes)
+                    expiration_minutes=url_expiration_minutes
                 )
             except Exception as e:
                 logger.error(f"Failed to generate signed URL for {gcs_path}: {e}")
