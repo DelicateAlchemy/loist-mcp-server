@@ -9,7 +9,7 @@ The embed link `https://loist.io/embed/{audio_id}` **does have a functional serv
 **Key Finding**: When accessing `https://loist.io/embed/c7fd6016-8d62-4e1f-9f8f-4f8cdc3f8080`, you get "audio not found" (not a 404), which proves:
 - ✅ Production embed server exists and is functional
 - ❌ Audio ingested locally via Docker is NOT in production database/storage
-- ⚠️ This local MCP server codebase does NOT contain the embed implementation
+- ✅ This local MCP server codebase **NOW CONTAINS** the embed implementation (2025-10-28)
 
 ## Current State
 
@@ -228,7 +228,7 @@ async def oembed_endpoint(url: str, maxwidth: int = 500, maxheight: int = 200):
 Current design (from `mcp.md` line 741):
 > "Every processed audio track gets a shareable URL pattern: `https://loist.io/embed/{uuid}`. This single URL serves two purposes: when accessed by embedding platforms (Notion, Slack, Coda), it returns oEmbed JSON and Open Graph meta tags that enable rich previews with an embedded iframe player. When clicked directly (email, WhatsApp, markdown links), the same URL renders a full standalone player page in the browser."
 
-**Status**: ✅ Design documented and implemented in production, ❌ Not implemented in this local repo
+**Status**: ✅ Design documented and implemented in production, ✅ **IMPLEMENTED in local repo** (2025-10-28)
 
 ## Recommendation
 
@@ -290,10 +290,10 @@ Current design (from `mcp.md` line 741):
 - Returns proper error messages when audio not found (proves implementation exists)
 - Separate from this local MCP server codebase
 
-**Local Docker MCP Server (This Repo)**: ⚠️ Embed functionality NOT included
-- This repository focuses on MCP protocol implementation
-- Production embed pages are in a separate codebase/service
-- URL generation exists, but no HTTP route handlers for embed pages
+**Local Docker MCP Server (This Repo)**: ✅ Embed functionality **FULLY IMPLEMENTED** (2025-10-28)
+- This repository now includes complete embed functionality
+- Both MCP protocol (STDIO) and web server (HTTP) modes supported
+- Full embed route handler and oEmbed endpoint implemented
 
 ### To Add Embed Functionality to Local Server:
 
