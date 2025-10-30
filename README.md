@@ -304,7 +304,35 @@ gcloud run deploy music-library-mcp \
 
 ## GitHub Actions CI/CD
 
-The project includes automated workflows for database provisioning and testing.
+The project includes automated workflows for database provisioning, testing, and MCP server validation.
+
+### Available Workflows
+
+#### 1. MCP Server Validation (New!)
+**Automated MCP protocol compliance and testing**
+
+| Trigger | Description |
+|---------|-------------|
+| Push to `main`, `develop` | Full validation suite |
+| Pull requests to `main` | Quality gates and compliance checks |
+
+**Features:**
+- 🧪 **Protocol Compliance**: Validates JSON-RPC 2.0 and MCP protocol adherence
+- 🔍 **Error Format Validation**: Ensures standardized error responses
+- ⚡ **Performance Monitoring**: Tracks response times and regression detection
+- 📊 **Quality Gates**: Fails CI on protocol violations or performance issues
+- 📁 **Test Artifacts**: Uploads detailed test results for debugging
+- 💬 **PR Integration**: Comments on pull requests with validation results
+
+#### 2. Database Provisioning
+**Cloud SQL instance management and migrations**
+
+| Action | Description | Trigger |
+|--------|-------------|---------|
+| `provision` | Create Cloud SQL instance | Manual dispatch |
+| `migrate` | Run database migrations | Manual dispatch / Push to main |
+| `test` | Run database tests | Manual dispatch / Pull requests |
+| `health-check` | Verify instance health | Manual dispatch |
 
 ### Quick Setup
 
@@ -332,24 +360,13 @@ rm github-actions-key.json
 - [GitHub Actions Setup Guide](docs/github-actions-setup.md) - Detailed setup instructions
 - [Quick Setup Guide](docs/github-secrets-quick-setup.md) - 5-minute quick start
 
-### Available Workflows
-
-The **Database Provisioning** workflow supports four actions:
-
-| Action | Description | Trigger |
-|--------|-------------|---------|
-| `provision` | Create Cloud SQL instance | Manual dispatch |
-| `migrate` | Run database migrations | Manual dispatch / Push to main |
-| `test` | Run database tests | Manual dispatch / Pull requests |
-| `health-check` | Verify instance health | Manual dispatch |
-
 ### Running Workflows
 
 1. Go to **Actions** tab in GitHub
-2. Select **Database Provisioning** workflow
-3. Click **Run workflow**
-4. Choose action (provision, migrate, test, health-check)
-5. Click **Run workflow**
+2. Select desired workflow:
+   - **MCP Server Validation** (runs automatically on push/PR)
+   - **Database Provisioning** (manual dispatch)
+3. For manual workflows: Click **Run workflow** → Choose action → **Run workflow**
 
 ## Development
 
