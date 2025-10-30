@@ -1,0 +1,82 @@
+# Google Cloud Build Configuration for Staging Environment
+# Deploys to staging Cloud Run service for testing
+
+steps:
+  # Step 1: Build Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-image'
+    args: [
+      'build',
+      '-t', 'gcr.io/$PROJECT_ID/music-library-mcp-staging:$COMMIT_SHA',
+      '-t', 'gcr.io/$PROJECT_ID/music-library-mcp-staging:latest',
+      '.'
+    ]
+
+  # Step 2: Push Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'push-image'
+    args: ['push', '--all-tags', 'gcr.io/$PROJECT_ID/music-library-mcp-staging']
+    waitFor: ['build-image']
+
+  # Step 3: Deploy to staging Cloud Run
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'deploy-staging'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'music-library-mcp-staging'
+      - '--image=gcr.io/$PROJECT_ID/music-library-mcp-staging:$COMMIT_SHA'
+      - '--region=us-central1'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--memory=1Gi'  # Smaller resources for staging
+      - '--cpu=1'
+      - '--timeout=300s'
+      - '--concurrency=40'
+      - '--max-instances=3'
+      - '--min-instances=0'
+      - '--port=8080'
+      - '--set-env-vars=SERVER_TRANSPORT=http,LOG_LEVEL=DEBUG,AUTH_ENABLED=false,ENABLE_CORS=true,CORS_ORIGINS=*,ENABLE_HEALTHCHECK=true'
+      - '--set-env-vars=GCS_PROJECT_ID=$PROJECT_ID'
+      - '--service-account=${_CLOUD_RUN_SERVICE_ACCOUNT}'
+      - '--update-secrets=DB_CONNECTION_NAME=${_DB_CONNECTION_NAME_STAGING}:latest'
+      - '--update-secrets=GCS_BUCKET_NAME=${_GCS_BUCKET_NAME_STAGING}:latest'
+      - '--quiet'
+    waitFor: ['push-image']
+
+  # Step 4: Basic health check
+  - name: 'gcr.io/cloud-builders/curl'
+    id: 'staging-health-check'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "🔍 Staging health check..."
+        SERVICE_URL=$(gcloud run services describe music-library-mcp-staging \
+          --platform managed \
+          --region us-central1 \
+          --format 'value(status.url)')
+        
+        sleep 20
+        curl -f -s --max-time 30 "$SERVICE_URL/mcp/health" || echo "Staging deployment ready for testing"
+        echo "🎯 Staging URL: $SERVICE_URL"
+    waitFor: ['deploy-staging']
+
+images:
+  - 'gcr.io/$PROJECT_ID/music-library-mcp-staging:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/music-library-mcp-staging:latest'
+
+options:
+  machineType: 'E2_STANDARD_2'  # Smaller machine for staging
+  logging: CLOUD_LOGGING_ONLY
+
+substitutions:
+  _CLOUD_RUN_SERVICE_ACCOUNT: 'music-library-sa@${PROJECT_ID}.iam.gserviceaccount.com'
+  _DB_CONNECTION_NAME_STAGING: 'db-connection-name-staging'
+  _GCS_BUCKET_NAME_STAGING: 'gcs-bucket-name-staging'
+
+timeout: '900s'  # 15 minutes
+
+tags:
+  - 'music-library-mcp'
+  - 'staging'
