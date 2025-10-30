@@ -83,10 +83,6 @@ class DatabasePool:
         """Build database URL from environment variables."""
         import os
         
-        # TEMPORARY DEBUG: Force local PostgreSQL connection
-        logger.info("DEBUG: Forcing local PostgreSQL connection")
-        return "postgresql://loist_user:dev_password@postgres:5432/loist_mvp"
-        
         db_host = os.getenv("DB_HOST")
         db_port = os.getenv("DB_PORT", "5432")
         db_name = os.getenv("DB_NAME")
@@ -383,7 +379,6 @@ def get_connection(retry: bool = True, max_retries: int = 3):
                 tracks = cur.fetchall()
     """
     pool = get_connection_pool()
-    logger.info(f"DEBUG get_connection: Using database URL: {pool.database_url}")
     with pool.get_connection(retry=retry, max_retries=max_retries) as conn:
         yield conn
 
