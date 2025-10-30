@@ -111,7 +111,10 @@ run_mcp_test() {
     # Clean up
     rm -f /tmp/mcp_test_messages_ci.json
     
-    echo "$output|$exit_code|$duration"
+    # Write results to temporary files to avoid output contamination
+    echo "$output" > "/tmp/test_output_${test_name}.txt"
+    echo "$exit_code" > "/tmp/test_exit_${test_name}.txt"
+    echo "$duration" > "/tmp/test_duration_${test_name}.txt"
 }
 
 echo "Starting MCP Tools CI Testing..."
@@ -131,10 +134,10 @@ mcp_messages='{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"pr
 {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}}
 {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "health_check", "arguments": {}}}'
 
-result=$(run_mcp_test "health_check" "$mcp_messages")
-output=$(echo "$result" | cut -d'|' -f1)
-exit_code=$(echo "$result" | cut -d'|' -f2)
-duration=$(echo "$result" | cut -d'|' -f3)
+run_mcp_test "health_check" "$mcp_messages"
+output=$(cat "/tmp/test_output_health_check.txt" 2>/dev/null || echo "")
+exit_code=$(cat "/tmp/test_exit_health_check.txt" 2>/dev/null || echo "1")
+duration=$(cat "/tmp/test_duration_health_check.txt" 2>/dev/null || echo "0")
 
 # Validate health check response
 if echo "$output" | grep -q '"status":"healthy"' && echo "$output" | grep -q '"transport":"stdio"'; then
@@ -155,10 +158,10 @@ mcp_messages='{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"pr
 {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}}
 {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "get_audio_metadata", "arguments": {"audioId": "invalid-id"}}}'
 
-result=$(run_mcp_test "get_audio_metadata_validation" "$mcp_messages")
-output=$(echo "$result" | cut -d'|' -f1)
-exit_code=$(echo "$result" | cut -d'|' -f2)
-duration=$(echo "$result" | cut -d'|' -f3)
+run_mcp_test "get_audio_metadata_validation" "$mcp_messages"
+output=$(cat "/tmp/test_output_get_audio_metadata_validation.txt" 2>/dev/null || echo "")
+exit_code=$(cat "/tmp/test_exit_get_audio_metadata_validation.txt" 2>/dev/null || echo "1")
+duration=$(cat "/tmp/test_duration_get_audio_metadata_validation.txt" 2>/dev/null || echo "0")
 
 # Validate error response format
 if echo "$output" | grep -q '"error":"INVALID_QUERY"' && echo "$output" | grep -q '"success":false'; then
@@ -179,10 +182,10 @@ mcp_messages='{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"pr
 {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}}
 {"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "search_library", "arguments": {"query": "test"}}}'
 
-result=$(run_mcp_test "search_library_database_error" "$mcp_messages")
-output=$(echo "$result" | cut -d'|' -f1)
-exit_code=$(echo "$result" | cut -d'|' -f2)
-duration=$(echo "$result" | cut -d'|' -f3)
+run_mcp_test "search_library_database_error" "$mcp_messages"
+output=$(cat "/tmp/test_output_search_library_database_error.txt" 2>/dev/null || echo "")
+exit_code=$(cat "/tmp/test_exit_search_library_database_error.txt" 2>/dev/null || echo "1")
+duration=$(cat "/tmp/test_duration_search_library_database_error.txt" 2>/dev/null || echo "0")
 
 # Validate database error response
 if echo "$output" | grep -q '"error":"DATABASE_ERROR"' && echo "$output" | grep -q '"success":false'; then
@@ -225,6 +228,9 @@ fi
 
 # Update final summary
 update_summary $total_tests $passed_tests $failed_tests $warning_tests
+
+# Clean up temporary files
+rm -f /tmp/test_output_*.txt /tmp/test_exit_*.txt /tmp/test_duration_*.txt
 
 echo ""
 echo "=================================="
