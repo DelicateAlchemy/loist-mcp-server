@@ -116,7 +116,10 @@ EOF
     # Clean up
     rm -f /tmp/mcp_resource_test_ci.json
     
-    echo "$output|$exit_code|$duration"
+    # Write results to temporary files to avoid output contamination
+    echo "$output" > "/tmp/test_output_${test_name}.txt"
+    echo "$exit_code" > "/tmp/test_exit_${test_name}.txt"
+    echo "$duration" > "/tmp/test_duration_${test_name}.txt"
 }
 
 echo "Starting MCP Resources CI Testing..."
@@ -161,10 +164,10 @@ fi
 total_tests=$((total_tests + 1))
 echo "Test 2: Metadata Resource URI Parsing"
 
-result=$(run_mcp_resource_test "metadata_resource" "music-library://audio/$TEST_UUID/metadata")
-output=$(echo "$result" | cut -d'|' -f1)
-exit_code=$(echo "$result" | cut -d'|' -f2)
-duration=$(echo "$result" | cut -d'|' -f3)
+run_mcp_resource_test "metadata_resource" "music-library://audio/$TEST_UUID/metadata"
+output=$(cat "/tmp/test_output_metadata_resource.txt" 2>/dev/null || echo "")
+exit_code=$(cat "/tmp/test_exit_metadata_resource.txt" 2>/dev/null || echo "1")
+duration=$(cat "/tmp/test_duration_metadata_resource.txt" 2>/dev/null || echo "0")
 
 # Check for proper URI parsing (expect database error, not URI format error)
 if echo "$output" | grep -q 'Database URL must be provided' && ! echo "$output" | grep -q 'Invalid URI format'; then
@@ -185,10 +188,10 @@ fi
 total_tests=$((total_tests + 1))
 echo "Test 3: Stream Resource URI Parsing"
 
-result=$(run_mcp_resource_test "stream_resource" "music-library://audio/$TEST_UUID/stream")
-output=$(echo "$result" | cut -d'|' -f1)
-exit_code=$(echo "$result" | cut -d'|' -f2)
-duration=$(echo "$result" | cut -d'|' -f3)
+run_mcp_resource_test "stream_resource" "music-library://audio/$TEST_UUID/stream"
+output=$(cat "/tmp/test_output_stream_resource.txt" 2>/dev/null || echo "")
+exit_code=$(cat "/tmp/test_exit_stream_resource.txt" 2>/dev/null || echo "1")
+duration=$(cat "/tmp/test_duration_stream_resource.txt" 2>/dev/null || echo "0")
 
 # Check for proper URI parsing (expect database error, not URI format error)
 if echo "$output" | grep -q 'Database URL must be provided' && ! echo "$output" | grep -q 'Invalid URI format'; then
@@ -209,10 +212,10 @@ fi
 total_tests=$((total_tests + 1))
 echo "Test 4: Thumbnail Resource URI Parsing"
 
-result=$(run_mcp_resource_test "thumbnail_resource" "music-library://audio/$TEST_UUID/thumbnail")
-output=$(echo "$result" | cut -d'|' -f1)
-exit_code=$(echo "$result" | cut -d'|' -f2)
-duration=$(echo "$result" | cut -d'|' -f3)
+run_mcp_resource_test "thumbnail_resource" "music-library://audio/$TEST_UUID/thumbnail"
+output=$(cat "/tmp/test_output_thumbnail_resource.txt" 2>/dev/null || echo "")
+exit_code=$(cat "/tmp/test_exit_thumbnail_resource.txt" 2>/dev/null || echo "1")
+duration=$(cat "/tmp/test_duration_thumbnail_resource.txt" 2>/dev/null || echo "0")
 
 # Check for proper URI parsing (expect database error, not URI format error)
 if echo "$output" | grep -q 'Database URL must be provided' && ! echo "$output" | grep -q 'Invalid URI format'; then
@@ -233,10 +236,10 @@ fi
 total_tests=$((total_tests + 1))
 echo "Test 5: Invalid Resource URI Handling"
 
-result=$(run_mcp_resource_test "invalid_resource" "music-library://audio/invalid-uuid/metadata")
-output=$(echo "$result" | cut -d'|' -f1)
-exit_code=$(echo "$result" | cut -d'|' -f2)
-duration=$(echo "$result" | cut -d'|' -f3)
+run_mcp_resource_test "invalid_resource" "music-library://audio/invalid-uuid/metadata"
+output=$(cat "/tmp/test_output_invalid_resource.txt" 2>/dev/null || echo "")
+exit_code=$(cat "/tmp/test_exit_invalid_resource.txt" 2>/dev/null || echo "1")
+duration=$(cat "/tmp/test_duration_invalid_resource.txt" 2>/dev/null || echo "0")
 
 # Check for proper error handling of invalid UUID
 if echo "$output" | grep -q 'Invalid URI format' || echo "$output" | grep -q 'error'; then
@@ -251,6 +254,9 @@ fi
 
 # Update final summary
 update_summary $total_tests $passed_tests $failed_tests $warning_tests
+
+# Clean up temporary files
+rm -f /tmp/test_output_*.txt /tmp/test_exit_*.txt /tmp/test_duration_*.txt
 
 echo ""
 echo "====================================="
