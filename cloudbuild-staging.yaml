@@ -67,7 +67,7 @@ images:
   - 'gcr.io/$PROJECT_ID/music-library-mcp-staging:latest'
 
 options:
-  machineType: 'E2_STANDARD_2'  # Smaller machine for staging
+  machineType: 'N1_HIGHCPU_8'  # Valid Cloud Build machine type for staging
   logging: CLOUD_LOGGING_ONLY
 
 substitutions:

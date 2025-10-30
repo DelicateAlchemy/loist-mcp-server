@@ -1,0 +1,189 @@
+# Google Cloud Build Configuration for Loist Music Library MCP Server
+# Automatically builds, tests, and deploys to Cloud Run on main branch commits
+
+steps:
+  # Step 1: Build Docker image with commit SHA tag
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-image'
+    args: [
+      'build',
+      '-t', 'gcr.io/$PROJECT_ID/music-library-mcp:$COMMIT_SHA',
+      '-t', 'gcr.io/$PROJECT_ID/music-library-mcp:latest',
+      '--cache-from', 'gcr.io/$PROJECT_ID/music-library-mcp:latest',
+      '.'
+    ]
+    timeout: '600s'
+
+  # Step 2: Push Docker image to Google Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'push-image'
+    args: ['push', '--all-tags', 'gcr.io/$PROJECT_ID/music-library-mcp']
+    waitFor: ['build-image']
+
+  # Step 3: Deploy to Cloud Run
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'deploy-cloud-run'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'music-library-mcp'
+      - '--image=gcr.io/$PROJECT_ID/music-library-mcp:$COMMIT_SHA'
+      - '--region=us-central1'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--memory=2Gi'
+      - '--cpu=1'
+      - '--timeout=600s'
+      - '--concurrency=80'
+      - '--max-instances=10'
+      - '--min-instances=0'
+      - '--port=8080'
+      - '--set-env-vars=SERVER_TRANSPORT=http,LOG_LEVEL=INFO,AUTH_ENABLED=false,ENABLE_CORS=true,CORS_ORIGINS=*,ENABLE_HEALTHCHECK=true'
+      - '--set-env-vars=GCS_PROJECT_ID=$PROJECT_ID'
+      - '--service-account=${_CLOUD_RUN_SERVICE_ACCOUNT}'
+      - '--update-secrets=DB_CONNECTION_NAME=${_DB_CONNECTION_NAME}:latest'
+      - '--update-secrets=GCS_BUCKET_NAME=${_GCS_BUCKET_NAME}:latest'
+      - '--quiet'
+    waitFor: ['push-image']
+
+  # Step 4: Get and verify service URL
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'get-service-url'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "🌐 Getting Cloud Run service URL..."
+        SERVICE_URL=$(gcloud run services describe music-library-mcp \
+          --platform managed \
+          --region us-central1 \
+          --format 'value(status.url)')
+        echo "Service deployed at: $$SERVICE_URL"
+        echo "$$SERVICE_URL" > /workspace/service_url.txt
+    waitFor: ['deploy-cloud-run']
+
+  # Step 5: Health check verification
+  - name: 'gcr.io/cloud-builders/curl'
+    id: 'health-check'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "🔍 Performing health check..."
+        SERVICE_URL=$(cat /workspace/service_url.txt)
+        HEALTH_URL="$$SERVICE_URL/mcp/health"
+        echo "Testing health endpoint: $$HEALTH_URL"
+        
+        # Wait for service to be ready
+        sleep 30
+        
+        # Retry health check up to 5 times
+        for i in {1..5}; do
+          echo "Health check attempt $$i..."
+          if curl -f -s --max-time 30 "$$HEALTH_URL" > /dev/null; then
+            echo "✅ Health check passed on attempt $$i"
+            curl -s "$$HEALTH_URL" | jq '.' || echo "Health check response received"
+            exit 0
+          else
+            echo "⏳ Health check failed on attempt $$i, retrying in 10s..."
+            sleep 10
+          fi
+        done
+        
+        echo "❌ Health check failed after 5 attempts"
+        exit 1
+    waitFor: ['get-service-url']
+
+  # Step 6: Update traffic to new revision
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'update-traffic'
+    args:
+      - 'run'
+      - 'services'
+      - 'update-traffic'
+      - 'music-library-mcp'
+      - '--to-latest'
+      - '--region=us-central1'
+      - '--quiet'
+    waitFor: ['health-check']
+
+  # Step 7: Deployment summary and verification
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'deployment-summary'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "🎉 Deployment completed successfully!"
+        echo "📊 Deployment Summary:"
+        echo "  - Project: $PROJECT_ID"
+        echo "  - Service: music-library-mcp"
+        echo "  - Region: us-central1"
+        echo "  - Image: gcr.io/$PROJECT_ID/music-library-mcp:$COMMIT_SHA"
+        echo "  - Commit: $COMMIT_SHA"
+        echo "  - Branch: $BRANCH_NAME"
+        
+        SERVICE_URL=$(cat /workspace/service_url.txt)
+        echo "  - URL: $$SERVICE_URL"
+        
+        echo ""
+        echo "📋 Service Configuration:"
+        gcloud run services describe music-library-mcp \
+          --platform managed \
+          --region us-central1 \
+          --format="table(
+            metadata.name,
+            status.url,
+            spec.template.spec.containers[0].image,
+            spec.template.metadata.annotations['run.googleapis.com/cpu'],
+            spec.template.spec.containers[0].resources.limits.memory,
+            status.conditions[0].status
+          )"
+        
+        echo ""
+        echo "🔗 Quick Links:"
+        echo "  - Service URL: $$SERVICE_URL"
+        echo "  - Health Check: $$SERVICE_URL/mcp/health"
+        echo "  - Cloud Console: https://console.cloud.google.com/run/detail/us-central1/music-library-mcp/metrics?project=$PROJECT_ID"
+    waitFor: ['update-traffic']
+
+# Automatically tag and push images
+images:
+  - 'gcr.io/$PROJECT_ID/music-library-mcp:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/music-library-mcp:latest'
+
+# Build options and configuration
+options:
+  # Use high-performance machine for faster builds
+  machineType: 'N1_HIGHCPU_32'  # Valid Cloud Build machine type for production
+  
+  # Disk size for build workspace
+  diskSizeGb: 100
+  
+  # Enable detailed logging
+  logging: CLOUD_LOGGING_ONLY
+  
+  # Use dynamic substitutions
+  dynamic_substitutions: true
+  
+  # Environment variables for build
+  env:
+    - 'DOCKER_BUILDKIT=1'
+
+# Substitution variables (can be overridden in triggers)
+substitutions:
+  # Cloud Run service account (should be configured in trigger)
+  _CLOUD_RUN_SERVICE_ACCOUNT: 'music-library-sa@${PROJECT_ID}.iam.gserviceaccount.com'
+  
+  # Secret Manager secret names (should be configured in trigger)
+  _DB_CONNECTION_NAME: 'db-connection-name'
+  _GCS_BUCKET_NAME: 'gcs-bucket-name'
+
+# Build timeout (maximum 24 hours, but we expect ~5-10 minutes)
+timeout: '1200s'  # 20 minutes
+
+# Tags for organizing builds
+tags:
+  - 'music-library-mcp'
+  - 'cloud-run'
+  - 'production'
