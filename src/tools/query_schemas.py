@@ -297,7 +297,7 @@ class GetAudioMetadataOutput(BaseModel):
                             "Bitrate": 320000,
                             "Format": "MP3"
                         },
-                        "urlEmbedLink": "https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000"
+                        "urlEmbedLink": "http://localhost:8080/embed/550e8400-e29b-41d4-a716-446655440000"
                     },
                     "resources": {
                         "audio": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/stream",
@@ -364,7 +364,7 @@ class SearchLibraryOutput(BaseModel):
                                     "Bitrate": 320000,
                                     "Format": "MP3"
                                 },
-                                "urlEmbedLink": "https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000"
+                                "urlEmbedLink": "http://localhost:8080/embed/550e8400-e29b-41d4-a716-446655440000"
                             },
                             "score": 0.95
                         }

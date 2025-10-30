@@ -6,6 +6,54 @@ FastMCP-based server for audio ingestion and embedding with the Music Library MC
 
 This project implements a Model Context Protocol (MCP) server using the FastMCP framework for managing audio file ingestion, processing, and embedding generation for a music library system.
 
+## MCP Server Naming Strategy
+
+This project supports both local development and production deployments with distinct naming conventions to avoid conflicts in MCP client configurations:
+
+### Local Development
+- **Cursor MCP Server Name**: `loist-music-library-local`
+- **FastMCP Server Name**: `Music Library MCP - Local Development`
+- **Environment**: Docker containers with local PostgreSQL + GCS integration
+- **Transport**: stdio (for Cursor MCP integration)
+
+### Production Deployment
+- **Cursor MCP Server Name**: `loist-music-library` (production)
+- **FastMCP Server Name**: `Music Library MCP - Production`
+- **Environment**: GCloud infrastructure (Cloud SQL + GCS)
+- **Transport**: Configurable (stdio/http/sse)
+
+### Configuration Details
+
+**Local Development (.cursor/mcp.json):**
+```json
+{
+  "loist-music-library-local": {
+    "command": "python3",
+    "args": ["/Users/Gareth/loist-mcp-server/run_server.py"],
+    "cwd": "/Users/Gareth/loist-mcp-server",
+    "env": {
+      "SERVER_TRANSPORT": "stdio",
+      "SERVER_NAME": "Music Library MCP - Local Development"
+    }
+  }
+}
+```
+
+**Production Deployment:**
+```json
+{
+  "loist-music-library": {
+    "command": "python3",
+    "args": ["/path/to/production/server.py"],
+    "env": {
+      "SERVER_NAME": "Music Library MCP - Production"
+    }
+  }
+}
+```
+
+This naming strategy allows both environments to coexist in Cursor MCP client configuration without conflicts.
+
 ## Prerequisites
 
 - Python 3.11 or higher
@@ -88,15 +136,46 @@ loist-mcp-server/
 
 ### Development Mode (STDIO)
 
+**Recommended: Use Docker for development** (ensures current dependencies):
+
+```bash
+# Run server directly
+./run_mcp_stdio_docker.sh
+```
+
+**Alternative: Use virtual environment** (may have outdated dependencies):
 ```bash
 source .venv/bin/activate  # Activate virtual environment
 python src/server.py
 ```
 
-Or with MCP Inspector:
+### Using MCP Inspector (stdio)
+
+MCP Inspector provides an interactive debugging interface for testing tools and resources.
+
+**Option A: Standalone Inspector** (recommended)
 ```bash
-fastmcp dev src/server.py
+# 1. Launch MCP Inspector (opens in browser)
+npx @modelcontextprotocol/inspector@latest
+
+# 2. In Inspector UI:
+#    - Transport: stdio
+#    - Command: /Users/Gareth/loist-mcp-server/run_mcp_stdio_docker.sh
+#    - Working Directory: /Users/Gareth/loist-mcp-server
 ```
+
+**Option B: Command line testing**
+```bash
+# Test tools and resources via command line
+./test_mcp_tools.sh
+./test_mcp_resources.sh
+```
+
+**What to test in Inspector:**
+- **health_check**: Verify server status and configuration
+- **get_audio_metadata**: Test with invalid ID to see error handling
+- **search_library**: Test with simple query (expect database error in stdio mode)
+- **Resources**: Test `music-library://audio/{id}/metadata|stream|thumbnail` URIs
 
 ### HTTP Mode (with CORS for iframe embedding)
 
@@ -308,7 +387,7 @@ Create a `.env` file in the project root (see `.env.example` for reference):
 
 ```env
 # Server Identity
-SERVER_NAME="Music Library MCP"
+SERVER_NAME="Music Library MCP - Local Development"
 SERVER_VERSION="0.1.0"
 SERVER_INSTRUCTIONS="Your custom instructions here"
 

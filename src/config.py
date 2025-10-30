@@ -84,6 +84,9 @@ class ServerConfig(BaseSettings):
     cors_allow_headers: str = "Authorization,Content-Type,Range,X-Requested-With,Accept,Origin"
     cors_expose_headers: str = "Content-Range,Accept-Ranges,Content-Length,Content-Type"
     
+    # Embed Configuration
+    embed_base_url: str = "https://loist.io"  # Base URL for embed links (configurable for local dev)
+
     # Feature Flags
     enable_metrics: bool = False
     enable_healthcheck: bool = True

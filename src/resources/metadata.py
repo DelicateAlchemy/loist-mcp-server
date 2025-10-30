@@ -40,7 +40,7 @@ async def get_metadata_resource(uri: str) -> Dict[str, Any]:
     try:
         # Parse URI to extract audioId
         # Format: music-library://audio/{audioId}/metadata
-        match = re.match(r"music-library://audio/([0-9a-f-]+)/metadata", uri)
+        match = re.match(r"music-library://audio/([0-9a-fA-F-]+)/metadata", uri)
         
         if not match:
             logger.error(f"Invalid metadata URI format: {uri}")
@@ -78,7 +78,7 @@ async def get_metadata_resource(uri: str) -> Dict[str, Any]:
                 "Bitrate": metadata.get("bitrate", 0),
                 "Format": metadata.get("format", "")
             },
-            "urlEmbedLink": f"https://loist.io/embed/{audio_id}",
+            "urlEmbedLink": f"http://localhost:8080/embed/{audio_id}",
             "resources": {
                 "audio": f"music-library://audio/{audio_id}/stream",
                 "thumbnail": f"music-library://audio/{audio_id}/thumbnail" if metadata.get("thumbnail_path") else None,

@@ -212,6 +212,73 @@ environment:
 
 ## Testing Your MCP Server
 
+### MCP Inspector Quickstart (stdio)
+
+**MCP Inspector** provides an interactive debugging interface for testing tools and resources. This is the recommended approach for development and debugging.
+
+#### Prerequisites
+- Node.js installed (for npx)
+- Docker running (for current dependencies)
+
+#### Setup & Launch
+
+**Step 1: Launch MCP Inspector**
+```bash
+cd /Users/Gareth/loist-mcp-server
+npx @modelcontextprotocol/inspector@latest
+```
+This opens Inspector in your browser at `http://localhost:5173`
+
+**Step 2: Configure Connection**
+In the Inspector UI:
+- **Transport**: `stdio`
+- **Command**: `/Users/Gareth/loist-mcp-server/run_mcp_stdio_docker.sh`
+- **Working Directory**: `/Users/Gareth/loist-mcp-server`
+- **Environment Variables**: Leave empty (Docker handles this)
+
+**Step 3: Connect**
+Click "Connect" - you should see the server initialize with FastMCP 2.12.4 and MCP SDK 1.16.0.
+
+#### Validation Checklist
+
+**✅ Tools Testing**
+- **health_check()**: 
+  - Expected: `{"status": "healthy", "transport": "stdio", "authentication": "disabled"}`
+  - Validates: Server startup, configuration, error handling
+- **get_audio_metadata("invalid-id")**:
+  - Expected: `INVALID_QUERY` error with validation details
+  - Validates: Input validation, standardized error format
+- **search_library({"query": "test"})**:
+  - Expected: `DATABASE_ERROR` (expected in stdio mode)
+  - Validates: Database connection handling, error serialization
+
+**✅ Resources Testing**
+Test these URIs (expect database errors in stdio mode):
+- `music-library://audio/550e8400-e29b-41d4-a716-446655440000/metadata`
+- `music-library://audio/550e8400-e29b-41d4-a716-446655440000/stream`
+- `music-library://audio/550e8400-e29b-41d4-a716-446655440000/thumbnail`
+
+**✅ Exception Serialization**
+- All errors return standardized format: `{"success": false, "error": "CODE", "message": "...", "details": {...}}`
+- Error codes match `src/error_utils.py` definitions
+- FastMCP properly serializes custom exceptions
+
+**✅ Logging Verification**
+- Terminal shows DEBUG logs for each request
+- Exception stack traces visible for debugging
+- Startup shows all 10 custom exceptions loaded
+
+#### Command Line Alternative
+
+For automated testing without the UI:
+```bash
+# Test all tools
+./test_mcp_tools.sh
+
+# Test all resources  
+./test_mcp_resources.sh
+```
+
 ### Quick Start for Local Testing
 
 #### 1. Set Up Environment (Choose One)

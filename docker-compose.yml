@@ -11,7 +11,7 @@ services:
       - "8080:8080"
     environment:
       # Server Configuration
-      - SERVER_NAME=Music Library MCP
+      - SERVER_NAME=Music Library MCP - Local Development
       - SERVER_VERSION=0.1.0
       - SERVER_HOST=0.0.0.0
       - SERVER_PORT=8080
@@ -33,13 +33,14 @@ services:
       # Feature Flags
       - ENABLE_HEALTHCHECK=true
       
-      # Database Configuration
+      # Database Configuration (Local PostgreSQL - Override any .env settings)
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_NAME=loist_mvp
       - DB_USER=loist_user
       - DB_PASSWORD=dev_password
       - DATABASE_URL=postgresql://loist_user:dev_password@postgres:5432/loist_mvp
+      - DB_CONNECTION_NAME=  # Explicitly empty to force local PostgreSQL
       
       # Google Cloud Storage Configuration
       - GOOGLE_APPLICATION_CREDENTIALS=/app/service-account-key.json

@@ -20,9 +20,84 @@ from starlette.responses import HTMLResponse
 from config import config
 from auth import SimpleBearerAuth
 
-# Configure logging
+# ============================================================================
+# Centralized Exception Import Strategy
+# ============================================================================
+# Import ALL custom exceptions at module level BEFORE FastMCP initialization
+# This ensures they're available in the global namespace when FastMCP's
+# internal serialization code tries to access exception class information.
+# FastMCP serializes exceptions to JSON-RPC, and needs exception classes
+# to be importable/accessible to format error responses correctly.
+
+from src.exceptions import (
+    MusicLibraryError,
+    AudioProcessingError,
+    StorageError,
+    ValidationError,
+    ResourceNotFoundError,
+    TimeoutError,
+    AuthenticationError,
+    RateLimitError,
+    ExternalServiceError,
+    DatabaseOperationError,
+    get_error_code,
+    ERROR_CODES,
+)
+
+def ensure_exceptions_loaded():
+    """
+    Explicitly ensure all custom exceptions are loaded and available.
+    
+    This function performs runtime checks to verify exception classes
+    are accessible, which helps catch import issues early and ensures
+    FastMCP can access them during exception serialization.
+    
+    Returns:
+        dict: Status of exception loading with verification results
+    """
+    exception_classes = {
+        'MusicLibraryError': MusicLibraryError,
+        'AudioProcessingError': AudioProcessingError,
+        'StorageError': StorageError,
+        'ValidationError': ValidationError,
+        'ResourceNotFoundError': ResourceNotFoundError,
+        'TimeoutError': TimeoutError,
+        'AuthenticationError': AuthenticationError,
+        'RateLimitError': RateLimitError,
+        'ExternalServiceError': ExternalServiceError,
+        'DatabaseOperationError': DatabaseOperationError,
+    }
+    
+    # Verify all exceptions are accessible
+    verification = {}
+    for name, exc_class in exception_classes.items():
+        verification[name] = {
+            'available': True,
+            'module': exc_class.__module__,
+            'qualified_name': f"{exc_class.__module__}.{exc_class.__name__}",
+        }
+    
+    # Make exceptions available in global namespace explicitly
+    # This ensures FastMCP's serialization can access them
+    globals().update(exception_classes)
+    
+    logger.debug(f"Loaded {len(exception_classes)} custom exception classes for FastMCP")
+    logger.debug(f"Exception modules: {set(e['module'] for e in verification.values())}")
+    
+    return {
+        'status': 'success',
+        'exceptions_loaded': len(exception_classes),
+        'verification': verification
+    }
+
+# Configure logging FIRST (needed for exception loading function)
 config.configure_logging()
 logger = logging.getLogger(__name__)
+
+# Execute exception loading BEFORE FastMCP initialization
+# This ensures exceptions are available when FastMCP is created
+_exception_status = ensure_exceptions_loaded()
+logger.info(f"✅ Exception classes loaded and verified: {_exception_status['exceptions_loaded']} classes")
 
 # Configure Jinja2 templates
 TEMPLATE_DIR = Path(__file__).parent.parent / "templates"
@@ -58,7 +133,69 @@ else:
     logger.info("🔓 Running without authentication (development mode)")
 
 
+def verify_exceptions_for_fastmcp():
+    """
+    Verify all custom exceptions are accessible before FastMCP initialization.
+    
+    This ensures FastMCP's serialization code can access exception classes
+    when it needs to format error responses. FastMCP may access exception
+    class information via __class__, __name__, __module__, etc.
+    """
+    exceptions_to_verify = [
+        'MusicLibraryError',
+        'AudioProcessingError',
+        'StorageError',
+        'ValidationError',
+        'ResourceNotFoundError',  # The problematic one
+        'TimeoutError',
+        'AuthenticationError',
+        'RateLimitError',
+        'ExternalServiceError',
+        'DatabaseOperationError',
+    ]
+    
+    verification_results = {}
+    all_passed = True
+    
+    for exc_name in exceptions_to_verify:
+        try:
+            exc_class = globals().get(exc_name)
+            if exc_class is None:
+                raise NameError(f"{exc_name} not found in globals()")
+            
+            # Verify we can access class attributes FastMCP might use
+            _ = exc_class.__name__
+            _ = exc_class.__module__
+            _ = exc_class.__bases__
+            
+            verification_results[exc_name] = {
+                'accessible': True,
+                'module': exc_class.__module__,
+                'qualified_name': f"{exc_class.__module__}.{exc_class.__name__}"
+            }
+            logger.debug(f"✅ {exc_name} verified: {verification_results[exc_name]['qualified_name']}")
+        except (NameError, AttributeError) as e:
+            all_passed = False
+            verification_results[exc_name] = {
+                'accessible': False,
+                'error': str(e)
+            }
+            logger.error(f"❌ {exc_name} verification failed: {e}")
+    
+    if not all_passed:
+        logger.error("❌ CRITICAL: Some exception classes are not accessible!")
+        logger.error(f"Failed verifications: {[k for k, v in verification_results.items() if not v.get('accessible', False)]}")
+        raise RuntimeError("Exception classes must be accessible before FastMCP initialization")
+    
+    logger.info(f"✅ All {len(exceptions_to_verify)} exception classes verified and accessible for FastMCP")
+    return verification_results
+
+# Verify exception classes are accessible before FastMCP initialization
+# This ensures FastMCP's serialization code can access them
+_verification_results = verify_exceptions_for_fastmcp()
+
 # Initialize FastMCP server with advanced configuration
+# All custom exceptions are now guaranteed to be in global scope
 mcp = FastMCP(
     name=config.server_name,
     instructions=config.server_instructions,
@@ -82,8 +219,8 @@ def health_check() -> dict:
     Raises:
         Exception: If health check fails (demonstrates error handling)
     """
-    from exceptions import MusicLibraryError
-    from error_utils import handle_tool_error
+    from src.exceptions import MusicLibraryError, ResourceNotFoundError
+    from src.error_utils import handle_tool_error
     
     try:
         logger.debug("Health check requested")
@@ -151,15 +288,27 @@ async def process_audio_complete(
         "550e8400-e29b-41d4-a716-446655440000"
     """
     from tools import process_audio_complete as process_audio_func
-    
-    # Build input data
-    input_data = {
-        "source": source,
-        "options": options or {}
-    }
-    
-    # Call the async processing function
-    return await process_audio_func(input_data)
+    from src.error_utils import handle_tool_error
+
+    try:
+        # All custom exceptions are already in global scope from centralized import
+        # FastMCP can now serialize them correctly since they're available in module namespace
+
+        # Build input data
+        input_data = {
+            "source": source,
+            "options": options or {}
+        }
+
+        # Call the async processing function
+        # Exceptions raised here will be serialized by FastMCP using the
+        # exception classes already loaded in global scope
+        return await process_audio_func(input_data)
+    except Exception as e:
+        # Log and return error response
+        error_response = handle_tool_error(e, "process_audio_complete")
+        logger.error(f"Process audio complete failed: {error_response}")
+        return error_response
 
 
 # ============================================================================
@@ -170,26 +319,33 @@ async def process_audio_complete(
 async def get_audio_metadata(audioId: str) -> dict:
     """
     Retrieve metadata for a previously processed audio track.
-    
+
     This tool fetches complete metadata for an audio track that has been
     previously processed and stored in the system.
-    
+
     Args:
         audioId: UUID of the audio track to retrieve
-        
+
     Returns:
         dict: Success response with complete metadata and resource URIs,
               or error response if track not found
-        
+
     Example:
         >>> result = await get_audio_metadata(audioId="550e8400-e29b-41d4-a716-446655440000")
         >>> print(result["metadata"]["Product"]["Title"])
         "Hey Jude"
     """
     from tools.query_tools import get_audio_metadata as get_metadata_func
-    
-    # Call the async function
-    return await get_metadata_func({"audioId": audioId})
+    from src.error_utils import handle_tool_error
+
+    try:
+        # Call the async function
+        return await get_metadata_func({"audioId": audioId})
+    except Exception as e:
+        # Log and return error response
+        error_response = handle_tool_error(e, "get_audio_metadata")
+        logger.error(f"Get audio metadata failed for {audioId}: {error_response}")
+        return error_response
 
 
 @mcp.tool()
@@ -230,19 +386,26 @@ async def search_library(
         Found 150 results
     """
     from tools.query_tools import search_library as search_func
-    
-    # Build input data
-    input_data = {
-        "query": query,
-        "filters": filters,
-        "limit": limit,
-        "offset": offset,
-        "sortBy": sortBy,
-        "sortOrder": sortOrder
-    }
-    
-    # Call the async function
-    return await search_func(input_data)
+    from src.error_utils import handle_tool_error
+
+    try:
+        # Build input data
+        input_data = {
+            "query": query,
+            "filters": filters,
+            "limit": limit,
+            "offset": offset,
+            "sortBy": sortBy,
+            "sortOrder": sortOrder
+        }
+
+        # Call the async function
+        return await search_func(input_data)
+    except Exception as e:
+        # Log and return error response
+        error_response = handle_tool_error(e, "search_library")
+        logger.error(f"Search library failed for query '{query}': {error_response}")
+        return error_response
 
 
 # ============================================================================
@@ -272,7 +435,8 @@ async def audio_stream_resource(audioId: str) -> str:
         Returns: Signed GCS URL for audio file
     """
     from resources.audio_stream import get_audio_stream_resource
-    return await get_audio_stream_resource(audioId)
+    uri = f"music-library://audio/{audioId}/stream"
+    return await get_audio_stream_resource(uri)
 
 
 @mcp.resource("music-library://audio/{audioId}/metadata")
@@ -295,7 +459,8 @@ async def metadata_resource(audioId: str) -> str:
         Returns: JSON with complete track metadata
     """
     from resources.metadata import get_metadata_resource
-    return await get_metadata_resource(audioId)
+    uri = f"music-library://audio/{audioId}/metadata"
+    return await get_metadata_resource(uri)
 
 
 @mcp.resource("music-library://audio/{audioId}/thumbnail")
@@ -318,7 +483,8 @@ async def thumbnail_resource(audioId: str) -> str:
         Returns: Signed GCS URL for thumbnail image
     """
     from resources.thumbnail import get_thumbnail_resource
-    return await get_thumbnail_resource(audioId)
+    uri = f"music-library://audio/{audioId}/thumbnail"
+    return await get_thumbnail_resource(uri)
 
 
 # ============================================================================
@@ -523,11 +689,12 @@ async def oembed_endpoint(request):
         logger.info(f"oEmbed request for URL: {url}")
         
         # Validate URL format
-        expected_prefix = "https://loist.io/embed/"
+        from config import config
+        expected_prefix = f"{config.embed_base_url}/embed/"
         if not url.startswith(expected_prefix):
             logger.warning(f"Invalid oEmbed URL: {url}")
             return JSONResponse(
-                {"error": "Invalid URL. Must start with https://loist.io/embed/"},
+                {"error": f"Invalid URL. Must start with {config.embed_base_url}/embed/"},
                 status_code=400
             )
         
@@ -563,7 +730,7 @@ async def oembed_endpoint(request):
                 # Continue without thumbnail
         
         # Build embed URL (full URL to player page)
-        embed_url = f"https://loist.io/embed/{audio_id}"
+        embed_url = f"{config.embed_base_url}/embed/{audio_id}"
         
         # Format metadata
         title = metadata.get("title", "Untitled")
@@ -580,7 +747,7 @@ async def oembed_endpoint(request):
             "version": "1.0",
             "type": "rich",
             "provider_name": "Loist Music Library",
-            "provider_url": "https://loist.io",
+            "provider_url": config.embed_base_url,
             "title": title,
             "author_name": artist,
             "html": f'<iframe src="{embed_url}" width="{maxwidth}" height="{maxheight}" frameborder="0" allow="autoplay" style="border-radius: 12px;"></iframe>',
@@ -657,6 +824,28 @@ if __name__ == "__main__":
         logger.info(f"📡 Starting SSE server on {config.server_host}:{config.server_port}")
         mcp.run(
             transport="sse",
+            host=config.server_host,
+            port=config.server_port
+        )
+    elif config.server_transport == "dual":
+        # Run both HTTP web server and MCP stdio for Cursor
+        logger.info(f"🔄 Starting dual mode: HTTP server + MCP stdio")
+        import asyncio
+        import threading
+
+        # Function to run MCP in stdio mode in a separate thread
+        def run_mcp_stdio():
+            logger.info("📡 Starting MCP stdio server in background thread")
+            mcp.run()
+
+        # Start MCP stdio in background thread
+        mcp_thread = threading.Thread(target=run_mcp_stdio, daemon=True)
+        mcp_thread.start()
+
+        # Run HTTP server in main thread
+        logger.info(f"🌐 Starting HTTP server on {config.server_host}:{config.server_port}")
+        mcp.run(
+            transport="http",
             host=config.server_host,
             port=config.server_port
         )

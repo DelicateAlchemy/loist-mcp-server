@@ -418,7 +418,8 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
         logger.info("Formatting response")
         
         # Generate embed URL
-        embed_url = f"https://loist.io/embed/{pipeline.audio_id}"
+        from config import config
+        embed_url = f"{config.embed_base_url}/embed/{pipeline.audio_id}"
         
         # Build response using Pydantic models for validation
         response = ProcessAudioOutput(

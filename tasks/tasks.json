@@ -1062,6 +1062,134 @@
           "status": "pending"
         }
       ]
+    },
+    {
+      "id": 13,
+      "title": "Task #13: Fix FastMCP Exception Serialization Context Issues",
+      "description": "Resolve the issue where FastMCP's internal exception serialization fails due to missing exception classes during JSON-RPC serialization, ensuring proper exception handling in all execution contexts.",
+      "details": "To address this issue, ensure that all necessary exception classes are imported and available in the scope where FastMCP's serialization occurs. This may involve modifying the import structure or using a custom serialization mechanism that can handle exceptions in different execution contexts. Additionally, consider implementing a fallback strategy to handle exceptions that cannot be serialized properly, such as logging detailed error messages for debugging purposes while sending generic error responses to clients. Ensure that the solution is compatible with FastMCP's error handling mechanisms, including the use of `ResourceError` for controlled error messaging.",
+      "testStrategy": "Verify task completion by testing FastMCP tools under various error conditions, ensuring that exceptions are properly serialized and handled without causing `NameError` exceptions. Use both normal Python execution and FastMCP's JSON-RPC serialization process for comprehensive testing. Validate that error messages are correctly logged and that clients receive appropriate error responses. Utilize tools like `Client` from `fastmcp.client` to simulate client interactions and verify the server's response to errors.",
+      "status": "pending",
+      "dependencies": [],
+      "priority": "high",
+      "subtasks": [
+        {
+          "id": 1,
+          "title": "Audit Exception Class Imports and Usage",
+          "description": "Identify all exception classes used by FastMCP during JSON-RPC serialization and ensure they are properly imported and available in all relevant execution contexts.",
+          "dependencies": [],
+          "details": "Review FastMCP's codebase and tool implementations to catalog all exceptions (standard and custom) that may be raised and serialized. Document any missing or inconsistently imported exception classes.",
+          "status": "pending",
+          "testStrategy": "Attempt to trigger each exception type in a controlled test environment and verify import errors or serialization failures are detected."
+        },
+        {
+          "id": 2,
+          "title": "Refactor Import Structure for Exception Availability",
+          "description": "Modify the import structure or module organization to guarantee that all necessary exception classes are accessible wherever FastMCP's serialization occurs.",
+          "dependencies": [
+            1
+          ],
+          "details": "Update module imports, tool registration, or dynamic import logic to ensure exception classes are always in scope during serialization and deserialization.",
+          "status": "pending",
+          "testStrategy": "Run unit tests that raise each exception type in all supported execution contexts and confirm no ImportError or serialization issues occur."
+        },
+        {
+          "id": 3,
+          "title": "Implement Custom Exception Serialization Mechanism",
+          "description": "Develop or enhance a serialization mechanism that can handle exceptions robustly, including cases where exception classes are missing or unknown.",
+          "dependencies": [
+            2
+          ],
+          "details": "Design a fallback serialization strategy (e.g., serializing exception name, message, and traceback) for unknown or missing exception classes. Integrate this with FastMCP's JSON-RPC error handling.",
+          "status": "pending",
+          "testStrategy": "Simulate serialization of both known and unknown exception classes and verify that error information is preserved or gracefully degraded."
+        },
+        {
+          "id": 4,
+          "title": "Integrate Fallback and Logging for Unserializable Exceptions",
+          "description": "Add logic to log detailed error information for debugging and send generic error responses to clients when exceptions cannot be serialized properly.",
+          "dependencies": [
+            3
+          ],
+          "details": "Ensure that all unserializable exceptions are logged with full context for developers, while clients receive sanitized or generic error messages in compliance with FastMCP's error masking settings.",
+          "status": "pending",
+          "testStrategy": "Force serialization failures in test cases and verify that logs contain detailed errors while client responses are appropriately masked or generic."
+        },
+        {
+          "id": 5,
+          "title": "Validate Compatibility with FastMCP Error Handling (Including ResourceError)",
+          "description": "Ensure the new exception handling and serialization logic is fully compatible with FastMCP's error handling mechanisms, including the use of ResourceError for controlled messaging.",
+          "dependencies": [
+            4
+          ],
+          "details": "Test integration with FastMCP's mask_error_details and ToolError/ResourceError pathways to confirm correct behavior in all error masking and propagation scenarios.",
+          "status": "pending",
+          "testStrategy": "Write integration tests that raise ResourceError and other exceptions under various masking configurations, verifying both client and server behavior."
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "title": "Resolve Architectural Issues and Technical Debt",
+      "description": "Address multiple architectural issues and technical debt by resolving premature status updates, consolidating exception handling patterns, and simplifying import dependencies.",
+      "details": "This task involves addressing three key areas of technical debt and architectural issues in the software development project. \n\n1. **Premature Status Updates**: Modify the `mark_as_processing()` function to handle non-existent database records gracefully. This can be achieved by either creating the record before calling the function or by enhancing the function to check for the existence of the record before attempting to update it. Ensure that this change does not introduce additional database queries unless necessary.\n\n2. **Consolidate Exception Handling Patterns**: Evaluate the existing exception handling systems, including `ProcessAudioException`, `MusicLibraryError` hierarchy, `handle_tool_error()`, and FastMCP's built-in exception handling. Choose one primary approach and refactor the codebase to use it consistently across all modules. This will involve reviewing and updating exception handling in schemas.py, exceptions.py, error_utils.py, and any other relevant files.\n\n3. **Simplify Import Chain Complexity**: Identify and simplify complex import dependencies that cause issues during FastMCP serialization. This may involve reorganizing modules, reducing circular dependencies, or using dependency injection techniques to improve code maintainability and reduce errors during serialization.\n\n**Additional Considerations**: Ensure that all changes are thoroughly documented and include clear commit messages. Coordinate with the QA team to integrate these changes into the testing pipeline to verify their impact on overall system stability and performance.",
+      "testStrategy": "To verify the completion of this task, follow these steps:\n\n1. **Premature Status Updates Test**:\n   - Create a test case where a non-existent database record is attempted to be marked as processing.\n   - Verify that the record is either created before being marked as processing or that the function handles the absence of the record gracefully without raising an error.\n\n2. **Consolidated Exception Handling Test**:\n   - Write test cases for each type of exception handling scenario (e.g., audio processing errors, music library errors).\n   - Ensure that all exceptions are handled consistently using the chosen primary approach.\n   - Validate that the refactored code does not introduce new errors or inconsistencies in exception handling.\n\n3. **Import Chain Complexity Test**:\n   - Perform serialization tests with FastMCP to ensure that the simplified import dependencies do not cause errors.\n   - Use different execution contexts to verify that the changes do not introduce new issues during serialization.\n\n**Integration Testing**: Conduct thorough integration tests to ensure that these changes do not negatively impact other parts of the system. This includes testing for any potential regressions in functionality or performance.",
+      "status": "pending",
+      "dependencies": [],
+      "priority": "high",
+      "subtasks": [
+        {
+          "id": 1,
+          "title": "Audit Current Exception Handling Systems",
+          "description": "Evaluate and document all existing exception handling approaches including ProcessAudioException, MusicLibraryError hierarchy, handle_tool_error(), and FastMCP's built-in exception handling mechanisms.",
+          "dependencies": [],
+          "details": "Review exceptions.py, error_utils.py, schemas.py and identify all exception types and handling patterns. Create a comprehensive audit report comparing each approach's strengths, weaknesses, and usage frequency across the codebase. Document the current state before making changes.",
+          "status": "pending",
+          "testStrategy": "Code review and static analysis to ensure all exception handlers are identified and documented"
+        },
+        {
+          "id": 2,
+          "title": "Resolve Premature Status Updates in mark_as_processing()",
+          "description": "Modify the mark_as_processing() function to gracefully handle non-existent database records without introducing unnecessary database queries.",
+          "dependencies": [],
+          "details": "Implement record existence checks before status updates. Choose between pre-creating records or adding defensive checks within the function. Measure database query impact before and after implementation. Update function documentation and add inline comments explaining the handling logic.",
+          "status": "pending",
+          "testStrategy": "Unit tests for both existing and non-existent records, performance testing to ensure no query regression"
+        },
+        {
+          "id": 3,
+          "title": "Select Primary Exception Handling Approach",
+          "description": "Based on the audit findings, select one primary exception handling strategy to standardize across the codebase.",
+          "dependencies": [
+            1
+          ],
+          "details": "Compare all four exception handling systems evaluated in subtask 1. Document the rationale for choosing the selected approach. Consider consistency, performance, maintainability, and compatibility with FastMCP serialization. Create detailed guidelines for implementing the chosen approach.",
+          "status": "pending",
+          "testStrategy": "Design review with team to validate selected approach before broader refactoring"
+        },
+        {
+          "id": 4,
+          "title": "Refactor Exception Handling Across Modules",
+          "description": "Systematically refactor all exception handling code to use the selected primary approach consistently across all modules.",
+          "dependencies": [
+            3
+          ],
+          "details": "Update exceptions.py, error_utils.py, schemas.py, and all other relevant files to use the standardized exception handling. Replace ProcessAudioException, MusicLibraryError hierarchy, and other approaches with the selected pattern. Ensure backward compatibility where necessary. Create clear migration path for deprecated exception types.",
+          "status": "pending",
+          "testStrategy": "Integration tests across all modules, regression testing for exception propagation and error reporting"
+        },
+        {
+          "id": 5,
+          "title": "Simplify Import Dependencies and Resolve Serialization Issues",
+          "description": "Identify and resolve complex import dependencies and circular import patterns that cause FastMCP serialization failures.",
+          "dependencies": [
+            4
+          ],
+          "details": "Map import chains and circular dependencies in the codebase. Reorganize modules to eliminate problematic patterns. Consider dependency injection to decouple modules. Test FastMCP serialization after each change. Document the new module structure and import guidelines for future development.",
+          "status": "pending",
+          "testStrategy": "FastMCP serialization tests, import cycle detection tools, performance validation to ensure no runtime overhead"
+        }
+      ]
     }
   ]
 }

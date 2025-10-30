@@ -90,7 +90,7 @@ async def get_audio_stream_resource(uri: str) -> Dict[str, Any]:
     try:
         # Parse URI to extract audioId
         # Format: music-library://audio/{audioId}/stream
-        match = re.match(r"music-library://audio/([0-9a-f-]+)/stream", uri)
+        match = re.match(r"music-library://audio/([0-9a-fA-F-]+)/stream", uri)
         
         if not match:
             logger.error(f"Invalid audio stream URI format: {uri}")

@@ -44,7 +44,7 @@ async def get_thumbnail_resource(uri: str) -> Dict[str, Any]:
     try:
         # Parse URI to extract audioId
         # Format: music-library://audio/{audioId}/thumbnail
-        match = re.match(r"music-library://audio/([0-9a-f-]+)/thumbnail", uri)
+        match = re.match(r"music-library://audio/([0-9a-fA-F-]+)/thumbnail", uri)
         
         if not match:
             logger.error(f"Invalid thumbnail URI format: {uri}")

@@ -1,0 +1,43 @@
+# Task ID: 13
+# Title: Task #13: Fix FastMCP Exception Serialization Context Issues
+# Status: pending
+# Dependencies: None
+# Priority: high
+# Description: Resolve the issue where FastMCP's internal exception serialization fails due to missing exception classes during JSON-RPC serialization, ensuring proper exception handling in all execution contexts.
+# Details:
+To address this issue, ensure that all necessary exception classes are imported and available in the scope where FastMCP's serialization occurs. This may involve modifying the import structure or using a custom serialization mechanism that can handle exceptions in different execution contexts. Additionally, consider implementing a fallback strategy to handle exceptions that cannot be serialized properly, such as logging detailed error messages for debugging purposes while sending generic error responses to clients. Ensure that the solution is compatible with FastMCP's error handling mechanisms, including the use of `ResourceError` for controlled error messaging.
+
+# Test Strategy:
+Verify task completion by testing FastMCP tools under various error conditions, ensuring that exceptions are properly serialized and handled without causing `NameError` exceptions. Use both normal Python execution and FastMCP's JSON-RPC serialization process for comprehensive testing. Validate that error messages are correctly logged and that clients receive appropriate error responses. Utilize tools like `Client` from `fastmcp.client` to simulate client interactions and verify the server's response to errors.
+
+# Subtasks:
+## 1. Audit Exception Class Imports and Usage [pending]
+### Dependencies: None
+### Description: Identify all exception classes used by FastMCP during JSON-RPC serialization and ensure they are properly imported and available in all relevant execution contexts.
+### Details:
+Review FastMCP's codebase and tool implementations to catalog all exceptions (standard and custom) that may be raised and serialized. Document any missing or inconsistently imported exception classes.
+
+## 2. Refactor Import Structure for Exception Availability [pending]
+### Dependencies: 13.1
+### Description: Modify the import structure or module organization to guarantee that all necessary exception classes are accessible wherever FastMCP's serialization occurs.
+### Details:
+Update module imports, tool registration, or dynamic import logic to ensure exception classes are always in scope during serialization and deserialization.
+
+## 3. Implement Custom Exception Serialization Mechanism [pending]
+### Dependencies: 13.2
+### Description: Develop or enhance a serialization mechanism that can handle exceptions robustly, including cases where exception classes are missing or unknown.
+### Details:
+Design a fallback serialization strategy (e.g., serializing exception name, message, and traceback) for unknown or missing exception classes. Integrate this with FastMCP's JSON-RPC error handling.
+
+## 4. Integrate Fallback and Logging for Unserializable Exceptions [pending]
+### Dependencies: 13.3
+### Description: Add logic to log detailed error information for debugging and send generic error responses to clients when exceptions cannot be serialized properly.
+### Details:
+Ensure that all unserializable exceptions are logged with full context for developers, while clients receive sanitized or generic error messages in compliance with FastMCP's error masking settings.
+
+## 5. Validate Compatibility with FastMCP Error Handling (Including ResourceError) [pending]
+### Dependencies: 13.4
+### Description: Ensure the new exception handling and serialization logic is fully compatible with FastMCP's error handling mechanisms, including the use of ResourceError for controlled messaging.
+### Details:
+Test integration with FastMCP's mask_error_details and ToolError/ResourceError pathways to confirm correct behavior in all error masking and propagation scenarios.
+
