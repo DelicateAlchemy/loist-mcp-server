@@ -112,6 +112,10 @@ EOF
     
     local end_time=$(date +%s.%N)
     local duration=$(echo "$end_time - $start_time" | bc -l 2>/dev/null || echo "0")
+    # Ensure duration has leading zero for JSON compliance
+    if [[ "$duration" =~ ^\. ]]; then
+        duration="0$duration"
+    fi
     
     # Clean up
     rm -f /tmp/mcp_resource_test_ci.json
@@ -147,6 +151,10 @@ echo "$mcp_messages" > /tmp/mcp_list_test_ci.json
 output=$(cat /tmp/mcp_list_test_ci.json | ./run_mcp_stdio_docker.sh 2>&1)
 end_time=$(date +%s.%N)
 duration=$(echo "$end_time - $start_time" | bc -l 2>/dev/null || echo "0")
+# Ensure duration has leading zero for JSON compliance
+if [[ "$duration" =~ ^\. ]]; then
+    duration="0$duration"
+fi
 rm -f /tmp/mcp_list_test_ci.json
 
 # Validate resources list response

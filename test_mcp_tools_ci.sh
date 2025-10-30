@@ -103,6 +103,10 @@ run_mcp_test() {
     
     local end_time=$(date +%s.%N)
     local duration=$(echo "$end_time - $start_time" | bc -l 2>/dev/null || echo "0")
+    # Ensure duration has leading zero for JSON compliance
+    if [[ "$duration" =~ ^\. ]]; then
+        duration="0$duration"
+    fi
     
     # Clean up
     rm -f /tmp/mcp_test_messages_ci.json
