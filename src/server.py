@@ -287,7 +287,7 @@ async def process_audio_complete(
         >>> print(result["audioId"])
         "550e8400-e29b-41d4-a716-446655440000"
     """
-    from tools import process_audio_complete as process_audio_func
+    from src.tools import process_audio_complete as process_audio_func
     from src.error_utils import handle_tool_error
 
     try:
@@ -335,7 +335,7 @@ async def get_audio_metadata(audioId: str) -> dict:
         >>> print(result["metadata"]["Product"]["Title"])
         "Hey Jude"
     """
-    from tools.query_tools import get_audio_metadata as get_metadata_func
+    from src.tools.query_tools import get_audio_metadata as get_metadata_func
     from src.error_utils import handle_tool_error
 
     try:
@@ -385,7 +385,7 @@ async def search_library(
         >>> print(f"Found {result['total']} results")
         Found 150 results
     """
-    from tools.query_tools import search_library as search_func
+    from src.tools.query_tools import search_library as search_func
     from src.error_utils import handle_tool_error
 
     try:
@@ -434,7 +434,7 @@ async def audio_stream_resource(audioId: str) -> str:
         URI: music-library://audio/550e8400-e29b-41d4-a716-446655440000/stream
         Returns: Signed GCS URL for audio file
     """
-    from resources.audio_stream import get_audio_stream_resource
+    from src.resources.audio_stream import get_audio_stream_resource
     uri = f"music-library://audio/{audioId}/stream"
     return await get_audio_stream_resource(uri)
 
@@ -458,7 +458,7 @@ async def metadata_resource(audioId: str) -> str:
         URI: music-library://audio/550e8400-e29b-41d4-a716-446655440000/metadata
         Returns: JSON with complete track metadata
     """
-    from resources.metadata import get_metadata_resource
+    from src.resources.metadata import get_metadata_resource
     uri = f"music-library://audio/{audioId}/metadata"
     return await get_metadata_resource(uri)
 
@@ -482,7 +482,7 @@ async def thumbnail_resource(audioId: str) -> str:
         URI: music-library://audio/550e8400-e29b-41d4-a716-446655440000/thumbnail
         Returns: Signed GCS URL for thumbnail image
     """
-    from resources.thumbnail import get_thumbnail_resource
+    from src.resources.thumbnail import get_thumbnail_resource
     uri = f"music-library://audio/{audioId}/thumbnail"
     return await get_thumbnail_resource(uri)
 
@@ -517,7 +517,7 @@ async def embed_page(request):
     """
     from starlette.requests import Request
     from database import get_audio_metadata_by_id
-    from resources.cache import get_cache
+    from src.resources.cache import get_cache
     
     # Extract audioId from path parameters
     audioId = request.path_params['audioId']
@@ -666,7 +666,7 @@ async def oembed_endpoint(request):
     from starlette.responses import JSONResponse
     from starlette.requests import Request
     from database import get_audio_metadata_by_id
-    from resources.cache import get_cache
+    from src.resources.cache import get_cache
     from urllib.parse import unquote
     
     try:
