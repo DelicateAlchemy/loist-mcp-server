@@ -83,6 +83,10 @@ class DatabasePool:
         """Build database URL from environment variables."""
         import os
         
+        # TEMPORARY DEBUG: Force local PostgreSQL connection
+        logger.info("DEBUG: Forcing local PostgreSQL connection")
+        return "postgresql://loist_user:dev_password@postgres:5432/loist_mvp"
+        
         db_host = os.getenv("DB_HOST")
         db_port = os.getenv("DB_PORT", "5432")
         db_name = os.getenv("DB_NAME")
@@ -90,7 +94,7 @@ class DatabasePool:
         db_password = os.getenv("DB_PASSWORD")
         db_connection_name = os.getenv("DB_CONNECTION_NAME")
         
-        if db_connection_name and db_name and db_user and db_password:
+        if db_connection_name and db_connection_name.strip() and db_name and db_user and db_password:
             # Cloud SQL Proxy connection
             return f"postgresql://{db_user}:{db_password}@/{db_name}?host=/cloudsql/{db_connection_name}"
         elif db_host and db_name and db_user and db_password:
@@ -379,6 +383,7 @@ def get_connection(retry: bool = True, max_retries: int = 3):
                 tracks = cur.fetchall()
     """
     pool = get_connection_pool()
+    logger.info(f"DEBUG get_connection: Using database URL: {pool.database_url}")
     with pool.get_connection(retry=retry, max_retries=max_retries) as conn:
         yield conn
 

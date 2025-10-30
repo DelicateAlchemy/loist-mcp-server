@@ -139,7 +139,7 @@ class ServerConfig(BaseSettings):
         """Check if database is properly configured"""
         # Can use either direct connection or Cloud SQL Proxy
         has_direct = bool(self.db_host and self.db_name and self.db_user and self.db_password)
-        has_proxy = bool(self.db_connection_name and self.db_name and self.db_user and self.db_password)
+        has_proxy = bool(self.db_connection_name and self.db_connection_name.strip() and self.db_name and self.db_user and self.db_password)
         return has_direct or has_proxy
     
     @property
@@ -151,7 +151,7 @@ class ServerConfig(BaseSettings):
         if not self.is_database_configured:
             return None
         
-        if self.db_connection_name:
+        if self.db_connection_name and self.db_connection_name.strip():
             # Cloud SQL Proxy connection
             # Format: postgresql://user:password@/dbname?host=/cloudsql/connection_name
             return f"postgresql://{self.db_user}:{self.db_password}@/{self.db_name}?host=/cloudsql/{self.db_connection_name}"
