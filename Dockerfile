@@ -69,12 +69,53 @@ RUN find /app -type f -exec chmod 644 {} \; && \
 USER fastmcpuser
 
 # Environment variables (can be overridden at runtime)
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
+# Application Configuration - Server Identity
+ENV SERVER_NAME="Music Library MCP" \
+    SERVER_VERSION="0.1.0" \
+    SERVER_INSTRUCTIONS="MCP server for audio ingestion and embedding. Use health_check to verify server status. Future capabilities will include audio file processing and embedding generation." \
+    # Server Runtime
     SERVER_HOST=0.0.0.0 \
     SERVER_PORT=8080 \
+    SERVER_TRANSPORT=http \
+    # Logging
     LOG_LEVEL=INFO \
-    # Security hardening
+    LOG_FORMAT=text \
+    # MCP Protocol
+    MCP_PROTOCOL_VERSION="2024-11-05" \
+    INCLUDE_FASTMCP_META=true \
+    # Duplicate Handling Policies
+    ON_DUPLICATE_TOOLS=error \
+    ON_DUPLICATE_RESOURCES=warn \
+    ON_DUPLICATE_PROMPTS=replace \
+    # Performance
+    MAX_WORKERS=4 \
+    REQUEST_TIMEOUT=30 \
+    # Storage Configuration
+    STORAGE_PATH=/tmp/storage \
+    MAX_FILE_SIZE=104857600 \
+    # Google Cloud Storage (non-sensitive defaults)
+    GCS_REGION=us-central1 \
+    GCS_SIGNED_URL_EXPIRATION=900 \
+    # Database Configuration (non-sensitive defaults)
+    DB_PORT=5432 \
+    DB_MIN_CONNECTIONS=2 \
+    DB_MAX_CONNECTIONS=10 \
+    DB_COMMAND_TIMEOUT=30 \
+    # CORS Configuration
+    ENABLE_CORS=true \
+    CORS_ORIGINS="*" \
+    CORS_ALLOW_CREDENTIALS=true \
+    CORS_ALLOW_METHODS="GET,POST,OPTIONS" \
+    CORS_ALLOW_HEADERS="Authorization,Content-Type,Range,X-Requested-With,Accept,Origin" \
+    CORS_EXPOSE_HEADERS="Content-Range,Accept-Ranges,Content-Length,Content-Type" \
+    # Embed Configuration
+    EMBED_BASE_URL="https://loist.io" \
+    # Feature Flags
+    ENABLE_METRICS=false \
+    ENABLE_HEALTHCHECK=true \
+    # Python Runtime (security hardening)
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH=/app/src \
     PYTHONHASHSEED=random \
     # Ensure container is ephemeral/stateless
@@ -111,12 +152,53 @@ COPY --from=runtime --chown=nonroot:nonroot /app /app
 USER nonroot
 
 # Environment variables (can be overridden at runtime)
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
+# Application Configuration - Server Identity
+ENV SERVER_NAME="Music Library MCP" \
+    SERVER_VERSION="0.1.0" \
+    SERVER_INSTRUCTIONS="MCP server for audio ingestion and embedding. Use health_check to verify server status. Future capabilities will include audio file processing and embedding generation." \
+    # Server Runtime
     SERVER_HOST=0.0.0.0 \
     SERVER_PORT=8080 \
+    SERVER_TRANSPORT=http \
+    # Logging
     LOG_LEVEL=INFO \
-    # Security hardening
+    LOG_FORMAT=text \
+    # MCP Protocol
+    MCP_PROTOCOL_VERSION="2024-11-05" \
+    INCLUDE_FASTMCP_META=true \
+    # Duplicate Handling Policies
+    ON_DUPLICATE_TOOLS=error \
+    ON_DUPLICATE_RESOURCES=warn \
+    ON_DUPLICATE_PROMPTS=replace \
+    # Performance
+    MAX_WORKERS=4 \
+    REQUEST_TIMEOUT=30 \
+    # Storage Configuration
+    STORAGE_PATH=/tmp/storage \
+    MAX_FILE_SIZE=104857600 \
+    # Google Cloud Storage (non-sensitive defaults)
+    GCS_REGION=us-central1 \
+    GCS_SIGNED_URL_EXPIRATION=900 \
+    # Database Configuration (non-sensitive defaults)
+    DB_PORT=5432 \
+    DB_MIN_CONNECTIONS=2 \
+    DB_MAX_CONNECTIONS=10 \
+    DB_COMMAND_TIMEOUT=30 \
+    # CORS Configuration
+    ENABLE_CORS=true \
+    CORS_ORIGINS="*" \
+    CORS_ALLOW_CREDENTIALS=true \
+    CORS_ALLOW_METHODS="GET,POST,OPTIONS" \
+    CORS_ALLOW_HEADERS="Authorization,Content-Type,Range,X-Requested-With,Accept,Origin" \
+    CORS_EXPOSE_HEADERS="Content-Range,Accept-Ranges,Content-Length,Content-Type" \
+    # Embed Configuration
+    EMBED_BASE_URL="https://loist.io" \
+    # Feature Flags
+    ENABLE_METRICS=false \
+    ENABLE_HEALTHCHECK=true \
+    # Python Runtime (security hardening)
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH=/app/src \
     PYTHONHASHSEED=random \
     # Ensure container is ephemeral/stateless

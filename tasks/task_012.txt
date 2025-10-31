@@ -262,11 +262,51 @@ Successfully completed container build and registry push setup with comprehensiv
    - Automated test reporting
 </info added on 2025-10-31T16:22:11.758Z>
 
-## 3. Environment Variable Configuration [pending]
+## 3. Environment Variable Configuration [done]
 ### Dependencies: 12.1
 ### Description: Set up environment variables for the Cloud Run service to configure application runtime behavior
 ### Details:
 Define all non-sensitive configuration variables needed by the application, create environment variable definitions for Cloud Run service (database connection strings without credentials, feature flags, API endpoints, logging levels), use ENV instructions in Dockerfile for default values, and document all environment variables with descriptions for team reference
+<info added on 2025-10-31T16:34:32.951Z>
+Successfully completed comprehensive environment variable configuration for Cloud Run deployment. This subtask established a complete, production-ready environment variable system across all deployment methods.
+
+✅ **Dockerfile Environment Variables**: Updated both runtime and distroless stages with comprehensive ENV definitions covering:
+   - Server identity (name, version, instructions)
+   - Server runtime (host, port, transport)
+   - Logging configuration (level, format)
+   - MCP protocol settings
+   - Duplicate handling policies
+   - Performance tuning (workers, timeouts)
+   - Storage configuration
+   - GCS settings (non-sensitive)
+   - Database settings (non-sensitive)
+   - CORS configuration
+   - Embed settings
+   - Feature flags
+   - Python runtime security hardening
+
+✅ **Cloud Build Environment Variables**: Enhanced cloudbuild.yaml with complete environment variable definitions for production deployment:
+   - Comprehensive set-env-vars covering all application configuration
+   - Proper grouping by functional areas
+   - Production-optimized default values
+   - Sensitive data handled via secrets (--update-secrets flags)
+
+✅ **Environment Variable Documentation**: Created comprehensive documentation (docs/environment-variables.md) including:
+   - Complete variable reference with descriptions, defaults, and examples
+   - Security considerations and secret management guidance
+   - Deployment examples for different environments (local dev, Cloud Run, .env files)
+   - Configuration loading priority and validation information
+
+✅ **Configuration Validation**: Developed validation framework (scripts/validate-env-config.sh) that verifies:
+   - Dockerfile ENV structure and critical variables
+   - Cloud Build environment variable definitions
+   - Docker Compose basic configuration
+   - Python configuration loading and attribute access
+   - Environment variable override functionality
+   - Documentation completeness
+
+The environment variable configuration is now production-ready with proper security separation, comprehensive documentation, and validation across all deployment methods (Docker, Docker Compose, Cloud Run). The system supports flexible configuration with environment-specific overrides while maintaining security best practices for sensitive data management.
+</info added on 2025-10-31T16:34:32.951Z>
 
 ## 4. Secret Management Implementation [pending]
 ### Dependencies: 12.3
