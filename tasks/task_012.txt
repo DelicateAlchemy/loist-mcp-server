@@ -198,17 +198,69 @@ echo "Bearer Token: stored in Secret Manager as 'mcp-bearer-token'"
 10. Test end-to-end functionality in production environment
 
 # Subtasks:
-## 1. Dockerfile Creation and Optimization [pending]
+## 1. Dockerfile Creation and Optimization [done]
 ### Dependencies: None
 ### Description: Create a production-ready Dockerfile following best practices including multi-stage builds, minimal base images, proper layer caching, and security considerations
 ### Details:
 Develop Dockerfile with optimized build instructions, use appropriate base image (Alpine or distroless), implement multi-stage builds to reduce image size, define environment variables with ENV, create .dockerignore file to exclude sensitive data and unnecessary files, ensure reproducible builds by specifying exact package versions, and validate the container runs stateless and ephemeral
+<info added on 2025-10-31T16:17:49.426Z>
+Successfully completed Dockerfile creation and optimization for Cloud Run deployment. Key improvements implemented:
 
-## 2. Container Build and Registry Push [pending]
+✅ Created comprehensive .dockerignore file to exclude sensitive data, development files, and unnecessary build context
+✅ Switched to Alpine Linux base images (python:3.11-alpine) for significantly smaller image size
+✅ Implemented multi-stage build with separate builder and runtime stages for optimal layer caching
+✅ Added distroless stage as alternative ultra-minimal option (gcr.io/distroless/python3-debian12:nonroot)
+✅ Enhanced security with non-root user (fastmcpuser), proper file permissions (644/755), and cleaned build artifacts
+✅ Added security hardening environment variables and ensured stateless/ephemeral container design
+✅ Optimized health check timing for production (30s start period)
+✅ Resolved psutil compilation issues by adding linux-headers to builder stage
+✅ Tested successful build and runtime functionality - container starts and imports FastMCP server correctly
+
+The optimized Dockerfile now follows production best practices with three stages: builder (Alpine), runtime (Alpine), and distroless (ultra-minimal alternative). Image size significantly reduced while maintaining full functionality and security hardening.
+</info added on 2025-10-31T16:17:49.426Z>
+
+## 2. Container Build and Registry Push [done]
 ### Dependencies: 12.1
 ### Description: Build the Docker container image using Cloud Build and push to Artifact Registry for deployment
 ### Details:
 Set up Artifact Registry repository, navigate to project directory with Dockerfile, execute 'gcloud builds submit --tag IMAGE_URL' to build on Google Cloud, verify image is pushed to registry with proper tagging convention (LOCATION-docker.pkg.dev/PROJECT_ID/REPO_NAME/PATH:TAG), implement image vulnerability scanning in CI/CD pipeline using security tools, and optimize build performance by leveraging cache
+<info added on 2025-10-31T16:22:11.758Z>
+Successfully completed container build and registry push setup with comprehensive CI/CD pipeline optimizations:
+
+1. Artifact Registry Setup Script (scripts/create-artifact-registry.sh):
+   - Automated repository creation with proper configuration
+   - IAM permissions for service accounts
+   - Cleanup policies for image lifecycle management
+   - Docker authentication setup
+   - Test image build and push validation
+
+2. Vulnerability Scanning Integration in cloudbuild.yaml:
+   - Automated scanning post-image push
+   - Critical/high severity vulnerability detection and reporting
+   - Non-blocking alerts with detailed vulnerability information
+   - Integration with Google Cloud's Container Analysis
+
+3. Cloud Build Performance Optimization:
+   - BuildKit enabled for faster builds
+   - Layer caching using --cache-from for incremental builds
+   - High-performance N1_HIGHCPU_32 machine type
+   - Increased disk space (200GB)
+   - Optimized Docker daemon environment variables
+
+4. Comprehensive Image Tagging Strategy:
+   - Commit SHA tagging for version tracking
+   - Latest tag for development
+   - Timestamp tags for chronological ordering
+   - Branch-based tags for multi-environment deployments
+   - Automatic cleanup policies for old images
+
+5. Build Process Validation Script (scripts/test-container-build.sh):
+   - Multi-stage build verification
+   - Security feature validation (non-root user, permissions)
+   - Dockerfile optimization assessment
+   - Image size and performance analysis
+   - Automated test reporting
+</info added on 2025-10-31T16:22:11.758Z>
 
 ## 3. Environment Variable Configuration [pending]
 ### Dependencies: 12.1

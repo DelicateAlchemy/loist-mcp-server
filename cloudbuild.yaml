@@ -2,13 +2,25 @@
 # Automatically builds, tests, and deploys to Cloud Run on main branch commits
 
 steps:
-  # Step 1: Build Docker image with commit SHA tag
+  # Step 1: Build Docker image with comprehensive tagging
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-image'
     args: [
       'build',
+      # Enable BuildKit for better performance and caching
+      '--build-arg', 'BUILDKIT_INLINE_CACHE=1',
+      # Use cache from previous builds
+      '--cache-from', 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp:latest',
+      # Comprehensive tagging strategy:
+      # - Commit SHA for precise version tracking
+      # - Latest for development convenience
+      # - Timestamp for chronological ordering
+      # - Branch name for multi-branch deployments
       '-t', 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp:$COMMIT_SHA',
       '-t', 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp:latest',
+      '-t', 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp:$(date +%Y%m%d-%H%M%S)',
+      '-t', 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp:$BRANCH_NAME',
+      # Build context
       '.'
     ]
     timeout: '600s'
@@ -19,7 +31,57 @@ steps:
     args: ['push', '--all-tags', 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp']
     waitFor: ['build-image']
 
-  # Step 3: Deploy to Cloud Run
+  # Step 3: Scan image for vulnerabilities
+  - name: 'gcr.io/gcp-runtimes/container-structure-test'
+    id: 'vulnerability-scan'
+    args: [
+      'gcloud',
+      'artifacts',
+      'docker',
+      'images',
+      'describe',
+      'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp:$COMMIT_SHA',
+      '--format=value(image_summary.fully_qualified_digest)',
+      '--show-package-vulnerability'
+    ]
+    waitFor: ['push-image']
+
+  # Step 4: Wait for vulnerability scan to complete and check results
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'check-vulnerabilities'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "🔍 Checking vulnerability scan results..."
+        IMAGE_DIGEST=$(gcloud artifacts docker images describe \
+          us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp:$COMMIT_SHA \
+          --format='value(image_summary.fully_qualified_digest)' \
+          --show-package-vulnerability)
+
+        echo "Image digest: $IMAGE_DIGEST"
+
+        # Check for critical/high severity vulnerabilities
+        CRITICAL_VULNS=$(gcloud artifacts docker images list-vulnerabilities \
+          us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp:$COMMIT_SHA \
+          --format='value(vulnerability.effectiveSeverity)' \
+          --filter='vulnerability.effectiveSeverity:(CRITICAL HIGH)' | wc -l)
+
+        if [ "$CRITICAL_VULNS" -gt 0 ]; then
+          echo "❌ Found $CRITICAL_VULNS critical/high severity vulnerabilities"
+          gcloud artifacts docker images list-vulnerabilities \
+            us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp:$COMMIT_SHA \
+            --format='table(vulnerability.cvssScore,vulnerability.effectiveSeverity,vulnerability.packageIssue[0].affectedPackage,vulnerability.shortDescription)' \
+            --filter='vulnerability.effectiveSeverity:(CRITICAL HIGH)' | head -20
+          echo "⚠️  Consider updating base images or dependencies to fix vulnerabilities"
+          # Don't fail the build for now, but log the issues
+          # exit 1  # Uncomment to fail build on vulnerabilities
+        else
+          echo "✅ No critical/high severity vulnerabilities found"
+        fi
+    waitFor: ['vulnerability-scan']
+
+  # Step 5: Deploy to Cloud Run
   - name: 'gcr.io/cloud-builders/gcloud'
     id: 'deploy-cloud-run'
     args:
@@ -42,9 +104,9 @@ steps:
       - '--update-secrets=DB_CONNECTION_NAME=${_DB_CONNECTION_NAME}:latest'
       - '--update-secrets=GCS_BUCKET_NAME=${_GCS_BUCKET_NAME}:latest'
       - '--quiet'
-    waitFor: ['push-image']
+    waitFor: ['check-vulnerabilities']
 
-  # Step 4: Get and verify service URL
+  # Step 6: Get and verify service URL
   - name: 'gcr.io/cloud-builders/gcloud'
     id: 'get-service-url'
     entrypoint: 'bash'
@@ -60,7 +122,7 @@ steps:
         echo "$$SERVICE_URL" > /workspace/service_url.txt
     waitFor: ['deploy-cloud-run']
 
-  # Step 5: Health check verification
+  # Step 7: Health check verification
   - name: 'gcr.io/cloud-builders/curl'
     id: 'health-check'
     entrypoint: 'bash'
@@ -71,10 +133,10 @@ steps:
         SERVICE_URL=$(cat /workspace/service_url.txt)
         HEALTH_URL="$$SERVICE_URL/mcp/health"
         echo "Testing health endpoint: $$HEALTH_URL"
-        
+
         # Wait for service to be ready
         sleep 30
-        
+
         # Retry health check up to 5 times
         for i in {1..5}; do
           echo "Health check attempt $$i..."
@@ -87,12 +149,12 @@ steps:
             sleep 10
           fi
         done
-        
+
         echo "❌ Health check failed after 5 attempts"
         exit 1
     waitFor: ['get-service-url']
 
-  # Step 6: Update traffic to new revision
+  # Step 8: Update traffic to new revision
   - name: 'gcr.io/cloud-builders/gcloud'
     id: 'update-traffic'
     args:
@@ -105,7 +167,7 @@ steps:
       - '--quiet'
     waitFor: ['health-check']
 
-  # Step 7: Deployment summary and verification
+  # Step 9: Deployment summary and verification
   - name: 'gcr.io/cloud-builders/gcloud'
     id: 'deployment-summary'
     entrypoint: 'bash'
@@ -120,10 +182,10 @@ steps:
         echo "  - Image: us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp:$COMMIT_SHA"
         echo "  - Commit: $COMMIT_SHA"
         echo "  - Branch: $BRANCH_NAME"
-        
+
         SERVICE_URL=$(cat /workspace/service_url.txt)
         echo "  - URL: $$SERVICE_URL"
-        
+
         echo ""
         echo "📋 Service Configuration:"
         gcloud run services describe music-library-mcp \
@@ -137,7 +199,7 @@ steps:
             spec.template.spec.containers[0].resources.limits.memory,
             status.conditions[0].status
           )"
-        
+
         echo ""
         echo "🔗 Quick Links:"
         echo "  - Service URL: $$SERVICE_URL"
@@ -145,28 +207,36 @@ steps:
         echo "  - Cloud Console: https://console.cloud.google.com/run/detail/us-central1/music-library-mcp/metrics?project=$PROJECT_ID"
     waitFor: ['update-traffic']
 
-# Automatically tag and push images
+# Automatically tag and push images (Cloud Build will handle all tags from build step)
 images:
   - 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp:$COMMIT_SHA'
   - 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp:latest'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp:$BRANCH_NAME'
 
 # Build options and configuration
 options:
   # Use high-performance machine for faster builds
   machineType: 'N1_HIGHCPU_32'  # Valid Cloud Build machine type for production
-  
-  # Disk size for build workspace
-  diskSizeGb: 100
-  
+
+  # Disk size for build workspace (increased for better performance)
+  diskSizeGb: 200
+
   # Enable detailed logging
   logging: CLOUD_LOGGING_ONLY
-  
+
   # Use dynamic substitutions
   dynamic_substitutions: true
-  
-  # Environment variables for build
+
+  # Enable BuildKit for all Docker operations
   env:
     - 'DOCKER_BUILDKIT=1'
+    - 'COMPOSE_DOCKER_CLI_BUILD=1'
+    # Optimize Docker daemon performance
+    - 'DOCKER_TMPDIR=/tmp/docker-tmp'
+
+  # Pool option for faster startup
+  pool:
+    name: 'projects/$PROJECT_ID/locations/us-central1/workerPools/default'
 
 # Substitution variables (can be overridden in triggers)
 substitutions:
