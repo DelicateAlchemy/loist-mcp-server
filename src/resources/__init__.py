@@ -1,17 +1,26 @@
 """
-MCP Resources for Music Library Server.
+MCP Resources for Loist Music Library Server.
 
-This module provides MCP resources for serving audio streams and thumbnails.
-Resources are registered with the FastMCP server to enable streaming access
-to audio files and artwork.
+This module provides MCP resource handlers for accessing:
+- Audio streams (with range request support)
+- Metadata
+- Thumbnails
+
+Follows best practices from research:
+- Signed URL caching
+- Range request support for seeking
+- Proper Content-Type and CORS headers
+- Efficient streaming
 """
 
-from .audio_stream import serve_audio_stream, get_audio_stream_info
-from .thumbnail import serve_thumbnail, get_thumbnail_info
+from .audio_stream import get_audio_stream_resource
+from .metadata import get_metadata_resource
+from .thumbnail import get_thumbnail_resource
+from .cache import SignedURLCache
 
 __all__ = [
-    'serve_audio_stream',
-    'get_audio_stream_info', 
-    'serve_thumbnail',
-    'get_thumbnail_info'
+    "get_audio_stream_resource",
+    "get_metadata_resource",
+    "get_thumbnail_resource",
+    "SignedURLCache",
 ]

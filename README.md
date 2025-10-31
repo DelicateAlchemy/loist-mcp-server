@@ -6,6 +6,78 @@ FastMCP-based server for audio ingestion and embedding with the Music Library MC
 
 This project implements a Model Context Protocol (MCP) server using the FastMCP framework for managing audio file ingestion, processing, and embedding generation for a music library system.
 
+## MCP Server Naming Strategy
+
+This project supports local development, staging, and production deployments with distinct naming conventions to avoid conflicts in MCP client configurations:
+
+### Local Development
+- **Cursor MCP Server Name**: `loist-music-library-local`
+- **FastMCP Server Name**: `Music Library MCP - Local Development`
+- **Environment**: Docker containers with local PostgreSQL + GCS integration
+- **Transport**: stdio (for Cursor MCP integration)
+
+### Development/Staging Environment
+- **Cursor MCP Server Name**: `loist-music-library-staging`
+- **FastMCP Server Name**: `Music Library MCP - Staging`
+- **Environment**: Docker containers with staging PostgreSQL + dedicated GCS staging buckets
+- **Transport**: http/sse (for integration testing and QA)
+- **Deployment**: GitHub Actions workflow on `dev` branch → Cloud Build (`cloudbuild-staging.yaml`)
+- **Purpose**: Pre-production validation, integration testing, QA verification
+- **Infrastructure**: Separate Cloud Run service, staging GCS buckets, staging database
+
+### Production Deployment
+- **Cursor MCP Server Name**: `loist-music-library` (production)
+- **FastMCP Server Name**: `Music Library MCP - Production`
+- **Environment**: GCloud infrastructure (Cloud SQL + GCS)
+- **Transport**: Configurable (stdio/http/sse)
+
+### Configuration Details
+
+**Local Development (.cursor/mcp.json):**
+```json
+{
+  "loist-music-library-local": {
+    "command": "python3",
+    "args": ["/Users/Gareth/loist-mcp-server/run_server.py"],
+    "cwd": "/Users/Gareth/loist-mcp-server",
+    "env": {
+      "SERVER_TRANSPORT": "stdio",
+      "SERVER_NAME": "Music Library MCP - Local Development"
+    }
+  }
+}
+```
+
+**Staging Environment (docker-compose.staging.yml):**
+```yaml
+version: '3.8'
+services:
+  mcp-server-staging:
+    image: loist-mcp-server:latest
+    environment:
+      - SERVER_NAME=Music Library MCP - Staging
+      - SERVER_TRANSPORT=http
+      - GCS_BUCKET_NAME=loist-mvp-staging-audio-files
+      - DB_NAME=loist_mvp_staging
+    ports:
+      - "8081:8080"  # Different port than local dev
+```
+
+**Production Deployment:**
+```json
+{
+  "loist-music-library": {
+    "command": "python3",
+    "args": ["/path/to/production/server.py"],
+    "env": {
+      "SERVER_NAME": "Music Library MCP - Production"
+    }
+  }
+}
+```
+
+This naming strategy allows both environments to coexist in Cursor MCP client configuration without conflicts.
+
 ## Prerequisites
 
 - Python 3.11 or higher
@@ -88,15 +160,46 @@ loist-mcp-server/
 
 ### Development Mode (STDIO)
 
+**Recommended: Use Docker for development** (ensures current dependencies):
+
+```bash
+# Run server directly
+./run_mcp_stdio_docker.sh
+```
+
+**Alternative: Use virtual environment** (may have outdated dependencies):
 ```bash
 source .venv/bin/activate  # Activate virtual environment
 python src/server.py
 ```
 
-Or with MCP Inspector:
+### Using MCP Inspector (stdio)
+
+MCP Inspector provides an interactive debugging interface for testing tools and resources.
+
+**Option A: Standalone Inspector** (recommended)
 ```bash
-fastmcp dev src/server.py
+# 1. Launch MCP Inspector (opens in browser)
+npx @modelcontextprotocol/inspector@latest
+
+# 2. In Inspector UI:
+#    - Transport: stdio
+#    - Command: /Users/Gareth/loist-mcp-server/run_mcp_stdio_docker.sh
+#    - Working Directory: /Users/Gareth/loist-mcp-server
 ```
+
+**Option B: Command line testing**
+```bash
+# Test tools and resources via command line
+./test_mcp_tools.sh
+./test_mcp_resources.sh
+```
+
+**What to test in Inspector:**
+- **health_check**: Verify server status and configuration
+- **get_audio_metadata**: Test with invalid ID to see error handling
+- **search_library**: Test with simple query (expect database error in stdio mode)
+- **Resources**: Test `music-library://audio/{id}/metadata|stream|thumbnail` URIs
 
 ### HTTP Mode (with CORS for iframe embedding)
 
@@ -225,7 +328,35 @@ gcloud run deploy music-library-mcp \
 
 ## GitHub Actions CI/CD
 
-The project includes automated workflows for database provisioning and testing.
+The project includes automated workflows for database provisioning, testing, and MCP server validation.
+
+### Available Workflows
+
+#### 1. MCP Server Validation (New!)
+**Automated MCP protocol compliance and testing**
+
+| Trigger | Description |
+|---------|-------------|
+| Push to `main`, `develop` | Full validation suite |
+| Pull requests to `main` | Quality gates and compliance checks |
+
+**Features:**
+- 🧪 **Protocol Compliance**: Validates JSON-RPC 2.0 and MCP protocol adherence
+- 🔍 **Error Format Validation**: Ensures standardized error responses
+- ⚡ **Performance Monitoring**: Tracks response times and regression detection
+- 📊 **Quality Gates**: Fails CI on protocol violations or performance issues
+- 📁 **Test Artifacts**: Uploads detailed test results for debugging
+- 💬 **PR Integration**: Comments on pull requests with validation results
+
+#### 2. Database Provisioning
+**Cloud SQL instance management and migrations**
+
+| Action | Description | Trigger |
+|--------|-------------|---------|
+| `provision` | Create Cloud SQL instance | Manual dispatch |
+| `migrate` | Run database migrations | Manual dispatch / Push to main |
+| `test` | Run database tests | Manual dispatch / Pull requests |
+| `health-check` | Verify instance health | Manual dispatch |
 
 ### Quick Setup
 
@@ -253,24 +384,13 @@ rm github-actions-key.json
 - [GitHub Actions Setup Guide](docs/github-actions-setup.md) - Detailed setup instructions
 - [Quick Setup Guide](docs/github-secrets-quick-setup.md) - 5-minute quick start
 
-### Available Workflows
-
-The **Database Provisioning** workflow supports four actions:
-
-| Action | Description | Trigger |
-|--------|-------------|---------|
-| `provision` | Create Cloud SQL instance | Manual dispatch |
-| `migrate` | Run database migrations | Manual dispatch / Push to main |
-| `test` | Run database tests | Manual dispatch / Pull requests |
-| `health-check` | Verify instance health | Manual dispatch |
-
 ### Running Workflows
 
 1. Go to **Actions** tab in GitHub
-2. Select **Database Provisioning** workflow
-3. Click **Run workflow**
-4. Choose action (provision, migrate, test, health-check)
-5. Click **Run workflow**
+2. Select desired workflow:
+   - **MCP Server Validation** (runs automatically on push/PR)
+   - **Database Provisioning** (manual dispatch)
+3. For manual workflows: Click **Run workflow** → Choose action → **Run workflow**
 
 ## Development
 
@@ -283,19 +403,56 @@ uv pip install -e ".[dev]"
 ### Running Tests
 
 ```bash
+# Install testing dependencies first (if not already installed)
+pip install pytest pytest-asyncio pytest-mock pytest-cov
+
+# Run all tests
 pytest tests/
+
+# Run tests with coverage report
+pytest --cov=src --cov-report=html
+
+# Run specific test file
+pytest tests/test_process_audio_complete.py
 ```
 
 ### Code Formatting
 
 ```bash
+# Install formatting tools first (if not already installed)
+pip install black
+
+# Format code
 black src/ tests/
 ```
 
 ### Linting
 
 ```bash
+# Install linting tools first (if not already installed)
+pip install ruff pylint flake8 bandit
+
+# Fast linting with ruff
 ruff check src/ tests/
+
+# More comprehensive linting with pylint
+pylint src/ tests/
+
+# Security linting
+bandit -r src/
+```
+
+### Type Checking
+
+```bash
+# Install type checking tools first (if not already installed)
+pip install mypy
+
+# Run type checking
+mypy src/
+
+# Run type checking with detailed output
+mypy src/ --show-error-codes
 ```
 
 ## Configuration
@@ -308,7 +465,7 @@ Create a `.env` file in the project root (see `.env.example` for reference):
 
 ```env
 # Server Identity
-SERVER_NAME="Music Library MCP"
+SERVER_NAME="Music Library MCP - Local Development"
 SERVER_VERSION="0.1.0"
 SERVER_INSTRUCTIONS="Your custom instructions here"
 
@@ -587,46 +744,6 @@ Returns the current status of the server.
 }
 ```
 
-## Troubleshooting
-
-### Import Errors
-
-If you encounter `ModuleNotFoundError` or `No module named 'src'` errors:
-
-**Problem:** Python can't find modules during import.
-
-**Solution:** Ensure Python path is set correctly. The `src/server.py` file sets up the path automatically:
-
-```python
-# Add both project root and src directory to Python path
-server_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.dirname(server_dir)
-sys.path.insert(0, project_root)
-sys.path.insert(0, server_dir)
-```
-
-**Important:** Import paths in the codebase do not use the `src.` prefix:
-- ✅ `from downloader.http_downloader import download_from_url`
-- ❌ `from src.downloader.http_downloader import download_from_url`
-
-### Docker Container Issues
-
-**Container exits immediately:**
-- Check that `CMD ["tail", "-f", "/dev/null"]` is in Dockerfile
-- Server should be started via `docker exec` for STDIO mode
-
-**Can't connect to database:**
-- Verify service account key is mounted: `./service-account-key.json:/app/service-account-key.json:ro`
-- Check database credentials in `.cursor/mcp.json`
-- Ensure database container is running: `docker ps | grep music-library-db`
-
-**MCP tools not appearing in Cursor:**
-- Reload Cursor window: `Cmd+Shift+P` → "Developer: Reload Window"
-- Check container is running: `docker ps | grep music-library-mcp`
-- View logs: `docker logs music-library-mcp`
-
-See `docs/mcp-tool-discovery-fix.md` for detailed troubleshooting.
-
 ## Contributing
 
 1. Create a feature branch from `main`
@@ -645,4 +762,5 @@ See `docs/mcp-tool-discovery-fix.md` for detailed troubleshooting.
 ## Support
 
 For issues and questions, please open an issue on the project repository.
+
 

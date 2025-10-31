@@ -7,17 +7,16 @@ steps:
     id: 'build-image'
     args: [
       'build',
-      '-t', 'gcr.io/$PROJECT_ID/music-library-mcp:$COMMIT_SHA',
-      '-t', 'gcr.io/$PROJECT_ID/music-library-mcp:latest',
-      '--cache-from', 'gcr.io/$PROJECT_ID/music-library-mcp:latest',
+      '-t', 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp:$COMMIT_SHA',
+      '-t', 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp:latest',
       '.'
     ]
     timeout: '600s'
 
-  # Step 2: Push Docker image to Google Container Registry
+  # Step 2: Push Docker image to Google Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
     id: 'push-image'
-    args: ['push', '--all-tags', 'gcr.io/$PROJECT_ID/music-library-mcp']
+    args: ['push', '--all-tags', 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp']
     waitFor: ['build-image']
 
   # Step 3: Deploy to Cloud Run
@@ -27,7 +26,7 @@ steps:
       - 'run'
       - 'deploy'
       - 'music-library-mcp'
-      - '--image=gcr.io/$PROJECT_ID/music-library-mcp:$COMMIT_SHA'
+      - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp:$COMMIT_SHA'
       - '--region=us-central1'
       - '--platform=managed'
       - '--allow-unauthenticated'
@@ -40,7 +39,6 @@ steps:
       - '--port=8080'
       - '--set-env-vars=SERVER_TRANSPORT=http,LOG_LEVEL=INFO,AUTH_ENABLED=false,ENABLE_CORS=true,CORS_ORIGINS=*,ENABLE_HEALTHCHECK=true'
       - '--set-env-vars=GCS_PROJECT_ID=$PROJECT_ID'
-      - '--service-account=${_CLOUD_RUN_SERVICE_ACCOUNT}'
       - '--update-secrets=DB_CONNECTION_NAME=${_DB_CONNECTION_NAME}:latest'
       - '--update-secrets=GCS_BUCKET_NAME=${_GCS_BUCKET_NAME}:latest'
       - '--quiet'
@@ -119,7 +117,7 @@ steps:
         echo "  - Project: $PROJECT_ID"
         echo "  - Service: music-library-mcp"
         echo "  - Region: us-central1"
-        echo "  - Image: gcr.io/$PROJECT_ID/music-library-mcp:$COMMIT_SHA"
+        echo "  - Image: us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp:$COMMIT_SHA"
         echo "  - Commit: $COMMIT_SHA"
         echo "  - Branch: $BRANCH_NAME"
         
@@ -149,13 +147,13 @@ steps:
 
 # Automatically tag and push images
 images:
-  - 'gcr.io/$PROJECT_ID/music-library-mcp:$COMMIT_SHA'
-  - 'gcr.io/$PROJECT_ID/music-library-mcp:latest'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp:$COMMIT_SHA'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp:latest'
 
 # Build options and configuration
 options:
   # Use high-performance machine for faster builds
-  machineType: 'E2_STANDARD_4'  # 4 vCPUs, 16GB RAM
+  machineType: 'N1_HIGHCPU_32'  # Valid Cloud Build machine type for production
   
   # Disk size for build workspace
   diskSizeGb: 100
@@ -172,9 +170,6 @@ options:
 
 # Substitution variables (can be overridden in triggers)
 substitutions:
-  # Cloud Run service account (should be configured in trigger)
-  _CLOUD_RUN_SERVICE_ACCOUNT: 'music-library-sa@${PROJECT_ID}.iam.gserviceaccount.com'
-  
   # Secret Manager secret names (should be configured in trigger)
   _DB_CONNECTION_NAME: 'db-connection-name'
   _GCS_BUCKET_NAME: 'gcs-bucket-name'

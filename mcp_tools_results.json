@@ -1,0 +1,237 @@
+{
+  "testSuite": "mcp_tools",
+  "startTime": "2025-10-30T13:14:26.3NZ",
+  "endTime": "2025-10-30T13:14:30.3NZ",
+  "tests": [
+    {"name":"health_check","status":"passed","timestamp":"2025-10-30T13:14:27.3NZ","duration":Running test: health_check
+    ,2025-10-30 13:14:27 - __main__ - DEBUG - [server.ensure_exceptions_loaded:84] - Loaded 10 custom exception classes for FastMCP
+    ,2025-10-30 13:14:27 - __main__ - DEBUG - [server.ensure_exceptions_loaded:85] - Exception modules: {'src.exceptions'}
+    ,2025-10-30 13:14:27 - __main__ - INFO - [server.<module>:100] - ✅ Exception classes loaded and verified: 10 classes
+    ,2025-10-30 13:14:27 - __main__ - INFO - [server.<module>:133] - 🔓 Running without authentication (development mode)
+    ,2025-10-30 13:14:27 - __main__ - DEBUG - [server.verify_exceptions_for_fastmcp:176] - ✅ MusicLibraryError verified: src.exceptions.MusicLibraryError
+    ,2025-10-30 13:14:27 - __main__ - DEBUG - [server.verify_exceptions_for_fastmcp:176] - ✅ AudioProcessingError verified: src.exceptions.AudioProcessingError
+    ,2025-10-30 13:14:27 - __main__ - DEBUG - [server.verify_exceptions_for_fastmcp:176] - ✅ StorageError verified: src.exceptions.StorageError
+    ,2025-10-30 13:14:27 - __main__ - DEBUG - [server.verify_exceptions_for_fastmcp:176] - ✅ ValidationError verified: src.exceptions.ValidationError
+    ,2025-10-30 13:14:27 - __main__ - DEBUG - [server.verify_exceptions_for_fastmcp:176] - ✅ ResourceNotFoundError verified: src.exceptions.ResourceNotFoundError
+    ,2025-10-30 13:14:27 - __main__ - DEBUG - [server.verify_exceptions_for_fastmcp:176] - ✅ TimeoutError verified: src.exceptions.TimeoutError
+    ,2025-10-30 13:14:27 - __main__ - DEBUG - [server.verify_exceptions_for_fastmcp:176] - ✅ AuthenticationError verified: src.exceptions.AuthenticationError
+    ,2025-10-30 13:14:27 - __main__ - DEBUG - [server.verify_exceptions_for_fastmcp:176] - ✅ RateLimitError verified: src.exceptions.RateLimitError
+    ,2025-10-30 13:14:27 - __main__ - DEBUG - [server.verify_exceptions_for_fastmcp:176] - ✅ ExternalServiceError verified: src.exceptions.ExternalServiceError
+    ,2025-10-30 13:14:27 - __main__ - DEBUG - [server.verify_exceptions_for_fastmcp:176] - ✅ DatabaseOperationError verified: src.exceptions.DatabaseOperationError
+    ,2025-10-30 13:14:27 - __main__ - INFO - [server.verify_exceptions_for_fastmcp:190] - ✅ All 10 exception classes verified and accessible for FastMCP
+    ,2025-10-30 13:14:27 - mcp.server.lowlevel.server - DEBUG - [server.__init__:157] - Initializing server 'Music Library MCP'
+    ,2025-10-30 13:14:27 - mcp.server.lowlevel.server - DEBUG - [server.decorator:414] - Registering handler for ListToolsRequest
+    ,2025-10-30 13:14:27 - mcp.server.lowlevel.server - DEBUG - [server.decorator:281] - Registering handler for ListResourcesRequest
+    ,2025-10-30 13:14:27 - mcp.server.lowlevel.server - DEBUG - [server.decorator:301] - Registering handler for ListResourceTemplatesRequest
+    ,2025-10-30 13:14:27 - mcp.server.lowlevel.server - DEBUG - [server.decorator:243] - Registering handler for PromptListRequest
+    ,2025-10-30 13:14:27 - mcp.server.lowlevel.server - DEBUG - [server.decorator:486] - Registering handler for CallToolRequest
+    ,2025-10-30 13:14:27 - mcp.server.lowlevel.server - DEBUG - [server.decorator:316] - Registering handler for ReadResourceRequest
+    ,2025-10-30 13:14:27 - mcp.server.lowlevel.server - DEBUG - [server.decorator:265] - Registering handler for GetPromptRequest
+    ,2025-10-30 13:14:27 - __main__ - INFO - [server.<module>:854] - 📡 Starting STDIO server for MCP client communication
+    ,2025-10-30 13:14:27 - asyncio - DEBUG - [selector_events.__init__:54] - Using selector: EpollSelector
+    ,
+    ,
+    ,╭────────────────────────────────────────────────────────────────────────────╮
+    ,│                                                                            │
+    ,│        _ __ ___  _____           __  __  _____________    ____    ____     │
+    ,___ \  / __ \    │
+    ,
+    ,│     _ __ ___ / __/ / /_/ (__  ) /_/ /  / / /___/ ____/  /  __/_/ /_/ /     │
+    ,│    _ __ ___ /_/    \____/____/\__/_/  /_/\____/_/      /_____(*)____/      │
+    ,│                                                                            │
+    ,│                                                                            │
+    ,│                                FastMCP  2.0                                │
+    ,│                                                                            │
+    ,│                                                                            │
+    ,│                 🖥️  Server name:     Music Library MCP                      │
+    ,│                 📦 Transport:       STDIO                                  │
+    ,│                                                                            │
+    ,│                 🏎️  FastMCP version: 2.12.4                                 │
+    ,│                 🤝 MCP SDK version: 1.16.0                                 │
+    ,│                                                                            │
+    ,│                 📚 Docs:            https://gofastmcp.com                  │
+    ,│                 🚀 Deploy:          https://fastmcp.cloud                  │
+    ,│                                                                            │
+    ,╰────────────────────────────────────────────────────────────────────────────╯
+    ,
+    ,
+    ,[10/30/25 13:14:27] INFO     Starting MCP server 'Music Library   server.py:1502
+    ,                             MCP' with transport 'stdio'                        
+    ,2025-10-30 13:14:27 - __main__ - INFO - [server.lifespan:113] - 🚀 Starting Music Library MCP v0.1.0
+    ,2025-10-30 13:14:27 - __main__ - INFO - [server.lifespan:114] - 📡 Transport: stdio
+    ,2025-10-30 13:14:27 - __main__ - INFO - [server.lifespan:115] - 🔧 Log Level: DEBUG
+    ,2025-10-30 13:14:27 - __main__ - INFO - [server.lifespan:116] - 🔐 Authentication: disabled
+    ,2025-10-30 13:14:27 - __main__ - INFO - [server.lifespan:117] - ✅ Health check enabled: True
+    ,2025-10-30 13:14:27 - mcp.server.lowlevel.server - DEBUG - [server.run:627] - Received message: root=InitializedNotification(method='notifications/initialized', params=NotificationParams(meta=None), jsonrpc='2.0')
+    ,2025-10-30 13:14:27 - mcp.server.lowlevel.server - DEBUG - [server.run:627] - Received message: <mcp.shared.session.RequestResponder object at 0xffff9a22ab90>
+    ,2025-10-30 13:14:27 - mcp.server.lowlevel.server - INFO - [server._handle_request:664] - Processing request of type CallToolRequest
+    ,{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2024-11-05","capabilities":{"experimental":{},"prompts":{"listChanged":false},"resources":{"subscribe":false,"listChanged":false},"tools":{"listChanged":true}},"serverInfo":{"name":"Music Library MCP","version":"1.16.0"},"instructions":"MCP server for audio ingestion and embedding. Use health_check to verify server status. Future capabilities will include audio file processing and embedding generation."}}
+    ,2025-10-30 13:14:27 - mcp.server.lowlevel.server - DEBUG - [server._handle_request:666] - Dispatching request of type CallToolRequest
+    ,2025-10-30 13:14:27 - mcp.server.lowlevel.server - DEBUG - [server._get_cached_tool_definition:456] - Tool cache miss for health_check, refreshing cache
+    ,2025-10-30 13:14:27 - __main__ - DEBUG - [server.health_check:226] - Health check requested
+    ,2025-10-30 13:14:27 - __main__ - INFO - [server.health_check:238] - Health check passed
+    ,2025-10-30 13:14:27 - mcp.server.lowlevel.server - DEBUG - [server._handle_request:713] - Response sent
+    ,2025-10-30 13:14:27 - __main__ - INFO - [server.lifespan:122] - 🛑 Shutting down Music Library MCP
+    ,1.023934000,"response":"Running test: health_check2025-10-30 13:14:27 - __main__ - DEBUG - [server.ensure_exceptions_loaded:84] - Loaded 10 custom exception classes for FastMCP2025-10-30 13:14:27 - __main__ - DEBUG - [server.ensure_exceptions_loaded:85] - Exception modules: {'src.exceptions'}2025-10-30 13:14:27 - __main__ - INFO - [server.<module>:100] - ✅ Exception classes loaded and verified: 10 classes2025-10-30 13:14:27 - __main__ - INFO - [server.<module>:133] - 🔓 Running without authentication (development m","errorMessage":""}
+    ,{"name":"get_audio_metadata_validation","status":"passed","timestamp":"2025-10-30T13:14:29.3NZ","duration":Running test: get_audio_metadata_validation
+    ,2025-10-30 13:14:29 - __main__ - DEBUG - [server.ensure_exceptions_loaded:84] - Loaded 10 custom exception classes for FastMCP
+    ,2025-10-30 13:14:29 - __main__ - DEBUG - [server.ensure_exceptions_loaded:85] - Exception modules: {'src.exceptions'}
+    ,2025-10-30 13:14:29 - __main__ - INFO - [server.<module>:100] - ✅ Exception classes loaded and verified: 10 classes
+    ,2025-10-30 13:14:29 - __main__ - INFO - [server.<module>:133] - 🔓 Running without authentication (development mode)
+    ,2025-10-30 13:14:29 - __main__ - DEBUG - [server.verify_exceptions_for_fastmcp:176] - ✅ MusicLibraryError verified: src.exceptions.MusicLibraryError
+    ,2025-10-30 13:14:29 - __main__ - DEBUG - [server.verify_exceptions_for_fastmcp:176] - ✅ AudioProcessingError verified: src.exceptions.AudioProcessingError
+    ,2025-10-30 13:14:29 - __main__ - DEBUG - [server.verify_exceptions_for_fastmcp:176] - ✅ StorageError verified: src.exceptions.StorageError
+    ,2025-10-30 13:14:29 - __main__ - DEBUG - [server.verify_exceptions_for_fastmcp:176] - ✅ ValidationError verified: src.exceptions.ValidationError
+    ,2025-10-30 13:14:29 - __main__ - DEBUG - [server.verify_exceptions_for_fastmcp:176] - ✅ ResourceNotFoundError verified: src.exceptions.ResourceNotFoundError
+    ,2025-10-30 13:14:29 - __main__ - DEBUG - [server.verify_exceptions_for_fastmcp:176] - ✅ TimeoutError verified: src.exceptions.TimeoutError
+    ,2025-10-30 13:14:29 - __main__ - DEBUG - [server.verify_exceptions_for_fastmcp:176] - ✅ AuthenticationError verified: src.exceptions.AuthenticationError
+    ,2025-10-30 13:14:29 - __main__ - DEBUG - [server.verify_exceptions_for_fastmcp:176] - ✅ RateLimitError verified: src.exceptions.RateLimitError
+    ,2025-10-30 13:14:29 - __main__ - DEBUG - [server.verify_exceptions_for_fastmcp:176] - ✅ ExternalServiceError verified: src.exceptions.ExternalServiceError
+    ,2025-10-30 13:14:29 - __main__ - DEBUG - [server.verify_exceptions_for_fastmcp:176] - ✅ DatabaseOperationError verified: src.exceptions.DatabaseOperationError
+    ,2025-10-30 13:14:29 - __main__ - INFO - [server.verify_exceptions_for_fastmcp:190] - ✅ All 10 exception classes verified and accessible for FastMCP
+    ,2025-10-30 13:14:29 - mcp.server.lowlevel.server - DEBUG - [server.__init__:157] - Initializing server 'Music Library MCP'
+    ,2025-10-30 13:14:29 - mcp.server.lowlevel.server - DEBUG - [server.decorator:414] - Registering handler for ListToolsRequest
+    ,2025-10-30 13:14:29 - mcp.server.lowlevel.server - DEBUG - [server.decorator:281] - Registering handler for ListResourcesRequest
+    ,2025-10-30 13:14:29 - mcp.server.lowlevel.server - DEBUG - [server.decorator:301] - Registering handler for ListResourceTemplatesRequest
+    ,2025-10-30 13:14:29 - mcp.server.lowlevel.server - DEBUG - [server.decorator:243] - Registering handler for PromptListRequest
+    ,2025-10-30 13:14:29 - mcp.server.lowlevel.server - DEBUG - [server.decorator:486] - Registering handler for CallToolRequest
+    ,2025-10-30 13:14:29 - mcp.server.lowlevel.server - DEBUG - [server.decorator:316] - Registering handler for ReadResourceRequest
+    ,2025-10-30 13:14:29 - mcp.server.lowlevel.server - DEBUG - [server.decorator:265] - Registering handler for GetPromptRequest
+    ,2025-10-30 13:14:29 - __main__ - INFO - [server.<module>:854] - 📡 Starting STDIO server for MCP client communication
+    ,2025-10-30 13:14:29 - asyncio - DEBUG - [selector_events.__init__:54] - Using selector: EpollSelector
+    ,
+    ,
+    ,╭────────────────────────────────────────────────────────────────────────────╮
+    ,│                                                                            │
+    ,│        _ __ ___  _____           __  __  _____________    ____    ____     │
+    ,___ \  / __ \    │
+    ,
+    ,│     _ __ ___ / __/ / /_/ (__  ) /_/ /  / / /___/ ____/  /  __/_/ /_/ /     │
+    ,│    _ __ ___ /_/    \____/____/\__/_/  /_/\____/_/      /_____(*)____/      │
+    ,│                                                                            │
+    ,│                                                                            │
+    ,│                                FastMCP  2.0                                │
+    ,│                                                                            │
+    ,│                                                                            │
+    ,│                 🖥️  Server name:     Music Library MCP                      │
+    ,│                 📦 Transport:       STDIO                                  │
+    ,│                                                                            │
+    ,│                 🏎️  FastMCP version: 2.12.4                                 │
+    ,│                 🤝 MCP SDK version: 1.16.0                                 │
+    ,│                                                                            │
+    ,│                 📚 Docs:            https://gofastmcp.com                  │
+    ,│                 🚀 Deploy:          https://fastmcp.cloud                  │
+    ,│                                                                            │
+    ,╰────────────────────────────────────────────────────────────────────────────╯
+    ,
+    ,
+    ,[10/30/25 13:14:29] INFO     Starting MCP server 'Music Library   server.py:1502
+    ,                             MCP' with transport 'stdio'                        
+    ,2025-10-30 13:14:29 - __main__ - INFO - [server.lifespan:113] - 🚀 Starting Music Library MCP v0.1.0
+    ,2025-10-30 13:14:29 - __main__ - INFO - [server.lifespan:114] - 📡 Transport: stdio
+    ,2025-10-30 13:14:29 - __main__ - INFO - [server.lifespan:115] - 🔧 Log Level: DEBUG
+    ,2025-10-30 13:14:29 - __main__ - INFO - [server.lifespan:116] - 🔐 Authentication: disabled
+    ,2025-10-30 13:14:29 - __main__ - INFO - [server.lifespan:117] - ✅ Health check enabled: True
+    ,2025-10-30 13:14:29 - mcp.server.lowlevel.server - DEBUG - [server.run:627] - Received message: root=InitializedNotification(method='notifications/initialized', params=NotificationParams(meta=None), jsonrpc='2.0')
+    ,2025-10-30 13:14:29 - mcp.server.lowlevel.server - DEBUG - [server.run:627] - Received message: <mcp.shared.session.RequestResponder object at 0xffff84ca8390>
+    ,2025-10-30 13:14:29 - mcp.server.lowlevel.server - INFO - [server._handle_request:664] - Processing request of type CallToolRequest
+    ,2025-10-30 13:14:29 - mcp.server.lowlevel.server - DEBUG - [server._handle_request:666] - Dispatching request of type CallToolRequest
+    ,2025-10-30 13:14:29 - mcp.server.lowlevel.server - DEBUG - [server._get_cached_tool_definition:456] - Tool cache miss for get_audio_metadata, refreshing cache
+    ,{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2024-11-05","capabilities":{"experimental":{},"prompts":{"listChanged":false},"resources":{"subscribe":false,"listChanged":false},"tools":{"listChanged":true}},"serverInfo":{"name":"Music Library MCP","version":"1.16.0"},"instructions":"MCP server for audio ingestion and embedding. Use health_check to verify server status. Future capabilities will include audio file processing and embedding generation."}}
+    ,2025-10-30 13:14:29 - google.cloud.storage._opentelemetry_tracing - DEBUG - [_opentelemetry_tracing.<module>:42] - This service is instrumented using OpenTelemetry. OpenTelemetry or one of its components could not be imported; please add compatible versions of opentelemetry-api and opentelemetry-instrumentation packages in order to get Storage Tracing data.
+    ,2025-10-30 13:14:29 - tools.query_tools - INFO - [query_tools.get_audio_metadata:138] - Retrieving audio metadata
+    ,2025-10-30 13:14:29 - tools.query_tools - ERROR - [query_tools.get_audio_metadata:145] - Input validation failed: 1 validation error for GetAudioMetadataInput
+    ,audioId
+    ,  String should have at least 36 characters [type=string_too_short, input_value='invalid-id', input_type=str]
+    ,    For further information visit https://errors.pydantic.dev/2.12/v/string_too_short
+    ,2025-10-30 13:14:29 - tools.query_tools - ERROR - [query_tools.get_audio_metadata:203] - Query error: Invalid input: 1 validation error for GetAudioMetadataInput
+    ,audioId
+    ,  String should have at least 36 characters [type=string_too_short, input_value='invalid-id', input_type=str]
+    ,    For further information visit https://errors.pydantic.dev/2.12/v/string_too_short
+    ,2025-10-30 13:14:29 - mcp.server.lowlevel.server - DEBUG - [server._handle_request:713] - Response sent
+    ,2025-10-30 13:14:29 - __main__ - INFO - [server.lifespan:122] - 🛑 Shutting down Music Library MCP
+    ,1.558804000,"response":"Running test: get_audio_metadata_validation2025-10-30 13:14:29 - __main__ - DEBUG - [server.ensure_exceptions_loaded:84] - Loaded 10 custom exception classes for FastMCP2025-10-30 13:14:29 - __main__ - DEBUG - [server.ensure_exceptions_loaded:85] - Exception modules: {'src.exceptions'}2025-10-30 13:14:29 - __main__ - INFO - [server.<module>:100] - ✅ Exception classes loaded and verified: 10 classes2025-10-30 13:14:29 - __main__ - INFO - [server.<module>:133] - 🔓 Running without authenticati","errorMessage":""}
+    ,{"name":"search_library_database_error","status":"passed","timestamp":"2025-10-30T13:14:30.3NZ","duration":Running test: search_library_database_error
+    ,2025-10-30 13:14:30 - __main__ - DEBUG - [server.ensure_exceptions_loaded:84] - Loaded 10 custom exception classes for FastMCP
+    ,2025-10-30 13:14:30 - __main__ - DEBUG - [server.ensure_exceptions_loaded:85] - Exception modules: {'src.exceptions'}
+    ,2025-10-30 13:14:30 - __main__ - INFO - [server.<module>:100] - ✅ Exception classes loaded and verified: 10 classes
+    ,2025-10-30 13:14:30 - __main__ - INFO - [server.<module>:133] - 🔓 Running without authentication (development mode)
+    ,2025-10-30 13:14:30 - __main__ - DEBUG - [server.verify_exceptions_for_fastmcp:176] - ✅ MusicLibraryError verified: src.exceptions.MusicLibraryError
+    ,2025-10-30 13:14:30 - __main__ - DEBUG - [server.verify_exceptions_for_fastmcp:176] - ✅ AudioProcessingError verified: src.exceptions.AudioProcessingError
+    ,2025-10-30 13:14:30 - __main__ - DEBUG - [server.verify_exceptions_for_fastmcp:176] - ✅ StorageError verified: src.exceptions.StorageError
+    ,2025-10-30 13:14:30 - __main__ - DEBUG - [server.verify_exceptions_for_fastmcp:176] - ✅ ValidationError verified: src.exceptions.ValidationError
+    ,2025-10-30 13:14:30 - __main__ - DEBUG - [server.verify_exceptions_for_fastmcp:176] - ✅ ResourceNotFoundError verified: src.exceptions.ResourceNotFoundError
+    ,2025-10-30 13:14:30 - __main__ - DEBUG - [server.verify_exceptions_for_fastmcp:176] - ✅ TimeoutError verified: src.exceptions.TimeoutError
+    ,2025-10-30 13:14:30 - __main__ - DEBUG - [server.verify_exceptions_for_fastmcp:176] - ✅ AuthenticationError verified: src.exceptions.AuthenticationError
+    ,2025-10-30 13:14:30 - __main__ - DEBUG - [server.verify_exceptions_for_fastmcp:176] - ✅ RateLimitError verified: src.exceptions.RateLimitError
+    ,2025-10-30 13:14:30 - __main__ - DEBUG - [server.verify_exceptions_for_fastmcp:176] - ✅ ExternalServiceError verified: src.exceptions.ExternalServiceError
+    ,2025-10-30 13:14:30 - __main__ - DEBUG - [server.verify_exceptions_for_fastmcp:176] - ✅ DatabaseOperationError verified: src.exceptions.DatabaseOperationError
+    ,2025-10-30 13:14:30 - __main__ - INFO - [server.verify_exceptions_for_fastmcp:190] - ✅ All 10 exception classes verified and accessible for FastMCP
+    ,2025-10-30 13:14:30 - mcp.server.lowlevel.server - DEBUG - [server.__init__:157] - Initializing server 'Music Library MCP'
+    ,2025-10-30 13:14:30 - mcp.server.lowlevel.server - DEBUG - [server.decorator:414] - Registering handler for ListToolsRequest
+    ,2025-10-30 13:14:30 - mcp.server.lowlevel.server - DEBUG - [server.decorator:281] - Registering handler for ListResourcesRequest
+    ,2025-10-30 13:14:30 - mcp.server.lowlevel.server - DEBUG - [server.decorator:301] - Registering handler for ListResourceTemplatesRequest
+    ,2025-10-30 13:14:30 - mcp.server.lowlevel.server - DEBUG - [server.decorator:243] - Registering handler for PromptListRequest
+    ,2025-10-30 13:14:30 - mcp.server.lowlevel.server - DEBUG - [server.decorator:486] - Registering handler for CallToolRequest
+    ,2025-10-30 13:14:30 - mcp.server.lowlevel.server - DEBUG - [server.decorator:316] - Registering handler for ReadResourceRequest
+    ,2025-10-30 13:14:30 - mcp.server.lowlevel.server - DEBUG - [server.decorator:265] - Registering handler for GetPromptRequest
+    ,2025-10-30 13:14:30 - __main__ - INFO - [server.<module>:854] - 📡 Starting STDIO server for MCP client communication
+    ,2025-10-30 13:14:30 - asyncio - DEBUG - [selector_events.__init__:54] - Using selector: EpollSelector
+    ,
+    ,
+    ,╭────────────────────────────────────────────────────────────────────────────╮
+    ,│                                                                            │
+    ,│        _ __ ___  _____           __  __  _____________    ____    ____     │
+    ,___ \  / __ \    │
+    ,
+    ,│     _ __ ___ / __/ / /_/ (__  ) /_/ /  / / /___/ ____/  /  __/_/ /_/ /     │
+    ,│    _ __ ___ /_/    \____/____/\__/_/  /_/\____/_/      /_____(*)____/      │
+    ,│                                                                            │
+    ,│                                                                            │
+    ,│                                FastMCP  2.0                                │
+    ,│                                                                            │
+    ,│                                                                            │
+    ,│                 🖥️  Server name:     Music Library MCP                      │
+    ,│                 📦 Transport:       STDIO                                  │
+    ,│                                                                            │
+    ,│                 🏎️  FastMCP version: 2.12.4                                 │
+    ,│                 🤝 MCP SDK version: 1.16.0                                 │
+    ,│                                                                            │
+    ,│                 📚 Docs:            https://gofastmcp.com                  │
+    ,│                 🚀 Deploy:          https://fastmcp.cloud                  │
+    ,│                                                                            │
+    ,╰────────────────────────────────────────────────────────────────────────────╯
+    ,
+    ,
+    ,[10/30/25 13:14:30] INFO     Starting MCP server 'Music Library   server.py:1502
+    ,                             MCP' with transport 'stdio'                        
+    ,2025-10-30 13:14:30 - __main__ - INFO - [server.lifespan:113] - 🚀 Starting Music Library MCP v0.1.0
+    ,2025-10-30 13:14:30 - __main__ - INFO - [server.lifespan:114] - 📡 Transport: stdio
+    ,2025-10-30 13:14:30 - __main__ - INFO - [server.lifespan:115] - 🔧 Log Level: DEBUG
+    ,2025-10-30 13:14:30 - __main__ - INFO - [server.lifespan:116] - 🔐 Authentication: disabled
+    ,2025-10-30 13:14:30 - __main__ - INFO - [server.lifespan:117] - ✅ Health check enabled: True
+    ,2025-10-30 13:14:30 - mcp.server.lowlevel.server - DEBUG - [server.run:627] - Received message: root=InitializedNotification(method='notifications/initialized', params=NotificationParams(meta=None), jsonrpc='2.0')
+    ,2025-10-30 13:14:30 - mcp.server.lowlevel.server - DEBUG - [server.run:627] - Received message: <mcp.shared.session.RequestResponder object at 0xffff8fad2bd0>
+    ,2025-10-30 13:14:30 - mcp.server.lowlevel.server - INFO - [server._handle_request:664] - Processing request of type CallToolRequest
+    ,2025-10-30 13:14:30 - mcp.server.lowlevel.server - DEBUG - [server._handle_request:666] - Dispatching request of type CallToolRequest
+    ,2025-10-30 13:14:30 - mcp.server.lowlevel.server - DEBUG - [server._get_cached_tool_definition:456] - Tool cache miss for search_library, refreshing cache
+    ,{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2024-11-05","capabilities":{"experimental":{},"prompts":{"listChanged":false},"resources":{"subscribe":false,"listChanged":false},"tools":{"listChanged":true}},"serverInfo":{"name":"Music Library MCP","version":"1.16.0"},"instructions":"MCP server for audio ingestion and embedding. Use health_check to verify server status. Future capabilities will include audio file processing and embedding generation."}}
+    ,2025-10-30 13:14:30 - google.cloud.storage._opentelemetry_tracing - DEBUG - [_opentelemetry_tracing.<module>:42] - This service is instrumented using OpenTelemetry. OpenTelemetry or one of its components could not be imported; please add compatible versions of opentelemetry-api and opentelemetry-instrumentation packages in order to get Storage Tracing data.
+    ,2025-10-30 13:14:30 - tools.query_tools - INFO - [query_tools.search_library:243] - Searching audio library
+    ,2025-10-30 13:14:30 - tools.query_tools - DEBUG - [query_tools.search_library:265] - Searching for: 'test' with limit=20, offset=0
+    ,2025-10-30 13:14:30 - database.operations - ERROR - [operations.search_audio_tracks_advanced:892] - Unexpected error during advanced search: Database URL must be provided via parameter, config, or environment variables
+    ,2025-10-30 13:14:30 - tools.query_tools - ERROR - [query_tools.search_library:316] - Database error during search: Advanced search operation failed: Database URL must be provided via parameter, config, or environment variables
+    ,2025-10-30 13:14:30 - tools.query_tools - ERROR - [query_tools.search_library:393] - Query error: Search failed: Advanced search operation failed: Database URL must be provided via parameter, config, or environment variables
+    ,2025-10-30 13:14:30 - mcp.server.lowlevel.server - DEBUG - [server._handle_request:713] - Response sent
+    ,2025-10-30 13:14:30 - __main__ - INFO - [server.lifespan:122] - 🛑 Shutting down Music Library MCP
+    ,.948434000,"response":"Running test: search_library_database_error2025-10-30 13:14:30 - __main__ - DEBUG - [server.ensure_exceptions_loaded:84] - Loaded 10 custom exception classes for FastMCP2025-10-30 13:14:30 - __main__ - DEBUG - [server.ensure_exceptions_loaded:85] - Exception modules: {'src.exceptions'}2025-10-30 13:14:30 - __main__ - INFO - [server.<module>:100] - ✅ Exception classes loaded and verified: 10 classes2025-10-30 13:14:30 - __main__ - INFO - [server.<module>:133] - 🔓 Running without authenticati","errorMessage":""}
+    ,{"name":"fastmcp_version_check","status":"passed","timestamp":"2025-10-30T13:14:30.3NZ","duration":0,"response":"FastMCP 2.12.4 detected","errorMessage":""}
+    ,{"name":"exception_loading_check","status":"passed","timestamp":"2025-10-30T13:14:30.3NZ","duration":0,"response":"10 custom exceptions loaded","errorMessage":""}
+  ],
+  "summary": {
+    "total": 5,
+    "passed": 5,
+    "failed": 0,
+    "warnings": 0
+  }
+}

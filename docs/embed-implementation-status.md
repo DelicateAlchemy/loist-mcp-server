@@ -2,14 +2,14 @@
 
 ## Executive Summary
 
-**Status**: ✅ **IMPLEMENTED IN PRODUCTION** ⚠️ **NOT IN LOCAL DOCKER MCP SERVER**
+**Status**: ✅ **IMPLEMENTED IN PRODUCTION** ✅ **IMPLEMENTED IN LOCAL DOCKER MCP SERVER** (Updated 2025-10-28)
 
-The embed link `https://loist.io/embed/{audio_id}` **does have a functional server-side implementation** running in production at `loist.io`. However, the local Docker MCP server in this repository does NOT include embed page functionality.
+The embed link `https://loist.io/embed/{audio_id}` **does have a functional server-side implementation** running in production at `loist.io`. **The local Docker MCP server in this repository now includes full embed page functionality**, including the oEmbed endpoint for rich previews.
 
 **Key Finding**: When accessing `https://loist.io/embed/c7fd6016-8d62-4e1f-9f8f-4f8cdc3f8080`, you get "audio not found" (not a 404), which proves:
 - ✅ Production embed server exists and is functional
 - ❌ Audio ingested locally via Docker is NOT in production database/storage
-- ⚠️ This local MCP server codebase does NOT contain the embed implementation
+- ✅ This local MCP server codebase **NOW CONTAINS** the embed implementation (2025-10-28)
 
 ## Current State
 
@@ -21,7 +21,7 @@ The embed link `https://loist.io/embed/{audio_id}` **does have a functional serv
 - **Note**: Production embed server codebase is separate from this MCP server repository
 
 ### Local Docker MCP Server (This Repository):
-⚠️ **EMBED FUNCTIONALITY NOT INCLUDED**
+✅ **EMBED FUNCTIONALITY FULLY IMPLEMENTED** (Updated 2025-10-28)
 
 #### What EXISTS in this repo:
 
@@ -41,27 +41,39 @@ The embed link `https://loist.io/embed/{audio_id}` **does have a functional serv
 
 #### What's MISSING in this repo:
 
-1. **HTTP Route Handler**: ❌
-   - No route at `/embed/{id}` to serve HTML pages
-   - No HTML template for audio player
-   - No static HTML generation
+1. **HTTP Route Handler**: ✅ **IMPLEMENTED** (Updated 2025-10-28)
+   - ✅ Route at `/embed/{audioId}` implemented in `src/server.py` (line 320)
+   - ✅ HTML template exists at `templates/embed.html` with full player UI
+   - ✅ Fixed database field mapping (audio_gcs_path, thumbnail_gcs_path)
+   - ✅ Template rendering with Jinja2
+   - ✅ Signed URL generation via cache
+   - ✅ Error handling for missing audio/thumbnails
 
-2. **oEmbed Endpoint**: ❌
-   - No `/oembed` endpoint for rich previews
-   - Required for Notion, Slack, Discord integration
+2. **oEmbed Endpoint**: ✅ **IMPLEMENTED** (Updated 2025-10-28)
+   - ✅ `/oembed` endpoint implemented in `src/server.py` (line 470)
+   - ✅ Follows oEmbed specification v1.0
+   - ✅ Supports query parameters: url (required), format, maxwidth, maxheight
+   - ✅ Returns rich media type with iframe HTML
+   - ✅ Includes thumbnail URLs when available
+   - ✅ Proper error handling for invalid URLs and missing audio
 
-3. **Web Server Mode**: ❌
-   - Server only runs in STDIO mode (for MCP)
-   - No HTTP mode implementation for embed pages
-   - `create_http_app()` exists but only sets up MCP endpoints
+3. **Web Server Mode**: ✅ **IMPLEMENTED**
+   - ✅ HTTP transport mode supported (lines 503-509 in `src/server.py`)
+   - ✅ Configurable via `SERVER_TRANSPORT` environment variable
+   - ✅ Supports stdio, http, and sse transport modes
+   - ✅ Custom routes work in HTTP mode
 
-4. **Player UI**: ❌
-   - No HTML5 audio player component
-   - No metadata display
-   - No artwork rendering
-   - No keyboard controls
+4. **Player UI**: ✅ **IMPLEMENTED**
+   - ✅ HTML5 audio player component with custom controls
+   - ✅ Metadata display (title, artist, album, year)
+   - ✅ Artwork rendering with fallback SVG placeholder
+   - ✅ Keyboard shortcuts (space, arrows, M for mute)
+   - ✅ Responsive design for mobile/desktop
+   - ✅ Progress bar with seeking
+   - ✅ Volume controls
 
 ### Why "Audio Not Found" Error?
+
 The audio track `c7fd6016-8d62-4e1f-9f8f-4f8cdc3f8080` was ingested using the **local Docker MCP server**, which stores audio in:
 - Local PostgreSQL database (`localhost:5432`)
 - GCS bucket: `loist-mvp-audio-files`
@@ -98,7 +110,7 @@ From recent research (October 2024):
 
 ## Implementation Requirements
 
-To make embed links functional, implement:
+To make embed links functional in the local server, implement:
 
 ### 1. HTTP Mode (High Priority)
 
@@ -216,23 +228,23 @@ async def oembed_endpoint(url: str, maxwidth: int = 500, maxheight: int = 200):
 Current design (from `mcp.md` line 741):
 > "Every processed audio track gets a shareable URL pattern: `https://loist.io/embed/{uuid}`. This single URL serves two purposes: when accessed by embedding platforms (Notion, Slack, Coda), it returns oEmbed JSON and Open Graph meta tags that enable rich previews with an embedded iframe player. When clicked directly (email, WhatsApp, markdown links), the same URL renders a full standalone player page in the browser."
 
-**Status**: ✅ Design documented, ❌ Not implemented
+**Status**: ✅ Design documented and implemented in production, ✅ **IMPLEMENTED in local repo** (2025-10-28)
 
 ## Recommendation
 
-### Phase 1: Basic Embed Page (MVP)
-- Implement HTTP route handler at `/embed/{id}`
-- Create simple HTML5 audio player
-- Display metadata (title, artist, artwork)
-- Basic CSS styling
-- **Estimated**: 4-6 hours
+### Phase 1: Basic Embed Page (MVP) ✅ **COMPLETE**
+- ✅ Implement HTTP route handler at `/embed/{audioId}`
+- ✅ Create simple HTML5 audio player
+- ✅ Display metadata (title, artist, artwork)
+- ✅ Basic CSS styling
+- **Status**: Completed 2025-10-28
 
-### Phase 2: Rich Previews
-- Add oEmbed endpoint
-- Add Open Graph meta tags
-- Add Twitter Card tags
-- Test with Notion embeds
-- **Estimated**: 3-4 hours
+### Phase 2: Rich Previews ✅ **COMPLETE**
+- ✅ Add oEmbed endpoint
+- ✅ Add Open Graph meta tags (already in template)
+- ✅ Add Twitter Card tags (already in template)
+- ⏳ Test with Notion embeds (pending testing)
+- **Status**: Implementation complete, testing pending
 
 ### Phase 3: Advanced Features
 - Keyboard shortcuts (space, arrow keys)
@@ -243,10 +255,16 @@ Current design (from `mcp.md` line 741):
 
 ## Files That Need Creation
 
-1. `src/resources/embed.py` - New file for embed page handler
-2. `src/templates/embed.html` - New file for HTML template
-3. `src/resources/oembed.py` - New file for oEmbed endpoint
-4. Update `src/server.py` - Add HTTP mode and route registration
+1. ~~`src/resources/embed.py`~~ - **NOT NEEDED** (implemented directly in `src/server.py`)
+2. ✅ `src/templates/embed.html` - **ALREADY EXISTS** with full implementation
+3. ~~`src/resources/oembed.py`~~ - **NOT NEEDED** (implemented directly in `src/server.py`)
+4. ✅ Update `src/server.py` - **COMPLETE** (HTTP mode, embed route, oEmbed endpoint)
+
+**Implementation Status (2025-10-28)**:
+- ✅ Embed route handler: `src/server.py` line 320 (`@mcp.custom_route("/embed/{audioId}")`)
+- ✅ oEmbed endpoint: `src/server.py` line 470 (`@mcp.custom_route("/oembed")`)
+- ✅ HTML template: `templates/embed.html` (full-featured player)
+- ✅ HTTP mode: Already supported via `config.server_transport == "http"`
 
 ## Testing Requirements
 
@@ -272,18 +290,20 @@ Current design (from `mcp.md` line 741):
 - Returns proper error messages when audio not found (proves implementation exists)
 - Separate from this local MCP server codebase
 
-**Local Docker MCP Server (This Repo)**: ⚠️ Embed functionality NOT included
-- This repository focuses on MCP protocol implementation
-- Production embed pages are in a separate codebase/service
-- URL generation exists, but no HTTP route handlers for embed pages
+**Local Docker MCP Server (This Repo)**: ✅ Embed functionality **FULLY IMPLEMENTED** (2025-10-28)
+- This repository now includes complete embed functionality
+- Both MCP protocol (STDIO) and web server (HTTP) modes supported
+- Full embed route handler and oEmbed endpoint implemented
 
 ### To Add Embed Functionality to Local Server:
 
 1. ✅ URL generation (already exists)
-2. ❌ HTTP route handler (need to implement)
-3. ❌ HTML template (need to create)
-4. ❌ oEmbed endpoint (need to implement)
-5. ❌ HTTP transport mode (need to enable)
+2. ✅ HTTP route handler (**IMPLEMENTED** - `src/server.py` line 320)
+3. ✅ HTML template (**EXISTS** - `templates/embed.html`)
+4. ✅ oEmbed endpoint (**IMPLEMENTED** - `src/server.py` line 470)
+5. ✅ HTTP transport mode (**ALREADY SUPPORTED** - via config)
+
+**All requirements are now implemented!** (2025-10-28)
 
 **Why separate implementations?**
 - **MCP Server**: Optimized for MCP protocol (STDIO mode) for IDE integration
@@ -293,5 +313,50 @@ Current design (from `mcp.md` line 741):
 **Current Capability**: 
 - MCP clients can access audio via `music-library://audio/{id}/stream` resources ✅
 - Production web browsers can access `https://loist.io/embed/{id}` URLs ✅
-- Local web browsers cannot access embed pages (not implemented in this repo) ❌
+- Local web browsers can access embed pages (**NOW IMPLEMENTED** ✅)
+- oEmbed endpoint available for rich previews (**NOW IMPLEMENTED** ✅)
+
+---
+
+**Last Updated**: 2025-10-28  
+**Status**: Production embed working ✅ | Local embed **FULLY IMPLEMENTED** ✅
+
+## Implementation Summary (2025-10-28)
+
+### Completed Features
+
+1. **Embed Route** (`/embed/{audioId}`)
+   - Location: `src/server.py` line 320
+   - Features: Full HTML5 player, metadata display, artwork, keyboard controls
+   - Template: `templates/embed.html` (comprehensive implementation)
+   - Fixed: Database field mapping (audio_gcs_path, thumbnail_gcs_path)
+
+2. **oEmbed Endpoint** (`/oembed`)
+   - Location: `src/server.py` line 470
+   - Features: oEmbed v1.0 spec compliance, rich media type, thumbnail support
+   - Query params: url (required), format, maxwidth, maxheight
+   - Error handling: Invalid URLs, missing audio, parameter validation
+
+3. **HTTP Transport Mode**
+   - Already supported via `SERVER_TRANSPORT=http` environment variable
+   - Custom routes work correctly in HTTP mode
+   - CORS configured for iframe embedding
+
+### Testing Status
+
+- [x] **oEmbed endpoint testing** ✅ (2025-10-29)
+  - ✅ Valid URLs return correct JSON response
+  - ✅ maxwidth/maxheight parameters work correctly
+  - ✅ Error handling for invalid URLs (400 response)
+  - ✅ Error handling for missing url parameter (400 response)
+  - ✅ Response format follows oEmbed v1.0 specification
+  - ✅ Iframe HTML includes correct dimensions and attributes
+- [ ] Test embed page with real audio ID (in browser)
+- [ ] Verify Notion embed functionality (requires production URL)
+- [ ] Test mobile responsiveness
+- [ ] Verify CORS headers for iframe embedding
+
+### Known Issues
+
+- None identified at this time
 

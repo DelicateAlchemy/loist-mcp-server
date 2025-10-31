@@ -4,7 +4,7 @@ Provides consistent error responses and logging
 """
 import logging
 from typing import Any, Optional
-from exceptions import MusicLibraryError, get_error_code
+from src.exceptions import MusicLibraryError, get_error_code
 
 logger = logging.getLogger(__name__)
 

@@ -90,7 +90,7 @@ class DatabasePool:
         db_password = os.getenv("DB_PASSWORD")
         db_connection_name = os.getenv("DB_CONNECTION_NAME")
         
-        if db_connection_name and db_name and db_user and db_password:
+        if db_connection_name and db_connection_name.strip() and db_name and db_user and db_password:
             # Cloud SQL Proxy connection
             return f"postgresql://{db_user}:{db_password}@/{db_name}?host=/cloudsql/{db_connection_name}"
         elif db_host and db_name and db_user and db_password:

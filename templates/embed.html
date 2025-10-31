@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ metadata.Product.Title }} by {{ metadata.Product.Artist }} - Loist Music Library</title>
+    
+    <!-- oEmbed Discovery -->
+    <link rel="alternate" type="application/json+oembed" 
+          href="https://loist.io/oembed?url=https://loist.io/embed/{{ audio_id }}&format=json" 
+          title="{{ metadata.Product.Title }}" />
+    
+    <!-- Open Graph Meta Tags -->
+    <meta property="og:type" content="music.song" />
+    <meta property="og:title" content="{{ metadata.Product.Title }}" />
+    <meta property="og:description" content="{{ metadata.Product.Artist }}{% if metadata.Product.Album %} - {{ metadata.Product.Album }}{% endif %}" />
+    <meta property="og:audio" content="{{ stream_url }}" />
+    <meta property="og:audio:type" content="{{ mime_type }}" />
+    {% if thumbnail_url %}
+    <meta property="og:image" content="{{ thumbnail_url }}" />
+    {% endif %}
+    <meta property="og:url" content="https://loist.io/embed/{{ audio_id }}" />
+    <meta property="og:site_name" content="Loist Music Library" />
+    
+    <!-- Twitter Card Meta Tags -->
+    <meta name="twitter:card" content="player" />
+    <meta name="twitter:title" content="{{ metadata.Product.Title }}" />
+    <meta name="twitter:description" content="{{ metadata.Product.Artist }}{% if metadata.Product.Album %} - {{ metadata.Product.Album }}{% endif %}" />
+    {% if thumbnail_url %}
+    <meta name="twitter:image" content="{{ thumbnail_url }}" />
+    {% endif %}
+    <meta name="twitter:player" content="https://loist.io/embed/{{ audio_id }}" />
+    <meta name="twitter:player:width" content="500" />
+    <meta name="twitter:player:height" content="200" />
+    
+    <!-- Security Headers (for iframe embedding) -->
+    <meta http-equiv="X-Frame-Options" content="ALLOWALL" />
+    
+    <!-- Styles -->
+    <style>
+        :root {
+            --primary-color: #4A90E2;
+            --primary-hover: #357ABD;
+            --background: #FFFFFF;
+            --text-primary: #333333;
+            --text-secondary: #666666;
+            --text-tertiary: #999999;
+            --border-color: #E0E0E0;
+            --shadow: rgba(0, 0, 0, 0.1);
+        }
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            background-color: var(--background);
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+        
+        .player-container {
+            max-width: 100%;
+            width: 100%;
+            margin: 0 auto;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px var(--shadow);
+            background-color: var(--background);
+            /* Responsive: adapts to iframe container size */
+            min-width: 280px; /* Minimum usable width */
+        }
+        
+        .player-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .artwork {
+            width: 80px;
+            height: 80px;
+            min-width: 80px;
+            border-radius: 8px;
+            background-color: var(--border-color);
+            background-size: cover;
+            background-position: center;
+            margin-right: 16px;
+            box-shadow: 0 2px 8px var(--shadow);
+        }
+        
+        .metadata {
+            flex: 1;
+            overflow: hidden;
+        }
+        
+        .title {
+            font-size: 18px;
+            font-weight: 600;
+            margin: 0 0 4px 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .artist {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin: 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .album {
+            font-size: 12px;
+            color: var(--text-tertiary);
+            margin: 4px 0 0 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .controls-container {
+            margin-top: 16px;
+        }
+        
+        .progress-section {
+            margin-bottom: 12px;
+        }
+        
+        .progress-container {
+            width: 100%;
+            height: 6px;
+            background-color: var(--border-color);
+            border-radius: 3px;
+            position: relative;
+            cursor: pointer;
+            margin-bottom: 8px;
+        }
+        
+        .progress-container:hover {
+            height: 8px;
+            margin-top: -1px;
+        }
+        
+        .progress-bar {
+            height: 100%;
+            background-color: var(--primary-color);
+            border-radius: 3px;
+            width: 0%;
+            transition: width 0.1s ease;
+        }
+        
+        .time-display {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: var(--text-tertiary);
+            font-variant-numeric: tabular-nums;
+        }
+        
+        .playback-controls {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .play-button {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+        
+        .play-button:hover {
+            background-color: var(--primary-hover);
+            transform: scale(1.05);
+        }
+        
+        .play-button:focus {
+            outline: 2px solid var(--primary-color);
+            outline-offset: 2px;
+        }
+        
+        .play-button:active {
+            transform: scale(0.95);
+        }
+        
+        .volume-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .volume-button {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .volume-button:hover {
+            color: var(--primary-color);
+        }
+        
+        .volume-slider {
+            width: 80px;
+            height: 4px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: var(--border-color);
+            border-radius: 2px;
+            outline: none;
+        }
+        
+        .volume-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 12px;
+            height: 12px;
+            background: var(--primary-color);
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        
+        .volume-slider::-moz-range-thumb {
+            width: 12px;
+            height: 12px;
+            background: var(--primary-color);
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
+        }
+        
+        .format-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            background-color: var(--border-color);
+            color: var(--text-secondary);
+            font-size: 10px;
+            font-weight: 600;
+            border-radius: 3px;
+            text-transform: uppercase;
+            margin-left: 8px;
+        }
+        
+        /* Loading state */
+        .loading {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+        
+        /* Error state */
+        .error-message {
+            background-color: #FEE;
+            color: #C33;
+            padding: 12px;
+            border-radius: 6px;
+            text-align: center;
+            margin-top: 16px;
+            font-size: 14px;
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 480px) {
+            .player-container {
+                margin: 0;
+                padding: 16px;
+                border-radius: 0;
+                box-shadow: none;
+            }
+            
+            .artwork {
+                width: 60px;
+                height: 60px;
+                min-width: 60px;
+            }
+            
+            .title {
+                font-size: 16px;
+            }
+            
+            .artist {
+                font-size: 13px;
+            }
+            
+            .album {
+                display: none; /* Hide on small screens */
+            }
+            
+            .volume-container {
+                display: none; /* Volume via device controls on mobile */
+            }
+        }
+        
+        /* Accessibility - visible focus indicators */
+        button:focus-visible,
+        input:focus-visible,
+        .progress-container:focus-visible {
+            outline: 2px solid var(--primary-color);
+            outline-offset: 2px;
+        }
+        
+        /* Hidden but accessible */
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border-width: 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="player-container" role="region" aria-label="Audio player">
+        <div class="player-header">
+            {% if thumbnail_url %}
+            <div class="artwork" 
+                 style="background-image: url('{{ thumbnail_url }}');"
+                 role="img"
+                 aria-label="Album artwork"></div>
+            {% else %}
+            <div class="artwork" role="img" aria-label="No artwork available">
+                <!-- Default artwork placeholder -->
+                <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect width="80" height="80" fill="#E0E0E0"/>
+                    <path d="M40 20C34.5 20 30 24.5 30 30V50C30 55.5 34.5 60 40 60C45.5 60 50 55.5 50 50V30C50 24.5 45.5 20 40 20ZM45 50C45 52.8 42.8 55 40 55C37.2 55 35 52.8 35 50V30C35 27.2 37.2 25 40 25C42.8 25 45 27.2 45 30V50Z" fill="#999"/>
+                </svg>
+            </div>
+            {% endif %}
+            <div class="metadata">
+                <h1 class="title">{{ metadata.Product.Title }}</h1>
+                <p class="artist">{{ metadata.Product.Artist }}</p>
+                {% if metadata.Product.Album %}
+                <p class="album">{{ metadata.Product.Album }} • {{ metadata.Product.Year or 'Unknown' }}</p>
+                {% endif %}
+                <span class="format-badge">{{ metadata.Format.Format }}</span>
+            </div>
+        </div>
+        
+        <!-- HTML5 Audio Element (hidden, controlled by custom UI) -->
+        <audio id="audio-player" preload="metadata" style="display: none;">
+            <source src="{{ stream_url }}" type="{{ mime_type }}">
+            Your browser does not support the audio element.
+        </audio>
+        
+        <div class="controls-container">
+            <div class="progress-section">
+                <div id="progress-container" 
+                     class="progress-container" 
+                     role="slider"
+                     aria-label="Seek"
+                     aria-valuemin="0"
+                     aria-valuemax="100"
+                     aria-valuenow="0"
+                     tabindex="0">
+                    <div id="progress-bar" class="progress-bar"></div>
+                </div>
+                <div class="time-display">
+                    <span id="current-time" aria-live="polite">0:00</span>
+                    <span id="duration">{{ duration_formatted }}</span>
+                </div>
+            </div>
+            
+            <div class="playback-controls">
+                <button id="play-button" 
+                        class="play-button" 
+                        aria-label="Play"
+                        title="Play/Pause (Space)">
+                    <!-- Play Icon (SVG) -->
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M8 5v14l11-7z"/>
+                    </svg>
+                </button>
+                
+                <div class="volume-container">
+                    <button id="mute-button" 
+                            class="volume-button" 
+                            aria-label="Mute"
+                            title="Mute/Unmute (M)">
+                        <!-- Volume Icon (SVG) -->
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
+                        </svg>
+                    </button>
+                    <input id="volume-slider" 
+                           class="volume-slider" 
+                           type="range" 
+                           min="0" 
+                           max="1" 
+                           step="0.01" 
+                           value="1"
+                           aria-label="Volume"
+                           title="Volume">
+                    <span class="sr-only" id="volume-percentage" aria-live="polite">100%</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Error message container -->
+        <div id="error-message" class="error-message" style="display: none;" role="alert"></div>
+    </div>
+    
+    <!-- JavaScript for Player Controls -->
+    <script>
+        (function() {
+            'use strict';
+            
+            // Elements
+            const audioPlayer = document.getElementById('audio-player');
+            const playButton = document.getElementById('play-button');
+            const muteButton = document.getElementById('mute-button');
+            const progressBar = document.getElementById('progress-bar');
+            const progressContainer = document.getElementById('progress-container');
+            const currentTimeDisplay = document.getElementById('current-time');
+            const volumeSlider = document.getElementById('volume-slider');
+            const volumePercentage = document.getElementById('volume-percentage');
+            const errorMessage = document.getElementById('error-message');
+            
+            // SVG Icons
+            const playIcon = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+            const pauseIcon = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>';
+            const volumeOnIcon = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg>';
+            const volumeOffIcon = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>';
+            
+            let isSeeking = false;
+            
+            // Format time (seconds to MM:SS)
+            function formatTime(seconds) {
+                if (!isFinite(seconds)) return '0:00';
+                const mins = Math.floor(seconds / 60);
+                const secs = Math.floor(seconds % 60).toString().padStart(2, '0');
+                return `${mins}:${secs}`;
+            }
+            
+            // Play/Pause functionality
+            playButton.addEventListener('click', function() {
+                togglePlayPause();
+            });
+            
+            function togglePlayPause() {
+                if (audioPlayer.paused) {
+                    audioPlayer.play().catch(function(error) {
+                        showError('Playback failed: ' + error.message);
+                    });
+                    playButton.innerHTML = pauseIcon;
+                    playButton.setAttribute('aria-label', 'Pause');
+                } else {
+                    audioPlayer.pause();
+                    playButton.innerHTML = playIcon;
+                    playButton.setAttribute('aria-label', 'Play');
+                }
+            }
+            
+            // Update progress bar and time
+            audioPlayer.addEventListener('timeupdate', function() {
+                if (!isSeeking) {
+                    const progress = (audioPlayer.currentTime / audioPlayer.duration) * 100;
+                    progressBar.style.width = progress + '%';
+                    progressContainer.setAttribute('aria-valuenow', Math.round(progress));
+                    currentTimeDisplay.textContent = formatTime(audioPlayer.currentTime);
+                }
+            });
+            
+            // Update duration when metadata loads
+            audioPlayer.addEventListener('loadedmetadata', function() {
+                const durationElement = document.getElementById('duration');
+                if (durationElement) {
+                    durationElement.textContent = formatTime(audioPlayer.duration);
+                }
+            });
+            
+            // Seek functionality (mouse/touch)
+            progressContainer.addEventListener('click', function(e) {
+                seek(e);
+            });
+            
+            progressContainer.addEventListener('mousedown', function() {
+                isSeeking = true;
+            });
+            
+            document.addEventListener('mouseup', function() {
+                isSeeking = false;
+            });
+            
+            progressContainer.addEventListener('mousemove', function(e) {
+                if (isSeeking) {
+                    seek(e);
+                }
+            });
+            
+            function seek(e) {
+                const rect = progressContainer.getBoundingClientRect();
+                const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+                audioPlayer.currentTime = pos * audioPlayer.duration;
+            }
+            
+            // Keyboard seek (left/right arrows on progress bar)
+            progressContainer.addEventListener('keydown', function(e) {
+                if (e.code === 'ArrowLeft') {
+                    e.preventDefault();
+                    audioPlayer.currentTime = Math.max(0, audioPlayer.currentTime - 5);
+                } else if (e.code === 'ArrowRight') {
+                    e.preventDefault();
+                    audioPlayer.currentTime = Math.min(audioPlayer.duration, audioPlayer.currentTime + 5);
+                }
+            });
+            
+            // Volume control
+            volumeSlider.addEventListener('input', function() {
+                audioPlayer.volume = volumeSlider.value;
+                audioPlayer.muted = false;
+                updateVolumeIcon();
+                updateVolumePercentage();
+            });
+            
+            // Mute toggle
+            muteButton.addEventListener('click', function() {
+                audioPlayer.muted = !audioPlayer.muted;
+                updateVolumeIcon();
+            });
+            
+            function updateVolumeIcon() {
+                if (audioPlayer.muted || audioPlayer.volume === 0) {
+                    muteButton.innerHTML = volumeOffIcon;
+                    muteButton.setAttribute('aria-label', 'Unmute');
+                } else {
+                    muteButton.innerHTML = volumeOnIcon;
+                    muteButton.setAttribute('aria-label', 'Mute');
+                }
+            }
+            
+            function updateVolumePercentage() {
+                const percent = Math.round(audioPlayer.volume * 100);
+                volumePercentage.textContent = percent + '%';
+            }
+            
+            // Handle audio ended
+            audioPlayer.addEventListener('ended', function() {
+                playButton.innerHTML = playIcon;
+                playButton.setAttribute('aria-label', 'Play');
+                progressBar.style.width = '0%';
+                currentTimeDisplay.textContent = '0:00';
+            });
+            
+            // Error handling
+            audioPlayer.addEventListener('error', function(e) {
+                const error = audioPlayer.error;
+                let message = 'Playback error occurred';
+                
+                if (error) {
+                    switch (error.code) {
+                        case error.MEDIA_ERR_ABORTED:
+                            message = 'Playback was aborted';
+                            break;
+                        case error.MEDIA_ERR_NETWORK:
+                            message = 'Network error occurred';
+                            break;
+                        case error.MEDIA_ERR_DECODE:
+                            message = 'Audio decoding failed';
+                            break;
+                        case error.MEDIA_ERR_SRC_NOT_SUPPORTED:
+                            message = 'Audio format not supported';
+                            break;
+                    }
+                }
+                
+                showError(message);
+            });
+            
+            function showError(message) {
+                errorMessage.textContent = message;
+                errorMessage.style.display = 'block';
+                console.error('Audio player error:', message);
+            }
+            
+            // Global keyboard shortcuts
+            document.addEventListener('keydown', function(e) {
+                // Don't trigger if user is typing in an input
+                if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+                    return;
+                }
+                
+                switch (e.code) {
+                    case 'Space':
+                        e.preventDefault();
+                        togglePlayPause();
+                        break;
+                    case 'KeyM':
+                        e.preventDefault();
+                        muteButton.click();
+                        break;
+                    case 'ArrowLeft':
+                        e.preventDefault();
+                        audioPlayer.currentTime = Math.max(0, audioPlayer.currentTime - 5);
+                        break;
+                    case 'ArrowRight':
+                        e.preventDefault();
+                        audioPlayer.currentTime = Math.min(audioPlayer.duration, audioPlayer.currentTime + 5);
+                        break;
+                    case 'ArrowUp':
+                        e.preventDefault();
+                        audioPlayer.volume = Math.min(1, audioPlayer.volume + 0.1);
+                        volumeSlider.value = audioPlayer.volume;
+                        updateVolumePercentage();
+                        break;
+                    case 'ArrowDown':
+                        e.preventDefault();
+                        audioPlayer.volume = Math.max(0, audioPlayer.volume - 0.1);
+                        volumeSlider.value = audioPlayer.volume;
+                        updateVolumePercentage();
+                        break;
+                }
+            });
+            
+            // Initialize
+            updateVolumeIcon();
+            updateVolumePercentage();
+            
+            // Log player ready
+            console.log('Music player initialized for: {{ metadata.Product.Title }}');
+        })();
+    </script>
+</body>
+</html>
+
+
+

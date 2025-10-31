@@ -13,7 +13,7 @@ import psycopg2.extras
 from psycopg2 import DatabaseError, IntegrityError
 
 from .pool import get_connection
-from exceptions import (
+from src.exceptions import (
     StorageError,
     ValidationError,
     DatabaseOperationError,
@@ -1190,6 +1190,72 @@ def mark_as_completed(track_id: str) -> Dict[str, Any]:
         error_message=None,
         increment_retry=False
     )
+
+
+def create_processing_record(track_id: str, status: str = 'PROCESSING') -> Dict[str, Any]:
+    """
+    Create a minimal processing record for tracking status.
+    
+    This function creates a database record with minimal required fields
+    to track processing status. The full metadata will be saved later.
+    
+    Args:
+        track_id: UUID of the track
+        status: Initial status (default: 'PROCESSING')
+    
+    Returns:
+        Created record information
+    
+    Raises:
+        ValidationError: If track_id format is invalid
+        DatabaseOperationError: If creation fails
+    
+    Example:
+        >>> create_processing_record('123e4567...', 'PROCESSING')
+    """
+    # Validate UUID format
+    try:
+        uuid.UUID(track_id)
+    except ValueError:
+        raise ValidationError(f"Invalid track_id format: {track_id}")
+    
+    # Validate status
+    valid_statuses = ['PENDING', 'PROCESSING', 'COMPLETED', 'FAILED']
+    if status not in valid_statuses:
+        raise ValidationError(f"Invalid status '{status}'. Must be one of: {valid_statuses}")
+    
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                # Create minimal record with required fields
+                insert_query = """
+                    INSERT INTO audio_tracks (
+                        id, status, title, format, created_at, updated_at
+                    ) VALUES (
+                        %s, %s, 'Processing...', 'Unknown', NOW(), NOW()
+                    )
+                    ON CONFLICT (id) DO UPDATE SET
+                        status = EXCLUDED.status,
+                        updated_at = NOW()
+                    RETURNING id, status, created_at, updated_at
+                """
+                
+                cur.execute(insert_query, (track_id, status))
+                result = cur.fetchone()
+                
+                # Commit transaction
+                conn.commit()
+                
+                logger.info(f"Created/updated processing record for track: {track_id}")
+                return dict(result)
+    
+    except DatabaseError as e:
+        logger.error(f"Database error creating processing record for {track_id}: {e}")
+        raise DatabaseOperationError(f"Failed to create processing record: {str(e)}")
+    
+    except Exception as e:
+        logger.error(f"Unexpected error creating processing record for {track_id}: {e}")
+        raise DatabaseOperationError(f"Failed to create processing record: {str(e)}")
 
 
 def mark_as_processing(track_id: str) -> Dict[str, Any]:

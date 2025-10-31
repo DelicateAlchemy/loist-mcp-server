@@ -84,6 +84,9 @@ class ServerConfig(BaseSettings):
     cors_allow_headers: str = "Authorization,Content-Type,Range,X-Requested-With,Accept,Origin"
     cors_expose_headers: str = "Content-Range,Accept-Ranges,Content-Length,Content-Type"
     
+    # Embed Configuration
+    embed_base_url: str = "https://loist.io"  # Base URL for embed links (configurable for local dev)
+
     # Feature Flags
     enable_metrics: bool = False
     enable_healthcheck: bool = True
@@ -139,7 +142,7 @@ class ServerConfig(BaseSettings):
         """Check if database is properly configured"""
         # Can use either direct connection or Cloud SQL Proxy
         has_direct = bool(self.db_host and self.db_name and self.db_user and self.db_password)
-        has_proxy = bool(self.db_connection_name and self.db_name and self.db_user and self.db_password)
+        has_proxy = bool(self.db_connection_name and self.db_connection_name.strip() and self.db_name and self.db_user and self.db_password)
         return has_direct or has_proxy
     
     @property
@@ -151,7 +154,7 @@ class ServerConfig(BaseSettings):
         if not self.is_database_configured:
             return None
         
-        if self.db_connection_name:
+        if self.db_connection_name and self.db_connection_name.strip():
             # Cloud SQL Proxy connection
             # Format: postgresql://user:password@/dbname?host=/cloudsql/connection_name
             return f"postgresql://{self.db_user}:{self.db_password}@/{self.db_name}?host=/cloudsql/{self.db_connection_name}"

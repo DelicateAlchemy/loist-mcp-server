@@ -1,0 +1,32 @@
+{
+  "version": "1.0",
+  "description": "Performance baseline for MCP server tests",
+  "thresholds": {
+    "health_check": {
+      "max_duration": 2.0,
+      "description": "Health check should respond within 2 seconds"
+    },
+    "get_audio_metadata": {
+      "max_duration": 1.0,
+      "description": "Metadata retrieval should complete within 1 second"
+    },
+    "search_library": {
+      "max_duration": 3.0,
+      "description": "Search operations should complete within 3 seconds"
+    },
+    "resource_access": {
+      "max_duration": 2.0,
+      "description": "Resource access should complete within 2 seconds"
+    }
+  },
+  "quality_gates": {
+    "min_protocol_compliance": 3,
+    "max_failed_tests": 0,
+    "max_performance_violations": 2
+  },
+  "baseline_metrics": {
+    "typical_health_check_duration": 0.5,
+    "typical_error_response_duration": 0.3,
+    "typical_resource_parse_duration": 0.2
+  }
+}
