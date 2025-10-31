@@ -39,7 +39,6 @@ steps:
       - '--port=8080'
       - '--set-env-vars=SERVER_TRANSPORT=http,LOG_LEVEL=INFO,AUTH_ENABLED=false,ENABLE_CORS=true,CORS_ORIGINS=*,ENABLE_HEALTHCHECK=true'
       - '--set-env-vars=GCS_PROJECT_ID=$PROJECT_ID'
-      - '--service-account=${_CLOUD_RUN_SERVICE_ACCOUNT}'
       - '--update-secrets=DB_CONNECTION_NAME=${_DB_CONNECTION_NAME}:latest'
       - '--update-secrets=GCS_BUCKET_NAME=${_GCS_BUCKET_NAME}:latest'
       - '--quiet'
@@ -171,9 +170,6 @@ options:
 
 # Substitution variables (can be overridden in triggers)
 substitutions:
-  # Cloud Run service account (should be configured in trigger)
-  _CLOUD_RUN_SERVICE_ACCOUNT: 'music-library-sa@${PROJECT_ID}.iam.gserviceaccount.com'
-  
   # Secret Manager secret names (should be configured in trigger)
   _DB_CONNECTION_NAME: 'db-connection-name'
   _GCS_BUCKET_NAME: 'gcs-bucket-name'
