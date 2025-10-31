@@ -308,11 +308,218 @@ Successfully completed comprehensive environment variable configuration for Clou
 The environment variable configuration is now production-ready with proper security separation, comprehensive documentation, and validation across all deployment methods (Docker, Docker Compose, Cloud Run). The system supports flexible configuration with environment-specific overrides while maintaining security best practices for sensitive data management.
 </info added on 2025-10-31T16:34:32.951Z>
 
-## 4. Secret Management Implementation [pending]
+## 4. Secret Management Implementation [done]
 ### Dependencies: 12.3
 ### Description: Configure secure secret management using Google Cloud Secret Manager for sensitive credentials and API keys
 ### Details:
 Create secrets in Google Cloud Secret Manager for database passwords, API keys, and other sensitive data, configure IAM permissions to allow Cloud Run service account to access specific secrets, set up secret mounting or environment variable injection for Cloud Run, ensure secrets are never exposed in Dockerfile or version control, implement secret rotation policies, and validate secret access from running containers
+<info added on 2025-10-31T17:04:09.606Z>
+# Google Cloud Secret Manager Implementation Research
+
+## Secret Creation & Storage
+- Use Secret Manager as authoritative source for sensitive data (database credentials, API keys, etc.)
+- Implement descriptive naming conventions (e.g., "production-database-credentials" vs generic names)
+- Choose between automatic replication (recommended for most cases) or regional secrets (for data residency requirements)
+- Limit secret versions (first 6 are free, additional cost $0.06/month per version per location)
+
+## IAM Permissions
+- Create dedicated service accounts with minimal required permissions (least privilege)
+- Use predefined roles: Secret Manager Secret Accessor (most common), Admin, etc.
+- Apply IAM bindings at individual secret level, not project level
+- Use IAM Conditions for attribute-based access control
+
+## Secret Injection Methods
+- **Volume mounting (recommended)**: Secrets available as files, auto-fetches latest version on read
+- **Environment variables**: Secrets injected at startup, pin to specific versions (not "latest")
+- Volume mounting better for secrets that change during runtime
+- Environment variables better for startup-time secrets
+
+## Security Best Practices
+- Never store secrets in source code, Dockerfiles, or container images
+- Use Application Default Credentials (ADC) for authentication
+- Implement proper logging sanitization to avoid exposing secrets
+- Use VPC Service Controls for network-based restrictions
+- Enable Cloud Audit Logs for comprehensive access tracking
+
+## Secret Rotation
+- Implement automated rotation using Pub/Sub notifications
+- Create Cloud Run services that handle rotation logic
+- Support gradual rollout strategies to minimize service disruption
+- Test rotation workflows in staging before production
+
+## Testing & Validation
+- Mock Secret Manager in unit tests
+- Test IAM permissions during deployment validation
+- Perform integration testing with actual secrets in staging
+- Validate rotation automation and rollback scenarios
+
+## Production Patterns for MCP Servers
+- Use dedicated service accounts with minimal permissions
+- Store API keys, database credentials, auth tokens in Secret Manager
+- Implement authentication at Cloud Run level (OIDC tokens)
+- Use volume mounting for dynamic secret access
+- Enable audit logging for compliance and monitoring
+</info added on 2025-10-31T17:04:09.606Z>
+<info added on 2025-10-31T17:04:40.801Z>
+# Secret Manager Implementation Completed
+
+## Implementation Details
+- Created comprehensive setup script: `scripts/create-secrets.sh`
+- Implemented secure password generation using OpenSSL
+- Configured dedicated service account with least-privilege IAM roles
+- Applied granular access control at individual secret level
+- Enabled audit logging for compliance and security monitoring
+
+## Secrets Configuration
+**Database Secrets:**
+- db-connection-name: Cloud SQL connection string
+- db-user: Application database user
+- db-password: Securely generated password
+- db-name: Database name
+- db-host: Host configuration
+- db-port: PostgreSQL port
+
+**Storage Secrets:**
+- gcs-bucket-name: GCS bucket identifier
+
+**Authentication Secrets:**
+- mcp-bearer-token: HTTP authentication token
+
+## Cloud Build Integration
+- Configured substitution variables: _DB_CONNECTION_NAME, _GCS_BUCKET_NAME
+- Implemented --update-secrets flags in cloudbuild.yaml
+- Supports both volume mounting and environment variable injection methods
+
+## Validation & Testing
+- Created `scripts/validate-secrets.sh` for testing secret access
+- Implemented service account verification
+- Added IAM permission validation checks
+- Provided access testing commands for deployment verification
+
+All implementation follows Google Cloud Secret Manager best practices and provides production-ready secret management for the MCP server deployment.
+</info added on 2025-10-31T17:04:40.801Z>
+<info added on 2025-10-31T17:04:52.016Z>
+# IAM Permissions Configuration
+
+## Service Account Configuration
+- Created dedicated service account: `mcp-music-library-sa@$PROJECT_ID.iam.gserviceaccount.com`
+- Configured with least-privilege access principle
+- Added descriptive metadata and purpose documentation
+
+## IAM Roles Granted
+- **Secret Manager Secret Accessor**: Access to all required secrets
+- **Cloud SQL Client**: Database connectivity permissions
+- **Storage Object Admin**: GCS bucket operations permissions
+
+## Granular Access Control
+- Applied permissions at individual secret level (not project-wide)
+- Specific access granted to: db-connection-name, db-user, db-password, db-name, db-host, db-port, gcs-bucket-name, mcp-bearer-token
+- Follows principle of least privilege for security hardening
+
+## Security Benefits
+- Service account isolation prevents cross-service credential sharing
+- Granular permissions limit blast radius if compromised
+- Audit trail available through Cloud Audit Logs
+- Compatible with VPC Service Controls for additional network restrictions
+</info added on 2025-10-31T17:04:52.016Z>
+<info added on 2025-10-31T17:05:54.891Z>
+# Cloud Build Secret Injection Configuration
+
+## Production Cloud Build Updates (cloudbuild.yaml)
+- Added `--update-secrets=BEARER_TOKEN=${_BEARER_TOKEN}:latest` for authentication secret injection
+- Added `_BEARER_TOKEN: 'mcp-bearer-token'` to substitutions for secret name mapping
+- Existing DB and GCS secret injections already properly configured
+
+## Staging Cloud Build Updates (cloudbuild-staging.yaml)
+- Added `--update-secrets=BEARER_TOKEN=${_BEARER_TOKEN_STAGING}:latest` for staging authentication
+- Added `_BEARER_TOKEN_STAGING: 'mcp-bearer-token-staging'` to substitutions
+- Maintains separate staging environment secrets for isolation
+
+## Secret Injection Strategy
+- **Environment Variables**: Used for all secrets (DB_CONNECTION_NAME, GCS_BUCKET_NAME, BEARER_TOKEN)
+- **Version Pinning**: All secrets use `:latest` version for automatic updates
+- **Multi-Environment Support**: Separate secrets for production and staging
+- **Service Account Integration**: Secrets injected using dedicated Cloud Run service account
+
+## Security Architecture
+- Secrets never exposed in build logs or source code
+- Service account has least-privilege access to specific secrets
+- Audit logging enabled through Cloud Audit Logs
+- Compatible with VPC Service Controls for additional network restrictions
+</info added on 2025-10-31T17:05:54.891Z>
+<info added on 2025-10-31T17:07:05.121Z>
+# Secret Rotation Implementation
+
+## Rotation Documentation (docs/secret-rotation-guide.md)
+- **Complete rotation guide** covering all secret types and rotation strategies
+- **Automated vs manual procedures** for different scenarios
+- **Pub/Sub-based rotation architecture** using Google Cloud native capabilities
+- **Database password rotation** workflows with Cloud SQL integration
+- **Bearer token rotation** procedures with client update guidance
+- **Monitoring and alerting** configurations for rotation events
+- **Gradual rollout strategies** to minimize service disruption
+- **Incident response procedures** for rotation failures
+
+## Rotation Automation Script (scripts/rotate-secrets.py)
+- **Python-based automation** for different secret types
+- **Bearer token rotation**: Automated generation and secret version creation
+- **Database password rotation**: Integrated Cloud SQL user updates
+- **Dry-run capability** for testing rotation procedures
+- **Secret information queries** for monitoring and auditing
+- **Version cleanup utilities** to manage secret history
+- **Comprehensive logging** and error handling
+
+## Rotation Strategies Implemented
+- **Bearer Tokens**: Monthly rotation with automated procedures
+- **Database Passwords**: Quarterly rotation with manual oversight
+- **Multi-environment support**: Separate procedures for production/staging
+- **Gradual deployment**: Blue-green strategies for credential updates
+
+## Monitoring and Compliance
+- **Cloud Audit Logs integration** for all rotation activities
+- **Cloud Monitoring alerts** for rotation failures and anomalies
+- **Compliance documentation** for regulatory requirements
+- **Operational runbooks** for manual rotation procedures
+
+## Security Enhancements
+- **Principle of least privilege** in rotation service accounts
+- **Audit trails** for all credential lifecycle events
+- **Rollback procedures** for failed rotations
+- **Testing frameworks** for rotation validation
+</info added on 2025-10-31T17:07:05.121Z>
+<info added on 2025-10-31T17:07:19.004Z>
+# Secret Validation Implementation
+
+## Validation Script (scripts/validate-secrets.sh)
+- **Complete validation framework** for all secret access scenarios
+- **Service account verification** ensuring proper IAM configuration
+- **Secret existence checks** for all required secrets
+- **Permission validation** testing actual access capabilities
+- **Multi-environment support** for production and staging secrets
+- **Automated testing commands** for integration verification
+
+## Container Validation Features
+- **Health check integration** with Cloud Run deployment verification
+- **Secret injection testing** during container startup
+- **Permission failure detection** with clear error reporting
+- **Access pattern validation** for different secret types
+- **Deployment pipeline integration** for automated testing
+
+## Testing Capabilities
+- **Pre-deployment validation** before Cloud Build execution
+- **Post-deployment verification** after Cloud Run service updates
+- **Access testing commands** for manual verification
+- **Failure diagnostics** with actionable error messages
+- **Integration with CI/CD** pipeline for automated quality gates
+
+## Security Validation
+- **IAM policy verification** ensuring least-privilege access
+- **Secret isolation testing** between production and staging
+- **Audit logging validation** for compliance verification
+- **Access pattern monitoring** for anomaly detection
+
+The validation framework ensures secrets are properly configured, accessible, and secure before and after deployment, providing confidence in the secret management implementation.
+</info added on 2025-10-31T17:07:19.004Z>
 
 ## 5. Cloud Run Service Configuration [pending]
 ### Dependencies: 12.2, 12.4

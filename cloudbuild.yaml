@@ -113,6 +113,7 @@ steps:
       - '--set-env-vars=EMBED_BASE_URL=https://loist.io,ENABLE_METRICS=false'
       - '--update-secrets=DB_CONNECTION_NAME=${_DB_CONNECTION_NAME}:latest'
       - '--update-secrets=GCS_BUCKET_NAME=${_GCS_BUCKET_NAME}:latest'
+      - '--update-secrets=BEARER_TOKEN=${_BEARER_TOKEN}:latest'
       - '--quiet'
     waitFor: ['check-vulnerabilities']
 
@@ -253,6 +254,7 @@ substitutions:
   # Secret Manager secret names (should be configured in trigger)
   _DB_CONNECTION_NAME: 'db-connection-name'
   _GCS_BUCKET_NAME: 'gcs-bucket-name'
+  _BEARER_TOKEN: 'mcp-bearer-token'
 
 # Build timeout (maximum 24 hours, but we expect ~5-10 minutes)
 timeout: '1200s'  # 20 minutes

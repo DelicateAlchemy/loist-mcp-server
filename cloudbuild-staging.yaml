@@ -41,6 +41,7 @@ steps:
       - '--service-account=${_CLOUD_RUN_SERVICE_ACCOUNT}'
       - '--update-secrets=DB_CONNECTION_NAME=${_DB_CONNECTION_NAME_STAGING}:latest'
       - '--update-secrets=GCS_BUCKET_NAME=${_GCS_BUCKET_NAME_STAGING}:latest'
+      - '--update-secrets=BEARER_TOKEN=${_BEARER_TOKEN_STAGING}:latest'
       - '--quiet'
     waitFor: ['push-image']
 
@@ -74,6 +75,7 @@ substitutions:
   _CLOUD_RUN_SERVICE_ACCOUNT: 'music-library-sa@${PROJECT_ID}.iam.gserviceaccount.com'
   _DB_CONNECTION_NAME_STAGING: 'db-connection-name-staging'
   _GCS_BUCKET_NAME_STAGING: 'gcs-bucket-name-staging'
+  _BEARER_TOKEN_STAGING: 'mcp-bearer-token-staging'
 
 timeout: '900s'  # 15 minutes
 
