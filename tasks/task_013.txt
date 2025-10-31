@@ -11,33 +11,51 @@ To address this issue, ensure that all necessary exception classes are imported 
 Verify task completion by testing FastMCP tools under various error conditions, ensuring that exceptions are properly serialized and handled without causing `NameError` exceptions. Use both normal Python execution and FastMCP's JSON-RPC serialization process for comprehensive testing. Validate that error messages are correctly logged and that clients receive appropriate error responses. Utilize tools like `Client` from `fastmcp.client` to simulate client interactions and verify the server's response to errors.
 
 # Subtasks:
-## 1. Audit Exception Class Imports and Usage [pending]
+## 1. Analyze FastMCP exception class hierarchy [pending]
 ### Dependencies: None
-### Description: Identify all exception classes used by FastMCP during JSON-RPC serialization and ensure they are properly imported and available in all relevant execution contexts.
+### Description: Examine the current exception class structure in FastMCP to understand inheritance patterns and serialization attributes.
 ### Details:
-Review FastMCP's codebase and tool implementations to catalog all exceptions (standard and custom) that may be raised and serialized. Document any missing or inconsistently imported exception classes.
+Map out all exception classes in FastMCP, identify their inheritance relationships, document special attributes that need serialization, and determine which exception types are currently failing to serialize context properly. Create a diagram showing the exception hierarchy.
 
-## 2. Refactor Import Structure for Exception Availability [pending]
+## 2. Investigate serialization mechanism failures [pending]
 ### Dependencies: 13.1
-### Description: Modify the import structure or module organization to guarantee that all necessary exception classes are accessible wherever FastMCP's serialization occurs.
+### Description: Identify specific failure points in the current serialization process for exceptions.
 ### Details:
-Update module imports, tool registration, or dynamic import logic to ensure exception classes are always in scope during serialization and deserialization.
+Set up debugging instrumentation to capture serialization failures, analyze stack traces, identify which context data is being lost during serialization, and determine if the issue is in serialization or deserialization. Document all edge cases found.
 
-## 3. Implement Custom Exception Serialization Mechanism [pending]
-### Dependencies: 13.2
-### Description: Develop or enhance a serialization mechanism that can handle exceptions robustly, including cases where exception classes are missing or unknown.
+## 3. Design improved exception serialization approach [pending]
+### Dependencies: 13.1, 13.2
+### Description: Create a technical design for enhancing exception serialization to preserve context.
 ### Details:
-Design a fallback serialization strategy (e.g., serializing exception name, message, and traceback) for unknown or missing exception classes. Integrate this with FastMCP's JSON-RPC error handling.
+Design a solution that addresses identified issues, consider backward compatibility, evaluate performance implications, and document the proposed changes with code examples. Include handling for custom attributes, nested exceptions, and circular references.
 
-## 4. Integrate Fallback and Logging for Unserializable Exceptions [pending]
+## 4. Implement serialization mechanism modifications [pending]
 ### Dependencies: 13.3
-### Description: Add logic to log detailed error information for debugging and send generic error responses to clients when exceptions cannot be serialized properly.
+### Description: Code the changes to the exception serialization system based on the approved design.
 ### Details:
-Ensure that all unserializable exceptions are logged with full context for developers, while clients receive sanitized or generic error messages in compliance with FastMCP's error masking settings.
+Implement the serialization enhancements, create custom serializers/deserializers if needed, modify exception base classes, and ensure proper context preservation across process boundaries. Include appropriate error handling for serialization failures.
 
-## 5. Validate Compatibility with FastMCP Error Handling (Including ResourceError) [pending]
+## 5. Create comprehensive test suite [pending]
 ### Dependencies: 13.4
-### Description: Ensure the new exception handling and serialization logic is fully compatible with FastMCP's error handling mechanisms, including the use of ResourceError for controlled messaging.
+### Description: Develop tests that verify exception serialization works correctly across different contexts.
 ### Details:
-Test integration with FastMCP's mask_error_details and ToolError/ResourceError pathways to confirm correct behavior in all error masking and propagation scenarios.
+Create unit tests for each exception type, integration tests for cross-process scenarios, performance tests to measure overhead, and regression tests to ensure existing functionality remains intact. Include tests for edge cases identified during investigation.
+
+## 6. Integrate with existing error handling systems [pending]
+### Dependencies: 13.4
+### Description: Ensure the improved exception serialization works with FastMCP's error handling infrastructure.
+### Details:
+Update error logging mechanisms, ensure error reporting systems correctly display the preserved context, modify any middleware that processes exceptions, and verify compatibility with monitoring tools. Test error recovery scenarios.
+
+## 7. Update documentation and developer guides [pending]
+### Dependencies: 13.4, 13.6
+### Description: Revise all relevant documentation to reflect the changes to exception handling.
+### Details:
+Update API documentation, create examples showing proper exception usage, document any new methods or attributes, and provide migration guides for developers using the previous system. Include troubleshooting information for common issues.
+
+## 8. Perform final validation and release [pending]
+### Dependencies: 13.5, 13.6, 13.7
+### Description: Conduct comprehensive validation and prepare the changes for release.
+### Details:
+Run the full test suite in various environments, perform code reviews, validate documentation accuracy, prepare release notes highlighting the changes, and create a deployment plan that minimizes disruption to existing systems.
 

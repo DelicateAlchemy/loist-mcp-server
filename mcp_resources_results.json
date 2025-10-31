@@ -1,0 +1,18 @@
+{
+  "testSuite": "mcp_resources",
+  "startTime": "2025-10-30T14:53:38.3NZ",
+  "endTime": "2025-10-30T14:53:46.3NZ",
+  "tests": [
+    {"name":"resources_list","status":"passed","timestamp":"2025-10-30T14:53:39.3NZ","duration":1.282293000,"response":"2025-10-30 14:53:39 - __main__ - DEBUG - [server.ensure_exceptions_loaded:84] - Loaded 10 custom exception classes for FastMCP2025-10-30 14:53:39 - __main__ - DEBUG - [server.ensure_exceptions_loaded:85] - Exception modules: {'src.exceptions'}2025-10-30 14:53:39 - __main__ - INFO - [server.<module>:100] - ✅ Exception classes loaded and verified: 10 classes2025-10-30 14:53:39 - __main__ - INFO - [server.<module>:133] - 🔓 Running without authentication (development mode)2025-10-30 14:53:39 - ","errorMessage":""}
+    ,{"name":"metadata_resource_uri_parsing","status":"passed","timestamp":"2025-10-30T14:53:41.3NZ","duration":1.701043000,"response":"2025-10-30 14:53:41 - __main__ - DEBUG - [server.ensure_exceptions_loaded:84] - Loaded 10 custom exception classes for FastMCP2025-10-30 14:53:41 - __main__ - DEBUG - [server.ensure_exceptions_loaded:85] - Exception modules: {'src.exceptions'}2025-10-30 14:53:41 - __main__ - INFO - [server.<module>:100] - ✅ Exception classes loaded and verified: 10 classes2025-10-30 14:53:41 - __main__ - INFO - [server.<module>:133] - 🔓 Running without authentication (development mode)2025-10-30 14:53:41 - ","errorMessage":""}
+    ,{"name":"stream_resource_uri_parsing","status":"passed","timestamp":"2025-10-30T14:53:43.3NZ","duration":1.497115000,"response":"2025-10-30 14:53:42 - __main__ - DEBUG - [server.ensure_exceptions_loaded:84] - Loaded 10 custom exception classes for FastMCP2025-10-30 14:53:42 - __main__ - DEBUG - [server.ensure_exceptions_loaded:85] - Exception modules: {'src.exceptions'}2025-10-30 14:53:42 - __main__ - INFO - [server.<module>:100] - ✅ Exception classes loaded and verified: 10 classes2025-10-30 14:53:42 - __main__ - INFO - [server.<module>:133] - 🔓 Running without authentication (development mode)2025-10-30 14:53:42 - ","errorMessage":""}
+    ,{"name":"thumbnail_resource_uri_parsing","status":"passed","timestamp":"2025-10-30T14:53:45.3NZ","duration":1.814360000,"response":"2025-10-30 14:53:44 - __main__ - DEBUG - [server.ensure_exceptions_loaded:84] - Loaded 10 custom exception classes for FastMCP2025-10-30 14:53:44 - __main__ - DEBUG - [server.ensure_exceptions_loaded:85] - Exception modules: {'src.exceptions'}2025-10-30 14:53:44 - __main__ - INFO - [server.<module>:100] - ✅ Exception classes loaded and verified: 10 classes2025-10-30 14:53:44 - __main__ - INFO - [server.<module>:133] - 🔓 Running without authentication (development mode)2025-10-30 14:53:44 - ","errorMessage":""}
+    ,{"name":"invalid_resource_uri_handling","status":"passed","timestamp":"2025-10-30T14:53:46.3NZ","duration":1.505339000,"response":"2025-10-30 14:53:46 - __main__ - DEBUG - [server.ensure_exceptions_loaded:84] - Loaded 10 custom exception classes for FastMCP2025-10-30 14:53:46 - __main__ - DEBUG - [server.ensure_exceptions_loaded:85] - Exception modules: {'src.exceptions'}2025-10-30 14:53:46 - __main__ - INFO - [server.<module>:100] - ✅ Exception classes loaded and verified: 10 classes2025-10-30 14:53:46 - __main__ - INFO - [server.<module>:133] - 🔓 Running without authentication (development mode)2025-10-30 14:53:46 - ","errorMessage":""}
+  ],
+  "summary": {
+    "total": 5,
+    "passed": 5,
+    "failed": 0,
+    "warnings": 0
+  }
+}

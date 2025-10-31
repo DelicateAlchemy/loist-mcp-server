@@ -8,13 +8,22 @@ This project implements a Model Context Protocol (MCP) server using the FastMCP 
 
 ## MCP Server Naming Strategy
 
-This project supports both local development and production deployments with distinct naming conventions to avoid conflicts in MCP client configurations:
+This project supports local development, staging, and production deployments with distinct naming conventions to avoid conflicts in MCP client configurations:
 
 ### Local Development
 - **Cursor MCP Server Name**: `loist-music-library-local`
 - **FastMCP Server Name**: `Music Library MCP - Local Development`
 - **Environment**: Docker containers with local PostgreSQL + GCS integration
 - **Transport**: stdio (for Cursor MCP integration)
+
+### Development/Staging Environment
+- **Cursor MCP Server Name**: `loist-music-library-staging`
+- **FastMCP Server Name**: `Music Library MCP - Staging`
+- **Environment**: Docker containers with staging PostgreSQL + dedicated GCS staging buckets
+- **Transport**: http/sse (for integration testing and QA)
+- **Deployment**: GitHub Actions workflow on `dev` branch → Cloud Build (`cloudbuild-staging.yaml`)
+- **Purpose**: Pre-production validation, integration testing, QA verification
+- **Infrastructure**: Separate Cloud Run service, staging GCS buckets, staging database
 
 ### Production Deployment
 - **Cursor MCP Server Name**: `loist-music-library` (production)
@@ -37,6 +46,21 @@ This project supports both local development and production deployments with dis
     }
   }
 }
+```
+
+**Staging Environment (docker-compose.staging.yml):**
+```yaml
+version: '3.8'
+services:
+  mcp-server-staging:
+    image: loist-mcp-server:latest
+    environment:
+      - SERVER_NAME=Music Library MCP - Staging
+      - SERVER_TRANSPORT=http
+      - GCS_BUCKET_NAME=loist-mvp-staging-audio-files
+      - DB_NAME=loist_mvp_staging
+    ports:
+      - "8081:8080"  # Different port than local dev
 ```
 
 **Production Deployment:**
@@ -379,19 +403,56 @@ uv pip install -e ".[dev]"
 ### Running Tests
 
 ```bash
+# Install testing dependencies first (if not already installed)
+pip install pytest pytest-asyncio pytest-mock pytest-cov
+
+# Run all tests
 pytest tests/
+
+# Run tests with coverage report
+pytest --cov=src --cov-report=html
+
+# Run specific test file
+pytest tests/test_process_audio_complete.py
 ```
 
 ### Code Formatting
 
 ```bash
+# Install formatting tools first (if not already installed)
+pip install black
+
+# Format code
 black src/ tests/
 ```
 
 ### Linting
 
 ```bash
+# Install linting tools first (if not already installed)
+pip install ruff pylint flake8 bandit
+
+# Fast linting with ruff
 ruff check src/ tests/
+
+# More comprehensive linting with pylint
+pylint src/ tests/
+
+# Security linting
+bandit -r src/
+```
+
+### Type Checking
+
+```bash
+# Install type checking tools first (if not already installed)
+pip install mypy
+
+# Run type checking
+mypy src/
+
+# Run type checking with detailed output
+mypy src/ --show-error-codes
 ```
 
 ## Configuration

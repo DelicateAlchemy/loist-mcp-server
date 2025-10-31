@@ -34,33 +34,51 @@ To verify the completion of this task, follow these steps:
 **Integration Testing**: Conduct thorough integration tests to ensure that these changes do not negatively impact other parts of the system. This includes testing for any potential regressions in functionality or performance.
 
 # Subtasks:
-## 1. Audit Current Exception Handling Systems [pending]
+## 1. Audit current exception handling patterns [pending]
 ### Dependencies: None
-### Description: Evaluate and document all existing exception handling approaches including ProcessAudioException, MusicLibraryError hierarchy, handle_tool_error(), and FastMCP's built-in exception handling mechanisms.
+### Description: Conduct a comprehensive audit of existing exception handling patterns across the codebase to identify inconsistencies and anti-patterns.
 ### Details:
-Review exceptions.py, error_utils.py, schemas.py and identify all exception types and handling patterns. Create a comprehensive audit report comparing each approach's strengths, weaknesses, and usage frequency across the codebase. Document the current state before making changes.
+Document all exception types being used, how they're caught and processed, logging patterns, and recovery mechanisms. Identify areas with missing error handling, overly broad catches, or swallowed exceptions. Create a report categorizing issues by severity and frequency.
 
-## 2. Resolve Premature Status Updates in mark_as_processing() [pending]
+## 2. Analyze database operation performance [pending]
 ### Dependencies: None
-### Description: Modify the mark_as_processing() function to gracefully handle non-existent database records without introducing unnecessary database queries.
+### Description: Analyze current database operations to identify inefficient queries, connection management issues, and transaction handling problems.
 ### Details:
-Implement record existence checks before status updates. Choose between pre-creating records or adding defensive checks within the function. Measure database query impact before and after implementation. Update function documentation and add inline comments explaining the handling logic.
+Profile database operations, identify N+1 query problems, examine connection pooling configuration, review transaction boundaries, and document areas for optimization. Create performance benchmarks for current implementation to measure improvements against.
 
-## 3. Select Primary Exception Handling Approach [pending]
+## 3. Map import dependencies across modules [pending]
+### Dependencies: None
+### Description: Create a comprehensive map of import dependencies between modules to identify circular dependencies and unnecessary coupling.
+### Details:
+Use static analysis tools to generate a dependency graph. Identify circular dependencies, modules with excessive incoming/outgoing dependencies, and opportunities for better encapsulation. Document findings with visualizations of the current architecture.
+
+## 4. Design standardized exception handling framework [pending]
 ### Dependencies: 14.1
-### Description: Based on the audit findings, select one primary exception handling strategy to standardize across the codebase.
+### Description: Design a consistent exception handling framework based on audit findings that addresses all identified issues.
 ### Details:
-Compare all four exception handling systems evaluated in subtask 1. Document the rationale for choosing the selected approach. Consider consistency, performance, maintainability, and compatibility with FastMCP serialization. Create detailed guidelines for implementing the chosen approach.
+Define exception hierarchy, standardize catching and logging patterns, create utility methods for common error handling scenarios, and establish guidelines for custom exceptions. Include recovery strategies and user-facing error message handling.
 
-## 4. Refactor Exception Handling Across Modules [pending]
+## 5. Implement database operation improvements [pending]
+### Dependencies: 14.2
+### Description: Implement optimizations for database operations based on the performance analysis.
+### Details:
+Refactor inefficient queries, implement proper connection pooling, optimize transaction boundaries, add caching where appropriate, and ensure proper resource cleanup. Create unit tests to verify improvements and prevent regression.
+
+## 6. Refactor import dependencies [pending]
 ### Dependencies: 14.3
-### Description: Systematically refactor all exception handling code to use the selected primary approach consistently across all modules.
+### Description: Refactor the codebase to eliminate circular dependencies and reduce unnecessary coupling between modules.
 ### Details:
-Update exceptions.py, error_utils.py, schemas.py, and all other relevant files to use the standardized exception handling. Replace ProcessAudioException, MusicLibraryError hierarchy, and other approaches with the selected pattern. Ensure backward compatibility where necessary. Create clear migration path for deprecated exception types.
+Implement dependency inversion where appropriate, extract interfaces, create abstraction layers, and reorganize package structure if necessary. Ensure changes maintain backward compatibility or document breaking changes.
 
-## 5. Simplify Import Dependencies and Resolve Serialization Issues [pending]
-### Dependencies: 14.4
-### Description: Identify and resolve complex import dependencies and circular import patterns that cause FastMCP serialization failures.
+## 7. Develop comprehensive testing strategy [pending]
+### Dependencies: 14.4, 14.5, 14.6
+### Description: Develop a testing strategy that covers the architectural improvements and ensures code quality.
 ### Details:
-Map import chains and circular dependencies in the codebase. Reorganize modules to eliminate problematic patterns. Consider dependency injection to decouple modules. Test FastMCP serialization after each change. Document the new module structure and import guidelines for future development.
+Create unit test templates for exception handling, database operations, and module interactions. Implement integration tests for critical paths. Set up automated testing pipelines and define code coverage goals. Document testing approach for team adoption.
+
+## 8. Update technical documentation [pending]
+### Dependencies: 14.4, 14.5, 14.6, 14.7
+### Description: Update all technical documentation to reflect the architectural improvements and new standards.
+### Details:
+Create developer guides for exception handling, database best practices, and module organization. Update architecture diagrams, API documentation, and codebase README files. Prepare training materials for the development team on the new standards and patterns.
 

@@ -1,0 +1,22 @@
+IAM Permissions Validation Report
+==================================
+Date: Fri Oct 31 08:33:58 GMT 2025
+Project: loist-music-library
+Service Account: loist-music-library-sa@loist-music-library.iam.gserviceaccount.com
+Bucket: gs://loist-mvp-audio-files
+
+Project-Level Roles:
+-------------------
+  roles/cloudsql.admin
+  roles/logging.logWriter
+  roles/monitoring.metricWriter
+  roles/run.admin
+  roles/storage.admin
+
+Bucket-Level Roles:
+------------------
+  None found
+
+Validation Tests:
+----------------
+  All tests completed successfully

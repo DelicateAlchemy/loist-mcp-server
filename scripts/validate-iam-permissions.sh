@@ -111,9 +111,9 @@ check_bucket_iam() {
         return 1
     fi
     
-    IAM_POLICY=$(gsutil iam get "gs://${BUCKET_NAME}")
+    IAM_POLICY=$(gcloud storage buckets get-iam-policy "gs://${BUCKET_NAME}" --format=json)
     
-    if echo "$IAM_POLICY" | grep -q "$SERVICE_ACCOUNT_EMAIL"; then
+    if echo "$IAM_POLICY" | grep -q "serviceAccount:$SERVICE_ACCOUNT_EMAIL"; then
         success "✓ Service account has bucket-level permissions"
         
         # Check specific roles
