@@ -21,6 +21,7 @@ The deployment uses Google Cloud Build with an optimized `cloudbuild.yaml` pipel
 - [Cloud Build Pipeline](#cloud-build-pipeline)
 - [Environment Variables](#environment-variables)
 - [Deployment Process](#deployment-process)
+- [Deployment Validation](#deployment-validation)
 - [Monitoring & Troubleshooting](#monitoring--troubleshooting)
 - [Security Considerations](#security-considerations)
 - [Rollback Procedures](#rollback-procedures)
@@ -404,6 +405,63 @@ curl -f https://music-library-mcp-<hash>-uc.a.run.app/mcp/health
   "version": "0.1.0"
 }
 ```
+
+## Deployment Validation
+
+### Automated Validation Suite
+
+After deployment, validate all components using the comprehensive validation scripts:
+
+```bash
+# Run full validation suite
+./scripts/validate-deployment.sh
+```
+
+This validates:
+- ✅ Cloud Build trigger configuration
+- ✅ Cloud Run service accessibility
+- ✅ Database connectivity
+- ✅ GCS bucket operations
+- ✅ Environment configuration
+- ✅ MCP protocol functionality (via Inspector)
+
+### Individual Validation Scripts
+
+Test specific components:
+
+```bash
+# Test Cloud Build triggers
+./scripts/test-deployment-triggers.sh
+
+# Test Cloud Run service
+./scripts/validate-cloud-run.sh
+
+# Test database (requires credentials)
+./scripts/validate-database.sh
+
+# Test GCS storage
+./scripts/validate-gcs.sh
+```
+
+### Validation Documentation
+
+For comprehensive validation procedures, see:
+- **[Deployment Validation Guide](./deployment-validation-guide.md)** - How to run validation scripts
+- **[Deployment Validation Results](./deployment-validation-results.md)** - Latest validation status
+- **[Troubleshooting Guide](./troubleshooting-deployment.md)** - Common issues and solutions
+- **[Rollback Procedures](./deployment-rollback-procedure.md)** - How to rollback deployments
+
+### Post-Deployment Checklist
+
+- [ ] Run validation suite: `./scripts/validate-deployment.sh`
+- [ ] Verify service URLs accessible
+- [ ] Test MCP tools via MCP Inspector
+- [ ] Check Cloud Monitoring metrics
+- [ ] Review Cloud Logging for errors
+- [ ] Verify database connectivity
+- [ ] Test GCS upload/download
+- [ ] Confirm environment variables loaded
+- [ ] Review security settings
 
 ## Security Considerations
 

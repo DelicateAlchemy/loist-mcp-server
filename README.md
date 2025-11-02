@@ -350,12 +350,35 @@ gcloud run deploy music-library-mcp \
 
 #### Deployment Features
 
+- ✅ **Automated CI/CD**: GitHub-triggered Cloud Build deployments for `main` and `dev` branches
 - ✅ **Vulnerability Scanning**: Automated image vulnerability detection
 - ✅ **Multi-stage Optimization**: Alpine builder → Alpine runtime for security and reliability
 - ✅ **Comprehensive Environment Variables**: 50+ environment variables configured
 - ✅ **Secret Management**: Database and GCS credentials via Secret Manager
 - ✅ **Artifact Registry**: Modern container registry with better performance
 - ✅ **Build Optimization**: Layer caching, BuildKit, and high-performance machines
+- ✅ **Deployment Validation**: Automated validation scripts for post-deployment verification
+
+#### Deployment Validation
+
+Validate deployments using the comprehensive validation suite:
+
+```bash
+# Run full validation
+./scripts/validate-deployment.sh
+
+# Individual component validation
+./scripts/test-deployment-triggers.sh  # Cloud Build triggers
+./scripts/validate-cloud-run.sh        # Service accessibility
+./scripts/validate-database.sh         # Database connectivity
+./scripts/validate-gcs.sh              # Storage operations
+```
+
+**Validation Documentation**:
+- [Deployment Validation Guide](docs/deployment-validation-guide.md) - How to run validations
+- [Validation Results](docs/deployment-validation-results.md) - Latest validation status
+- [Troubleshooting Guide](docs/troubleshooting-deployment.md) - Common issues
+- [Rollback Procedures](docs/deployment-rollback-procedure.md) - How to rollback
 
 📚 **Full Deployment Documentation**: See [`docs/cloud-run-deployment.md`](docs/cloud-run-deployment.md) for complete setup instructions, troubleshooting, and configuration details.
 
