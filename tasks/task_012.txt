@@ -667,7 +667,7 @@ Verify domain ownership in Google Cloud Console, map custom domain to Cloud Run 
 ### Details:
 Implement /health or /readiness endpoint in application code, configure Cloud Run startup and liveness probes, set up Cloud Monitoring dashboards for key metrics (request latency, error rates, instance count, CPU/memory usage), configure log aggregation in Cloud Logging with appropriate filters, create alerting policies for critical thresholds (error rate spikes, high latency, resource exhaustion), enable Cloud Trace for request tracing, and set up uptime checks for availability monitoring
 
-## 10. End-to-End Deployment Validation [pending]
+## 10. End-to-End Deployment Validation [in-progress]
 ### Dependencies: 12.6, 12.7, 12.8, 12.9
 ### Description: Perform comprehensive testing and validation of the entire production deployment to ensure all components work together correctly
 ### Details:
@@ -675,6 +675,46 @@ Execute smoke tests against deployed service endpoints, validate HTTPS access th
 <info added on 2025-11-02T14:34:46.504Z>
 Note: End-to-end validation will proceed without custom domain mapping. HTTPS and Custom Domain Mapping has been moved to Task 19 and will be handled separately. Smoke tests should focus on service functionality, database operations, file operations, environment configuration, and autoscaling behavior. Domain validation will be performed as part of Task 19 and is no longer a dependency for this subtask.
 </info added on 2025-11-02T14:34:46.504Z>
+<info added on 2025-11-02T14:39:14.672Z>
+Based on the comprehensive research completed for End-to-End Deployment Validation, the following key validation areas have been identified and documented in `docs/task-12.10-end-to-end-validation-research.md`:
+
+1. Service Smoke Tests: Testing service accessibility at Cloud Run URL, MCP protocol handshake, JSON-RPC 2.0 compliance, and error handling validation.
+
+2. Database Operations: Cloud SQL connection testing, connection pooling validation, and query performance testing using existing test files.
+
+3. GCS File Operations: Testing upload/download to GCS bucket, signed URL generation, and bucket permissions validation.
+
+4. Environment Variables & Secrets: Verification of environment variables and Secret Manager access using existing validation scripts.
+
+5. Load Testing & Autoscaling: Testing concurrent request handling, autoscaling behavior (0-10 instances), and request timeout handling.
+
+6. Monitoring & Logging: Validation of Cloud Monitoring metrics, Cloud Logging aggregation, and health check endpoints.
+
+7. Security Audit: Review of IAM permissions, service account configuration, and secret isolation.
+
+Specific MCP tools and resources have been identified for testing, along with existing validation infrastructure. The Cloud Run service configuration has been documented with memory, CPU, timeout, and concurrency settings.
+
+Required deliverables include a comprehensive validation script, test results report, deployment and rollback documentation, troubleshooting guide, and Cloud Monitoring dashboard configuration.
+</info added on 2025-11-02T14:39:14.672Z>
+<info added on 2025-11-02T15:11:43.395Z>
+Based on the deployment investigation, significant technical debt has been identified in our Cloud Build configuration:
+
+1. The production deployment trigger 'production-deployment-init-location' exists but currently requires manual approval, preventing true automation.
+2. No staging trigger has been configured despite having cloudbuild-staging.yaml in the repository.
+3. Current deployments are being performed manually via 'gcloud builds submit' commands.
+4. Documentation incorrectly states that automated deployment is in place.
+5. Several experimental build files need cleanup: cloudbuild-simple.yaml, final-build.yaml, and simple-build.yaml.
+
+Action plan for remediation:
+1. Remove the approval requirement from the production trigger to enable true CI/CD.
+2. Create and configure a staging trigger that targets the dev branch.
+3. Test the automated pipeline end-to-end for both staging and production.
+4. Validate that services deploy correctly through the automated pipeline.
+5. Clean up experimental build configuration files to reduce confusion.
+6. Update deployment documentation to accurately reflect the automated process.
+
+These issues should be addressed before completing the end-to-end validation to ensure we're testing the actual deployment process that will be used in production.
+</info added on 2025-11-02T15:11:43.395Z>
 
 ## 11. Debug Cloud Build Deployment Issues [done]
 ### Dependencies: None
