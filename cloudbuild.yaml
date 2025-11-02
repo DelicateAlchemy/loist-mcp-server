@@ -65,7 +65,9 @@ steps:
       - '--set-env-vars=CORS_ALLOW_HEADERS=Authorization,Content-Type,Range,X-Requested-With,Accept,Origin'
       - '--set-env-vars=CORS_EXPOSE_HEADERS=Content-Range,Accept-Ranges,Content-Length,Content-Type'
       - '--set-env-vars=EMBED_BASE_URL=https://loist.io,ENABLE_METRICS=false'
+      - '--set-env-vars=DB_NAME=loist_mvp,DB_USER=music_library_user'
       - '--update-secrets=DB_CONNECTION_NAME=${_DB_CONNECTION_NAME}:latest'
+      - '--update-secrets=DB_PASSWORD=${_DB_PASSWORD}:latest'
       - '--update-secrets=GCS_BUCKET_NAME=${_GCS_BUCKET_NAME}:latest'
       - '--update-secrets=BEARER_TOKEN=${_BEARER_TOKEN}:latest'
       - '--quiet'
@@ -85,6 +87,7 @@ options:
 substitutions:
   _COMMIT_SHA: 'local-test'
   _DB_CONNECTION_NAME: 'db-connection-name'
+  _DB_PASSWORD: 'db-password'
   _GCS_BUCKET_NAME: 'gcs-bucket-name'
   _BEARER_TOKEN: 'mcp-bearer-token'
 
