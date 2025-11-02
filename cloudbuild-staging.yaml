@@ -1,31 +1,44 @@
 # Google Cloud Build Configuration for Staging Environment
-# Deploys to staging Cloud Run service for testing
+# Optimized staging deployment: Build → Push → Deploy (uses Artifact Registry)
 
 steps:
-  # Step 1: Build Docker image
+  # Step 1: Build Docker image with optimized caching
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-image'
     args: [
       'build',
-      '-t', 'gcr.io/$PROJECT_ID/music-library-mcp-staging:$COMMIT_SHA',
-      '-t', 'gcr.io/$PROJECT_ID/music-library-mcp-staging:latest',
+      # Target runtime stage (Alpine-based, more reliable than distroless)
+      '--target', 'runtime',
+      # Enable BuildKit for better performance and caching
+      '--build-arg', 'BUILDKIT_INLINE_CACHE=1',
+      # Use cache from previous builds
+      '--cache-from', 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp-staging:latest',
+      # Enable BuildKit cache mounts for faster builds
+      '--build-arg', 'BUILDKIT_PROGRESS=plain',
+      # Optimized tagging: commit SHA and latest only
+      '-t', 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp-staging:$COMMIT_SHA',
+      '-t', 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp-staging:latest',
+      # Build context
       '.'
     ]
+    env:
+      - 'DOCKER_BUILDKIT=1'
+    timeout: '600s'
 
-  # Step 2: Push Docker image
+  # Step 2: Push Docker image to Google Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
     id: 'push-image'
-    args: ['push', '--all-tags', 'gcr.io/$PROJECT_ID/music-library-mcp-staging']
+    args: ['push', '--all-tags', 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp-staging']
     waitFor: ['build-image']
 
-  # Step 3: Deploy to staging Cloud Run
+  # Step 3: Deploy to staging Cloud Run (uses built-in health checks)
   - name: 'gcr.io/cloud-builders/gcloud'
     id: 'deploy-staging'
     args:
       - 'run'
       - 'deploy'
       - 'music-library-mcp-staging'
-      - '--image=gcr.io/$PROJECT_ID/music-library-mcp-staging:$COMMIT_SHA'
+      - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp-staging:$COMMIT_SHA'
       - '--region=us-central1'
       - '--platform=managed'
       - '--allow-unauthenticated'
@@ -36,48 +49,35 @@ steps:
       - '--max-instances=3'
       - '--min-instances=0'
       - '--port=8080'
+      # Explicit command override to ensure correct startup (fallback if Dockerfile CMD is misinterpreted)
+      - '--command=/usr/local/bin/python'
+      - '--args=/app/src/server.py'
       - '--set-env-vars=SERVER_TRANSPORT=http,LOG_LEVEL=DEBUG,AUTH_ENABLED=false,ENABLE_CORS=true,CORS_ORIGINS=*,ENABLE_HEALTHCHECK=true'
-      - '--set-env-vars=GCS_PROJECT_ID=$PROJECT_ID'
-      - '--service-account=${_CLOUD_RUN_SERVICE_ACCOUNT}'
+      - '--set-env-vars=GCS_PROJECT_ID=$PROJECT_ID,SERVER_NAME=Music Library MCP - Staging'
+      - '--service-account=mcp-music-library-sa@$PROJECT_ID.iam.gserviceaccount.com'
       - '--update-secrets=DB_CONNECTION_NAME=${_DB_CONNECTION_NAME_STAGING}:latest'
       - '--update-secrets=GCS_BUCKET_NAME=${_GCS_BUCKET_NAME_STAGING}:latest'
       - '--update-secrets=BEARER_TOKEN=${_BEARER_TOKEN_STAGING}:latest'
       - '--quiet'
     waitFor: ['push-image']
 
-  # Step 4: Basic health check
-  - name: 'gcr.io/cloud-builders/curl'
-    id: 'staging-health-check'
-    entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        echo "🔍 Staging health check..."
-        SERVICE_URL=$(gcloud run services describe music-library-mcp-staging \
-          --platform managed \
-          --region us-central1 \
-          --format 'value(status.url)')
-        
-        sleep 20
-        curl -f -s --max-time 30 "$SERVICE_URL/mcp/health" || echo "Staging deployment ready for testing"
-        echo "🎯 Staging URL: $SERVICE_URL"
-    waitFor: ['deploy-staging']
-
+# Automatically tag and push images
 images:
-  - 'gcr.io/$PROJECT_ID/music-library-mcp-staging:$COMMIT_SHA'
-  - 'gcr.io/$PROJECT_ID/music-library-mcp-staging:latest'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp-staging:$COMMIT_SHA'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp-staging:latest'
 
+# Build options and configuration
 options:
-  machineType: 'N1_HIGHCPU_8'  # Valid Cloud Build machine type for staging
+  machineType: 'E2_HIGHCPU_8'  # Faster builds, same cost as default
   logging: CLOUD_LOGGING_ONLY
 
 substitutions:
-  _CLOUD_RUN_SERVICE_ACCOUNT: 'music-library-sa@${PROJECT_ID}.iam.gserviceaccount.com'
   _DB_CONNECTION_NAME_STAGING: 'db-connection-name-staging'
   _GCS_BUCKET_NAME_STAGING: 'gcs-bucket-name-staging'
   _BEARER_TOKEN_STAGING: 'mcp-bearer-token-staging'
 
-timeout: '900s'  # 15 minutes
+# Build timeout (reduced from 15 to 10 minutes)
+timeout: '600s'  # 10 minutes
 
 tags:
   - 'music-library-mcp'

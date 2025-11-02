@@ -29,7 +29,8 @@ class ServerConfig(BaseSettings):
     
     # Server Runtime
     server_host: str = "0.0.0.0"
-    server_port: int = 8080
+    # Cloud Run sets PORT automatically, fallback to 8080 for local development
+    server_port: int = int(os.getenv("PORT", "8080"))
     server_transport: Literal["stdio", "http", "sse"] = "stdio"
     
     # Authentication

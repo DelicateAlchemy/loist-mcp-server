@@ -87,7 +87,6 @@ create_secret() {
         log "Creating new secret: $secret_name"
         echo -n "$secret_value" | gcloud secrets create "$secret_name" \
             --data-file=- \
-            --description="$description" \
             --labels="project=loist-music-library,component=mcp-server,managed-by=script"
     fi
 

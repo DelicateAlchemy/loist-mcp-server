@@ -190,6 +190,8 @@ SERVER_VERSION=0.1.0
 # ... additional variables ...
 ```
 
+📚 **Complete Cloud Run Deployment Guide**: See [`docs/cloud-run-deployment.md`](docs/cloud-run-deployment.md) for comprehensive deployment setup, pipeline configuration, security considerations, and troubleshooting.
+
 ### Environment File (.env)
 
 ```bash

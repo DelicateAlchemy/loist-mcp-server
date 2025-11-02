@@ -1,0 +1,82 @@
+# Task ID: 19
+# Title: Configure Custom Domain Mapping for Cloud Run Service
+# Status: pending
+# Dependencies: 12
+# Priority: low
+# Description: Set up and configure the custom domain mcp.loist.io to replace the default Cloud Run URL for the MCP service, including domain verification, DNS configuration, SSL certificate management, and client configuration updates.
+# Details:
+1. Domain Verification:
+   - Verify ownership of the loist.io domain in Google Cloud Console
+   - Add the required TXT records to the domain's DNS configuration
+   - Complete the verification process in Google Cloud Console
+
+2. DNS Configuration:
+   - Create a new CNAME record for mcp.loist.io pointing to ghs.googlehosted.com
+   - Alternatively, set up an A record with the appropriate Google Cloud IP addresses
+   - Ensure proper TTL settings (recommend starting with 3600 seconds)
+   - Document all DNS changes for future reference
+
+3. SSL Certificate Provisioning:
+   - Use Google-managed SSL certificates for the custom domain
+   - Configure the certificate in Cloud Run settings
+   - Monitor certificate provisioning status (can take up to 24 hours)
+   - Set up automatic renewal of certificates
+
+4. Cloud Run Configuration:
+   - Map the custom domain to the existing Cloud Run service in Google Cloud Console
+   - Update service configuration to accept traffic from the custom domain
+   - Configure proper IAM permissions for the domain mapping
+   - Test the domain mapping configuration
+
+5. MCP Client Configuration Updates:
+   - Update all client configurations to use the new mcp.loist.io domain
+   - Update any hardcoded URLs in application code
+   - Update documentation to reflect the new domain
+   - Create a transition plan for clients still using the old URL
+
+6. Monitoring and Logging:
+   - Set up monitoring for the custom domain
+   - Configure alerts for certificate expiration or domain issues
+   - Implement logging for domain-related events
+
+This task depends on Task 12 (Setup Cloud Run Deployment) being completed successfully.
+
+# Test Strategy:
+1. Domain Verification Testing:
+   - Verify that the domain ownership is confirmed in Google Cloud Console
+   - Check that all required DNS records are properly configured using dig or nslookup
+   - Confirm verification status in Google Cloud Console
+
+2. DNS Configuration Testing:
+   - Use DNS lookup tools (dig, nslookup) to verify CNAME or A records are correctly set
+   - Check propagation of DNS changes across multiple DNS servers
+   - Verify that the domain resolves to the correct IP addresses
+
+3. SSL Certificate Testing:
+   - Verify certificate issuance and validity using browser inspection tools
+   - Check certificate details including expiration date and domain coverage
+   - Test SSL configuration using tools like SSL Labs or testssl.sh
+   - Verify proper HTTPS redirection and security headers
+
+4. Domain Mapping Testing:
+   - Access the application via the custom domain (https://mcp.loist.io)
+   - Verify that all application functionality works correctly with the new domain
+   - Test both HTTP and HTTPS access, ensuring proper redirects
+   - Verify that the old URL still works during transition period
+
+5. Client Configuration Testing:
+   - Test all client applications with updated configurations
+   - Verify API calls work correctly with the new domain
+   - Test authentication and authorization with the new domain
+   - Perform load testing to ensure performance is maintained
+
+6. End-to-End Testing:
+   - Create a comprehensive test plan covering all application features
+   - Test all critical user journeys using the new domain
+   - Verify that monitoring and logging are capturing domain-related events
+   - Document test results and any issues found
+
+7. Security Testing:
+   - Perform security scan on the new domain configuration
+   - Verify that proper security headers are in place
+   - Test for common domain configuration vulnerabilities

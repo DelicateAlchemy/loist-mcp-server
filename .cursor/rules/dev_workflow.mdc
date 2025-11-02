@@ -31,6 +31,7 @@ Task Master offers two primary ways to interact:
 -   Start new projects by running `initialize_project` tool / `task-master init` or `parse_prd` / `task-master parse-prd --input='<prd-file.txt>'` (see [`taskmaster.mdc`](mdc:.cursor/rules/taskmaster.mdc)) to generate initial tasks.json
 -   Begin coding sessions with `get_tasks` / `task-master list` (see [`taskmaster.mdc`](mdc:.cursor/rules/taskmaster.mdc)) to see current tasks, status, and IDs
 -   Determine the next task to work on using `next_task` / `task-master next` (see [`taskmaster.mdc`](mdc:.cursor/rules/taskmaster.mdc)).
+-   **After identifying the next task, immediately use todo list and planning features to break down the work before implementing any code**
 -   Analyze task complexity with `analyze_project_complexity` / `task-master analyze-complexity --research` (see [`taskmaster.mdc`](mdc:.cursor/rules/taskmaster.mdc)) before breaking down tasks
 -   Review complexity report using `complexity_report` / `task-master complexity-report` (see [`taskmaster.mdc`](mdc:.cursor/rules/taskmaster.mdc)).
 -   Select tasks based on dependencies (all marked 'done'), priority level, and ID order
@@ -40,6 +41,8 @@ Task Master offers two primary ways to interact:
 -   Clear existing subtasks if needed using `clear_subtasks` / `task-master clear-subtasks --id=<id>` (see [`taskmaster.mdc`](mdc:.cursor/rules/taskmaster.mdc)) before regenerating
 -   Implement code following task details, dependencies, and project standards
 -   Verify tasks according to test strategies before marking as complete (See [`tests.mdc`](mdc:.cursor/rules/tests.mdc))
+-   **When implementation is complete, create a git commit for the code changes**
+-   **After the git commit, update documentation** following the guidelines below
 -   Mark completed tasks with `set_task_status` / `task-master set-status --id=<id> --status=done` (see [`taskmaster.mdc`](mdc:.cursor/rules/taskmaster.mdc))
 -   Update dependent tasks when implementation differs from original plan using `update` / `task-master update --from=<id> --prompt="..."` or `update_task` / `task-master update-task --id=<id> --prompt="..."` (see [`taskmaster.mdc`](mdc:.cursor/rules/taskmaster.mdc))
 -   Add new tasks discovered during implementation using `add_task` / `task-master add-task --prompt="..." --research` (see [`taskmaster.mdc`](mdc:.cursor/rules/taskmaster.mdc)).
@@ -130,10 +133,24 @@ Taskmaster configuration is managed through two main mechanisms:
     - Implementation details
     - Subtasks (if they exist)
     - Contextual suggested actions
+- **Critical**: After running `next_task`, immediately use todo list and planning features to break down the work before implementing any code
 - Recommended before starting any new development work
 - Respects your project's dependency structure
 - Ensures tasks are completed in the appropriate sequence
 - Provides ready-to-use commands for common task actions
+
+## Next Task Workflow Sequence
+
+**When `next_task` is called, follow this exact sequence:**
+
+1. **Run `next_task`** to identify the next work item
+2. **Immediately use todo list and planning features** to break down the task into manageable steps
+3. **Analyze complexity** if needed using `analyze_project_complexity`
+4. **Expand into subtasks** using `expand_task` if the task is complex
+5. **Implement code** following the planned approach
+6. **Create git commit** when implementation is complete
+7. **Update documentation** after the commit
+8. **Mark task complete** and move to next task
 
 ## Viewing Specific Task Details
 
@@ -206,6 +223,65 @@ Once a task has been broken down into subtasks using `expand_task` or similar me
 
 10. **Proceed to Next Subtask:**
     *   Identify the next subtask (e.g., using `next_task` / `task-master next`).
+
+## Documentation Management
+
+### README.md Updates
+
+**Update README.md for significant changes, but break off detailed documentation:**
+
+- **README.md Purpose**: High-level overview, quick start, architecture overview
+- **When to Update README.md**:
+  - New major features or capabilities
+  - Significant architecture changes
+  - Installation or setup procedure changes
+  - Breaking API changes
+- **When to Create Separate Docs**:
+  - Detailed configuration guides (>500 words)
+  - Complex deployment procedures
+  - API reference documentation
+  - Troubleshooting guides
+  - Architecture deep-dives
+
+### Documentation Organization
+
+**Use `docs/` directory for detailed documentation:**
+
+```
+docs/
+├── environment-variables.md     # Configuration reference
+├── cloud-run-deployment.md      # Deployment procedures
+├── api-endpoints.md            # API documentation
+└── troubleshooting.md          # Common issues & solutions
+```
+
+### Documentation Standards
+
+- **File Naming**: `kebab-case.md` (e.g., `cloud-run-deployment.md`)
+- **Structure**: Table of contents, clear headings, code examples
+- **Cross-references**: Link between related documents
+- **Version Updates**: Update docs when code changes affect documented procedures
+
+### Documentation Updates in Task Workflow
+
+**Include documentation updates in task implementation:**
+
+1. **During Implementation**: Note documentation impact in subtask details
+2. **Before Completion**: Update relevant documentation files
+3. **Commit Separately**: Create separate commit for documentation changes
+4. **Cross-reference**: Ensure README.md links to detailed docs when appropriate
+
+### Documentation Commit Guidelines
+
+```
+docs: Update cloud run deployment guide (Task 12.3)
+
+- Add comprehensive pipeline documentation
+- Include security scanning procedures
+- Document environment variable configuration
+- Add troubleshooting section
+- Files: docs/cloud-run-deployment.md, README.md
+```
 
 ## Code Analysis & Refactoring Techniques
 
