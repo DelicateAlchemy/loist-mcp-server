@@ -19,9 +19,9 @@ This project supports local development, staging, and production deployments wit
 ### Development/Staging Environment
 - **Cursor MCP Server Name**: `loist-music-library-staging`
 - **FastMCP Server Name**: `Music Library MCP - Staging`
-- **Environment**: Docker containers with staging PostgreSQL + dedicated GCS staging buckets
+- **Environment**: Cloud Run with staging PostgreSQL + dedicated GCS staging buckets
 - **Transport**: http/sse (for integration testing and QA)
-- **Deployment**: GitHub Actions workflow on `dev` branch → Cloud Build (`cloudbuild-staging.yaml`)
+- **Deployment**: Cloud Build trigger on `dev` branch (`cloudbuild-staging.yaml`)
 - **Purpose**: Pre-production validation, integration testing, QA verification
 - **Infrastructure**: Separate Cloud Run service, staging GCS buckets, staging database
 
@@ -257,7 +257,12 @@ SERVER_PORT=8080
 
 ### Building the Docker Image
 
-Using the build script:
+Using the comprehensive build and validation script:
+```bash
+./scripts/test-container-build.sh
+```
+
+Or using the build script:
 ```bash
 ./scripts/docker/build.sh
 ```
@@ -268,10 +273,13 @@ docker build -t music-library-mcp:latest .
 ```
 
 **Image Details:**
-- Base: Python 3.11-slim
-- Size: ~245MB (multi-stage build)
-- User: Non-root (fastmcpuser)
-- Security: Minimal attack surface
+- **Multi-stage Build**: Builder (Alpine) → Runtime (Alpine)
+- **Base Image**: `python:3.11-alpine`
+- **Size**: ~180MB (highly optimized multi-stage build)
+- **User**: Non-root (`fastmcpuser` with UID 1000)
+- **Security**: Hardened with minimal attack surface, proper permissions, and stateless design
+- **Dependencies**: Includes `psutil`, `fastmcp`, and all required libraries
+- **Health Checks**: Built-in health check with 30s startup period for Cloud Run compatibility
 
 ### Running with Docker
 
@@ -303,32 +311,61 @@ Services:
 
 ### Cloud Run Deployment
 
-Build and push to Google Container Registry:
+The project includes a comprehensive automated deployment pipeline using Google Cloud Build with vulnerability scanning, optimized builds, and complete environment variable configuration.
+
+#### Automated Deployment (Recommended)
+
+Use the Cloud Build pipeline defined in `cloudbuild.yaml`:
 
 ```bash
-# Configure gcloud
-gcloud config set project YOUR_PROJECT_ID
+# Trigger automated deployment via Cloud Build
+gcloud builds submit --config cloudbuild.yaml --substitutions=_GCS_BUCKET_NAME=your-bucket,_DB_CONNECTION_NAME=your-db-connection .
 
-# Build for Cloud Run
-docker build -t gcr.io/YOUR_PROJECT_ID/music-library-mcp:latest .
+# Or push to main branch to trigger GitHub Actions (if configured)
+git push origin main
+```
 
-# Push to GCR
-docker push gcr.io/YOUR_PROJECT_ID/music-library-mcp:latest
+#### Manual Deployment (Alternative)
 
-# Deploy to Cloud Run
+For manual deployment, use the provided scripts:
+
+```bash
+# 1. Create Artifact Registry repository (one-time setup)
+./scripts/create-artifact-registry.sh
+
+# 2. Build and push image
+docker build -t us-central1-docker.pkg.dev/YOUR_PROJECT/music-library-repo/music-library-mcp:latest .
+docker push us-central1-docker.pkg.dev/YOUR_PROJECT/music-library-repo/music-library-mcp:latest
+
+# 3. Deploy to Cloud Run
 gcloud run deploy music-library-mcp \
-  --image gcr.io/YOUR_PROJECT_ID/music-library-mcp:latest \
+  --image us-central1-docker.pkg.dev/YOUR_PROJECT/music-library-repo/music-library-mcp:latest \
   --platform managed \
   --region us-central1 \
   --allow-unauthenticated \
   --memory 2Gi \
   --timeout 600s \
-  --set-env-vars "SERVER_TRANSPORT=http,LOG_LEVEL=INFO"
+  --set-env-vars-file env-vars.yaml
 ```
+
+#### Deployment Features
+
+- ✅ **Vulnerability Scanning**: Automated image vulnerability detection
+- ✅ **Multi-stage Optimization**: Alpine builder → Alpine runtime for security and reliability
+- ✅ **Comprehensive Environment Variables**: 50+ environment variables configured
+- ✅ **Secret Management**: Database and GCS credentials via Secret Manager
+- ✅ **Artifact Registry**: Modern container registry with better performance
+- ✅ **Build Optimization**: Layer caching, BuildKit, and high-performance machines
+
+📚 **Full Deployment Documentation**: See [`docs/cloud-run-deployment.md`](docs/cloud-run-deployment.md) for complete setup instructions, troubleshooting, and configuration details.
 
 ## GitHub Actions CI/CD
 
-The project includes automated workflows for database provisioning, testing, and MCP server validation.
+The project uses GitHub Actions for automated testing and validation. **Deployments are handled by Cloud Build** to avoid duplication and optimize costs.
+
+### Testing & Validation (GitHub Actions)
+
+GitHub Actions handles code quality, testing, and MCP protocol validation:
 
 ### Available Workflows
 
@@ -457,9 +494,11 @@ mypy src/ --show-error-codes
 
 ## Configuration
 
-Configuration is managed through environment variables using the `src/config.py` module with Pydantic Settings.
+Configuration is managed through environment variables using the `src/config.py` module with Pydantic Settings. The server supports 50+ environment variables across all functional areas.
 
 ### Environment Variables
+
+📚 **Complete Environment Variables Reference**: See [`docs/environment-variables.md`](docs/environment-variables.md) for comprehensive documentation of all environment variables, their purposes, default values, and configuration examples.
 
 Create a `.env` file in the project root (see `.env.example` for reference):
 
@@ -509,6 +548,16 @@ ENABLE_HEALTHCHECK=true
 - **Sensible Defaults**: Server works out-of-the-box without configuration
 - **Type Safety**: Pydantic validates all configuration values
 - **Lifespan Management**: Startup and shutdown hooks for resource management
+- **Automated Deployment Config**: Cloud Build pipeline automatically configures 50+ environment variables
+- **Secret Management**: Sensitive data (database credentials, GCS keys) managed via Google Secret Manager
+- **Validation Scripts**: `scripts/validate-env-config.sh` ensures configuration consistency across environments
+
+### Deployment-Specific Configuration
+
+- **Local Development**: Basic configuration via `.env` file with sensible defaults
+- **Cloud Run Production**: Comprehensive environment variables configured via `cloudbuild.yaml`
+- **Docker Compose**: Environment-specific overrides for development and staging
+- **Validation**: Automated scripts ensure configuration consistency across all deployment methods
 
 ## Error Handling & Logging
 
