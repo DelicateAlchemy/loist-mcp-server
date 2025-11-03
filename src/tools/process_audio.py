@@ -419,9 +419,9 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
         
         # Generate embed URL
         from config import config
-        logger.debug(f"[PROCESS_AUDIO DEBUG] config.embed_base_url = {config.embed_base_url}")
+        logger.info(f"[EMBED_URL_DEBUG] config.embed_base_url = {config.embed_base_url}")
         embed_url = f"{config.embed_base_url}/embed/{pipeline.audio_id}"
-        logger.debug(f"[PROCESS_AUDIO DEBUG] embed_url = {embed_url}")
+        logger.info(f"[EMBED_URL_DEBUG] Generated embed_url = {embed_url}")
         
         # Build response using Pydantic models for validation
         response = ProcessAudioOutput(
