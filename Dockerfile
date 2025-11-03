@@ -68,6 +68,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
 # Copy application code with proper permissions
 COPY --chown=fastmcpuser:fastmcpuser src/ ./src/
+COPY --chown=fastmcpuser:fastmcpuser database/ ./database/
+COPY --chown=fastmcpuser:fastmcpuser templates/ ./templates/
 
 # Ensure proper permissions and remove any world-writable files
 RUN find /app -type f -exec chmod 644 {} \; && \
