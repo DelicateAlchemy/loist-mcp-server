@@ -201,3 +201,10 @@ class ServerConfig(BaseSettings):
 # Global configuration instance
 config = ServerConfig()
 
+# Debug logging for environment variable loading (temporary for troubleshooting)
+import sys
+if config.log_level.upper() == "DEBUG":
+    print(f"[CONFIG DEBUG] embed_base_url = {config.embed_base_url}", file=sys.stderr)
+    print(f"[CONFIG DEBUG] EMBED_BASE_URL env var = {os.getenv('EMBED_BASE_URL', 'NOT SET')}", file=sys.stderr)
+    print(f"[CONFIG DEBUG] .env file exists = {os.path.exists('.env')}", file=sys.stderr)
+
