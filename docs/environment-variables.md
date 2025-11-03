@@ -128,6 +128,8 @@ Cross-Origin Resource Sharing settings for HTTP endpoints.
 |----------|-------------|---------|---------|
 | `EMBED_BASE_URL` | Base URL for embed links and oEmbed endpoints | "https://loist.io" | "https://your-domain.com" |
 
+**Note:** In Cloud Run deployments, this is overridden via `--set-env-vars` to support separate staging and production domains (e.g., `staging.loist.io` vs `loist.io`).
+
 ## Feature Flags
 
 | Variable | Description | Default | Example |
