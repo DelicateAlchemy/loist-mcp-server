@@ -81,8 +81,8 @@ USER fastmcpuser
 
 # Environment variables (can be overridden at runtime)
 
-# Server Identity
-ENV SERVER_NAME="Music Library MCP"
+# Server Identity (set at runtime for environment-specific names)
+# ENV SERVER_NAME - Set via Cloud Run --set-env-vars per environment
 ENV SERVER_VERSION="0.1.0"
 ENV SERVER_INSTRUCTIONS="MCP server for audio ingestion and embedding. Use health_check to verify server status. Future capabilities will include audio file processing and embedding generation."
 
