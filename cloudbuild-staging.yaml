@@ -1,6 +1,6 @@
 # Google Cloud Build Configuration for Staging Environment
 # Optimized staging deployment: Build → Push → Deploy (uses Artifact Registry)
-# Staging embeds: https://music-library-mcp-staging-7de5nxpr4q-uc.a.run.app/embed/{audioId}
+# Staging embeds: https://staging.loist.io/embed/{audioId}
 
 steps:
   # Step 1: Build Docker image with optimized caching
@@ -55,7 +55,7 @@ steps:
       - '--args=/app/src/server.py'
       - '--set-env-vars=SERVER_TRANSPORT=http,LOG_LEVEL=DEBUG,AUTH_ENABLED=false,ENABLE_CORS=true,CORS_ORIGINS=*,ENABLE_HEALTHCHECK=true'
       - '--set-env-vars=GCS_PROJECT_ID=$PROJECT_ID,SERVER_NAME=Music Library MCP - Staging'
-      - '--set-env-vars=EMBED_BASE_URL=https://music-library-mcp-staging-7de5nxpr4q-uc.a.run.app'
+      - '--set-env-vars=EMBED_BASE_URL=https://staging.loist.io'
       - '--set-env-vars=DB_NAME=loist_mvp,DB_USER=music_library_user,DB_PORT=5432'
       - '--service-account=mcp-music-library-sa@$PROJECT_ID.iam.gserviceaccount.com'
       - '--update-secrets=DB_CONNECTION_NAME=${_DB_CONNECTION_NAME_STAGING}:latest'
