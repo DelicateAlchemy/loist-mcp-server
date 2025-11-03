@@ -7,12 +7,21 @@ set -e
 echo "Running database migrations..."
 
 # Use Cloud Build service account to access secrets
-DB_PASSWORD=$(gcloud secrets versions access latest --secret=db-password-staging --format="value" 2>/dev/null || echo "")
-DB_CONNECTION_NAME=$(gcloud secrets versions access latest --secret=db-connection-name-staging --format="value" 2>/dev/null || echo "")
+echo "Authenticating with service account..."
+gcloud auth list
+echo "Testing secret access..."
+
+DB_PASSWORD=$(gcloud secrets versions access latest --secret=db-password-staging --format="value" 2>&1 || echo "")
+DB_CONNECTION_NAME=$(gcloud secrets versions access latest --secret=db-connection-name-staging --format="value" 2>&1 || echo "")
 DB_NAME=loist_mvp_staging
 
-if [ -z "$DB_PASSWORD" ] || [ -z "$DB_CONNECTION_NAME" ]; then
-    echo "Database secrets not available, skipping migrations"
+echo "DB_PASSWORD length: ${#DB_PASSWORD}"
+echo "DB_CONNECTION_NAME: $DB_CONNECTION_NAME"
+
+if [ -z "$DB_PASSWORD" ] || [ -z "$DB_CONNECTION_NAME" ] || [[ "$DB_PASSWORD" == *"ERROR"* ]]; then
+    echo "Database secrets not available or access failed, skipping migrations"
+    echo "DB_PASSWORD: '$DB_PASSWORD'"
+    echo "DB_CONNECTION_NAME: '$DB_CONNECTION_NAME'"
     exit 0
 fi
 
