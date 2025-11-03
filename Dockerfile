@@ -130,8 +130,8 @@ ENV CORS_ALLOW_METHODS="GET,POST,OPTIONS"
 ENV CORS_ALLOW_HEADERS="Authorization,Content-Type,Range,X-Requested-With,Accept,Origin"
 ENV CORS_EXPOSE_HEADERS="Content-Range,Accept-Ranges,Content-Length,Content-Type"
 
-# Embed Configuration
-ENV EMBED_BASE_URL="https://loist.io"
+# Embed Configuration (set at runtime via Cloud Run --set-env-vars)
+# ENV EMBED_BASE_URL - Do not set default, must be configured per environment
 
 # Feature Flags
 ENV ENABLE_METRICS="false"

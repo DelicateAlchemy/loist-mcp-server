@@ -12,13 +12,11 @@ class ServerConfig(BaseSettings):
     """Server configuration with environment variable support"""
     
     model_config = SettingsConfigDict(
-        # Only read .env file in local development (file won't exist in Cloud Run)
-        env_file=".env" if os.path.exists(".env") else None,
+        # Read .env file if it exists (local dev), gracefully ignore if missing (production)
+        env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
-        # Ensure environment variables always take precedence over defaults
-        env_ignore_empty=False,
     )
     
     # Server Identity
