@@ -83,7 +83,6 @@ images:
 options:
   machineType: 'E2_HIGHCPU_8'  # Faster builds, same cost as default
   logging: CLOUD_LOGGING_ONLY
-  serviceAccount: 'mcp-music-library-sa@loist-music-library.iam.gserviceaccount.com'
 
 substitutions:
   _DB_CONNECTION_NAME_STAGING: 'db-connection-name-staging'
