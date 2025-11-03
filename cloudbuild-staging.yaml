@@ -1,5 +1,6 @@
 # Google Cloud Build Configuration for Staging Environment
 # Optimized staging deployment: Build → Push → Deploy (uses Artifact Registry)
+# Staging embeds: https://music-library-mcp-staging-7de5nxpr4q-uc.a.run.app/embed/{audioId}
 
 steps:
   # Step 1: Build Docker image with optimized caching
