@@ -18,6 +18,7 @@ The deployment uses Google Cloud Build with an optimized `cloudbuild.yaml` pipel
 
 - [Prerequisites](#prerequisites)
 - [Required Setup](#required-setup)
+- [Staging Environment](#staging-environment)
 - [Cloud Build Pipeline](#cloud-build-pipeline)
 - [Environment Variables](#environment-variables)
 - [Deployment Process](#deployment-process)
@@ -138,6 +139,61 @@ gcloud sql users create music_library_user \
   --instance=loist-music-library-db \
   --password=your-secure-password \
   --project=loist-music-library
+```
+
+## Staging Environment
+
+The staging environment provides a complete testing environment that mirrors production with the following key differences:
+
+### Staging Database Setup
+
+- **Database Name**: `loist_mvp_staging` (separate from production `music_library`)
+- **Automatic Creation**: Cloud Build creates the staging database if it doesn't exist
+- **Schema Migration**: Full schema applied during deployment
+- **Data Isolation**: Completely separate from production data
+
+### Staging Configuration
+
+```yaml
+# Staging-specific environment variables
+EMBED_BASE_URL=https://staging.loist.io
+SERVER_NAME=Music Library MCP - Staging
+LOG_LEVEL=DEBUG
+AUTH_ENABLED=false
+DB_NAME=loist_mvp_staging
+```
+
+### Staging Deployment Pipeline
+
+The `cloudbuild-staging.yaml` includes additional steps for staging setup:
+
+1. **Build & Push**: Optimized Docker image for staging
+2. **Database Setup**: Create `loist_mvp_staging` database if needed
+3. **Secret Updates**: Ensure staging secrets use correct database name
+4. **Migration**: Apply database schema to staging database
+5. **Deploy**: Deploy to Cloud Run with staging configuration
+
+### EMBED_BASE_URL Configuration Fix
+
+**Issue Fixed**: Dockerfile ENV defaults were preventing runtime overrides.
+
+**Solution Applied**:
+- Removed `EMBED_BASE_URL="https://loist.io"` from Dockerfile
+- Updated Pydantic config to handle missing `.env` files gracefully
+- Cloud Run runtime injection now works: `EMBED_BASE_URL=https://staging.loist.io`
+
+**Verification**: MCP `process_audio_complete` returns `urlEmbedLink: "https://staging.loist.io/embed/{uuid}"`
+
+### Staging Testing
+
+Use the comprehensive test script to verify staging deployment:
+
+```bash
+# Run full staging deployment and EMBED_BASE_URL test
+./scripts/test-staging-deployment.sh
+
+# Or test EMBED_BASE_URL fix specifically
+./scripts/test-embed-url-fix.sh
 ```
 
 ## Cloud Build Pipeline

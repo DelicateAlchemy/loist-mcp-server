@@ -33,7 +33,23 @@ steps:
     args: ['push', '--all-tags', 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp-staging']
     waitFor: ['build-image']
 
-  # Step 3: Run database migrations (if needed)
+  # Step 3: Ensure staging database exists
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'create-staging-db'
+    entrypoint: 'bash'
+    args: ['scripts/create-staging-database.sh']
+    env:
+      - 'CLOUDSDK_CORE_PROJECT=loist-music-library'
+
+  # Step 4: Update staging secrets if needed
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'update-staging-secrets'
+    entrypoint: 'bash'
+    args: ['scripts/update-staging-secrets.sh']
+    env:
+      - 'CLOUDSDK_CORE_PROJECT=loist-music-library'
+
+  # Step 5: Run database migrations (if needed)
   - name: 'gcr.io/cloud-builders/docker'
     id: 'migrate-db'
     entrypoint: 'bash'
@@ -72,7 +88,7 @@ steps:
       - '--update-secrets=GCS_BUCKET_NAME=${_GCS_BUCKET_NAME_STAGING}:latest'
       - '--update-secrets=BEARER_TOKEN=${_BEARER_TOKEN_STAGING}:latest'
       - '--quiet'
-    waitFor: ['migrate-db']
+    waitFor: ['create-staging-db', 'update-staging-secrets', 'migrate-db']
 
 # Automatically tag and push images
 images:
