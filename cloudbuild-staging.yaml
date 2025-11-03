@@ -1,6 +1,7 @@
-# Google Cloud Build Configuration for Staging Environment
+# Google Cloud Build Configuration for Staging Environment  
 # Optimized staging deployment: Build → Push → Deploy (uses Artifact Registry)
 # Staging embeds: https://staging.loist.io/embed/{audioId}
+# Force rebuild: 2025-11-03
 
 steps:
   # Step 1: Build Docker image with optimized caching
