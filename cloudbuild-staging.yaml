@@ -57,7 +57,7 @@ steps:
       - '--set-env-vars=SERVER_TRANSPORT=http,LOG_LEVEL=DEBUG,AUTH_ENABLED=false,ENABLE_CORS=true,CORS_ORIGINS=*,ENABLE_HEALTHCHECK=true'
       - '--set-env-vars=GCS_PROJECT_ID=$PROJECT_ID,SERVER_NAME=Music Library MCP - Staging'
       - '--set-env-vars=EMBED_BASE_URL=https://staging.loist.io'
-      - '--set-env-vars=DB_NAME=loist_mvp,DB_USER=music_library_user,DB_PORT=5432'
+      - '--set-env-vars=DB_NAME=loist_mvp_staging,DB_USER=music_library_user,DB_PORT=5432'
       - '--service-account=mcp-music-library-sa@$PROJECT_ID.iam.gserviceaccount.com'
       - '--update-secrets=DB_CONNECTION_NAME=${_DB_CONNECTION_NAME_STAGING}:latest'
       - '--update-secrets=DB_PASSWORD=${_DB_PASSWORD_STAGING}:latest'
