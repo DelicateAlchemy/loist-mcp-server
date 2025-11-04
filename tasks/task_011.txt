@@ -176,7 +176,7 @@ Local environment configuration created and validated:
 ### Details:
 Configure the application to use real GCS buckets for thumbnails and audio files. Test uploading, retrieving, and generating signed URLs for these resources. Ensure the fixed FastMCP decorators work correctly with GCS operations.
 
-## 5. Validate MCP Tools Functionality [pending]
+## 5. Validate MCP Tools Functionality [done]
 ### Dependencies: 11.1, 11.2, 11.3, 11.4, 11.9
 ### Description: Ensure all Music Content Platform tools work in the local Docker environment.
 ### Details:

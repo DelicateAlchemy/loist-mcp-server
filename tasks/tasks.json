@@ -895,7 +895,7 @@
             9
           ],
           "details": "Test each MCP tool and feature to verify they function correctly in the local Docker environment. Address any issues that arise during testing. Confirm that the FastMCP decorator fix works for all routes.",
-          "status": "pending"
+          "status": "done"
         },
         {
           "id": 6,
