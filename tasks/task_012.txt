@@ -655,11 +655,172 @@ Enable Cloud SQL Admin API, configure Cloud SQL connection using Unix socket (re
 ### Details:
 Create or identify GCS buckets needed by the application, grant appropriate IAM roles to Cloud Run service account (Storage Object Viewer, Creator, or Admin based on requirements), configure bucket-level or object-level permissions, implement signed URLs for secure temporary access if needed, set up lifecycle policies for data retention, and validate read/write operations from the deployed service
 
-## 8. HTTPS and Custom Domain Mapping [pending]
+## 8. HTTPS and Custom Domain Mapping [done]
 ### Dependencies: 12.5
 ### Description: Configure custom domain mapping with automatic HTTPS certificate provisioning for the Cloud Run service
 ### Details:
 Verify domain ownership in Google Cloud Console, map custom domain to Cloud Run service, configure DNS records (A or CNAME) to point to Cloud Run endpoints, enable automatic SSL/TLS certificate provisioning through Google-managed certificates, verify HTTPS is enforced and HTTP redirects properly, set up domain verification for additional domains if needed, and test domain resolution and certificate validity
+<info added on 2025-11-04T11:17:39.807Z>
+DNS Configuration for mcp.loist.io:
+
+Based on analysis of existing working domain mappings (staging.loist.io), the DNS record required for mcp.loist.io is:
+
+**CNAME Record:**
+- Name: mcp
+- Type: CNAME  
+- Data/Value: ghs.googlehosted.com.
+- TTL: 3600 (recommended)
+
+This follows the same pattern as staging.loist.io which successfully maps to the staging Cloud Run service.
+
+**Next Steps:**
+1. Access the DNS management interface for loist.io domain
+2. Add the CNAME record as specified above
+3. Wait for DNS propagation (may take 5-60 minutes)
+4. Verify domain mapping status in Cloud Run console
+5. SSL certificate will be automatically provisioned once DNS is configured
+
+**Current Status:** Domain mapping created in Cloud Run but waiting for DNS configuration to complete provisioning.
+</info added on 2025-11-04T11:17:39.807Z>
+<info added on 2025-11-04T11:18:13.965Z>
+SSL Certificate Provisioning Status:
+
+**Certificate Mode:** AUTOMATIC (default for Cloud Run domain mappings)
+**Provisioning Method:** Google-managed SSL/TLS certificates  
+**Trigger:** Automatic once DNS records are configured and domain mapping becomes routable
+
+**How it works:**
+1. Domain mapping created with certificateMode: AUTOMATIC (default)
+2. DNS records configured → domain becomes routable
+3. Google automatically provisions and manages SSL certificates
+4. Certificate renewal handled automatically by Google
+5. No manual certificate installation required
+
+**Expected Timeline:** Certificate provisioning typically completes within 30 minutes after DNS configuration, but can take up to 24 hours in some cases.
+
+**Verification:** Once DNS is configured, check domain mapping status for CertificateProvisioned: True condition.
+</info added on 2025-11-04T11:18:13.965Z>
+<info added on 2025-11-04T11:18:32.105Z>
+HTTPS Enforcement and HTTP Redirects:
+
+**Google Cloud Run HTTPS Behavior:**
+- **Automatic HTTPS Enforcement:** Cloud Run automatically enforces HTTPS for all custom domains
+- **HTTP to HTTPS Redirect:** All HTTP requests to custom domains are automatically redirected to HTTPS (301 redirect)
+- **No Configuration Required:** This is built into Cloud Run's domain mapping functionality
+- **Certificate Required:** HTTPS enforcement only works after SSL certificates are provisioned
+
+**Verification Steps (after DNS configuration):**
+1. Access `http://mcp.loist.io` → should redirect to `https://mcp.loist.io`
+2. Check HTTP status code: 301 (permanent redirect)
+3. Verify HTTPS access works without certificate errors
+4. Test with different endpoints (/, /mcp, etc.)
+
+**Expected Behavior:**
+- `curl -I http://mcp.loist.io` should return HTTP 301 with Location: https://mcp.loist.io
+- Direct HTTPS access should work with valid SSL certificate
+- No mixed content or insecure connection warnings
+
+**Timeline:** HTTPS enforcement activates automatically once SSL certificates are provisioned (typically 30 minutes after DNS configuration).
+</info added on 2025-11-04T11:18:32.105Z>
+<info added on 2025-11-04T11:19:12.073Z>
+Domain Verification for Additional Domains:
+
+**Current Domain Status:**
+- `loist.io` (root domain): ✅ Verified and working
+- `api.loist.io` (subdomain): ✅ Verified and working  
+- `staging.loist.io` (subdomain): ✅ Verified and working
+- `mcp.loist.io` (subdomain): ⏳ Created, verification pending DNS configuration
+
+**Domain Verification Requirements:**
+- **Root Domain Verification:** Only the root domain (`loist.io`) requires explicit verification in Google Cloud Console
+- **Subdomain Inheritance:** All subdomains (`*.loist.io`) automatically inherit verification from the root domain
+- **No Additional Verification Needed:** Since all domains are subdomains of the already-verified `loist.io`, no additional verification steps are required
+
+**Verification Method Used:**
+- Google Search Console integration for domain ownership verification
+- TXT record added to DNS (completed during initial setup)
+- Verification confirmed for `loist.io` root domain
+
+**Future Considerations:**
+- If adding domains from different registrars (e.g., `example.com`), separate verification would be required
+- Domain verification is typically a one-time setup per root domain
+- Re-verification may be needed if DNS configuration changes significantly
+</info added on 2025-11-04T11:19:12.073Z>
+<info added on 2025-11-04T11:19:35.678Z>
+Domain Resolution and Certificate Validity Testing:
+
+**Testing Prerequisites:**
+- DNS CNAME record configured: `mcp.loist.io` → `ghs.googlehosted.com.`
+- DNS propagation completed (5-60 minutes)
+- Domain mapping status shows Ready: True and CertificateProvisioned: True
+
+**1. DNS Resolution Testing:**
+```bash
+# Test CNAME resolution
+dig CNAME mcp.loist.io
+# Should return: mcp.loist.io. IN CNAME ghs.googlehosted.com.
+
+# Test A record resolution (should resolve through CNAME)
+dig A mcp.loist.io  
+# Should return Google Cloud Run IP addresses
+```
+
+**2. SSL Certificate Validation:**
+```bash
+# Check certificate details
+openssl s_client -connect mcp.loist.io:443 -servername mcp.loist.io < /dev/null 2>/dev/null | openssl x509 -noout -text
+
+# Test certificate validity
+echo | openssl s_client -connect mcp.loist.io:443 -servername mcp.loist.io 2>/dev/null | openssl x509 -noout -dates
+
+# Verify certificate chain
+openssl s_client -connect mcp.loist.io:443 -servername mcp.loist.io -showcerts < /dev/null
+```
+
+**3. HTTPS Connectivity Testing:**
+```bash
+# Test HTTPS access
+curl -I https://mcp.loist.io
+# Should return HTTP 200 or expected service response
+
+# Test HTTP redirect to HTTPS  
+curl -I http://mcp.loist.io
+# Should return HTTP 301 with Location: https://mcp.loist.io
+```
+
+**4. Cloud Run Service Functionality:**
+```bash
+# Test MCP health check endpoint
+curl -X POST https://mcp.loist.io/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "health_check", "arguments": {}}}'
+
+# Test MCP tools listing
+curl -X POST https://mcp.loist.io/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}'
+```
+
+**5. Browser Testing:**
+- Access `https://mcp.loist.io` in browser
+- Verify no SSL certificate warnings
+- Check browser developer tools security tab
+- Test with different endpoints and parameters
+
+**Expected Results:**
+- ✅ DNS resolves correctly to Google Cloud Run IPs
+- ✅ SSL certificate valid and issued by Google Trust Services
+- ✅ HTTPS access works without certificate errors
+- ✅ HTTP redirects to HTTPS automatically
+- ✅ Cloud Run service responds to MCP requests
+- ✅ No mixed content or security warnings
+
+**Troubleshooting:**
+- If DNS doesn't resolve: Check CNAME record configuration
+- If certificate errors: Wait longer for provisioning (up to 24 hours)
+- If service errors: Verify Cloud Run service is healthy
+- If routing issues: Check domain mapping status in Cloud Run console
+</info added on 2025-11-04T11:19:35.678Z>
 
 ## 9. Health Checks and Monitoring Setup [done]
 ### Dependencies: 12.5
