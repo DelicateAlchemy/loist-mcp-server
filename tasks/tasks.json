@@ -881,7 +881,7 @@
             9
           ],
           "details": "Configure the application to use real GCS buckets for thumbnails and audio files. Test uploading, retrieving, and generating signed URLs for these resources. Ensure the fixed FastMCP decorators work correctly with GCS operations.",
-          "status": "pending"
+          "status": "done"
         },
         {
           "id": 5,
