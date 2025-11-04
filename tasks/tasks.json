@@ -905,9 +905,11 @@
             1,
             2,
             3,
-            9
+            9,
+            "15.1",
+            5
           ],
-          "details": "Test the oEmbed endpoint with various valid and invalid URLs. Verify response format, error handling, and parameter processing. Ensure the @mcp.custom_route() decorator is working correctly for the oEmbed endpoint.",
+          "details": "Test the oEmbed endpoint with various valid and invalid URLs. Verify response format, error handling, and parameter processing. Ensure the @mcp.custom_route() decorator is working correctly for the oEmbed endpoint.\n<info added on 2025-11-04T11:35:53.495Z>\n**Testing Strategy Update**\n\nDue to dependencies on Task 5 (Audio Processing), we need to revise our testing approach:\n\n**Immediate Testing (No Dependencies):**\n- Invalid URL testing with wrong domains, malformed UUIDs, missing parameters, and non-existent endpoints\n- Parameter processing for `maxwidth`/`maxheight` using mock data\n- Response format structure validation\n- Error handling verification\n- Endpoint accessibility testing for `/oembed`\n- FastMCP `@mcp.custom_route()` decorator functionality verification\n- Basic connectivity and routing tests\n\n**Deferred Testing (Requires Task 5 Completion):**\n- Valid URL testing with actual audio UUIDs\n- Full end-to-end testing with real data\n\nDocument test cases clearly, separating those that can be completed now versus those that require actual audio data. Create mock response structures to validate format compliance while waiting for real data availability.\n</info added on 2025-11-04T11:35:53.495Z>\n<info added on 2025-11-04T11:39:57.153Z>\n**Updated Dependencies - Added Task 15.1 and Task 5**\n\nAfter review of all open subtasks, I've identified that Task 11.6 has additional dependencies that weren't originally captured:\n\n**New Dependencies Added:**\n1. **Task 15.1** (Define Staging Environment Architecture) - Required for proper testing environment setup\n2. **Task 5** (Audio Processing Implementation) - Required for real audio data to test valid URLs\n\n**Complete Dependency Chain:**\n- ✅ 11.1, 11.2, 11.3, 11.9 (already satisfied)\n- ✅ **15.1** (staging architecture - needed for proper test environment)\n- ❌ **Task 5** (audio processing - needed for real audio data)\n\n**Why Task 15.1 is Required:**\n- oEmbed endpoint testing requires a properly configured staging environment\n- Docker setup, database connectivity, and GCS access all depend on staging architecture\n- The `/embed/{uuid}` URLs in oEmbed responses need to work in staging context\n\n**Why Task 5 is Required:**\n- Testing \"valid URLs\" requires actual audio UUIDs from processed audio files\n- Database needs real metadata for oEmbed responses\n- GCS needs real signed URLs for thumbnail images\n\n**Current Status:** Task 11.6 is blocked until Task 15.1 and Task 5 are completed.\n</info added on 2025-11-04T11:39:57.153Z>",
           "status": "pending"
         },
         {
@@ -918,7 +920,9 @@
             1,
             2,
             3,
-            9
+            9,
+            "15.1",
+            5
           ],
           "details": "Inspect HTML responses to verify Open Graph and Twitter Card meta tags are correctly included and populated with appropriate values. Test with various metadata combinations to ensure proper rendering.",
           "status": "pending"
@@ -930,7 +934,8 @@
           "dependencies": [
             5,
             6,
-            7
+            7,
+            "15.1"
           ],
           "details": "Document and fix any issues discovered during local testing. Ensure all functionality works correctly before proceeding to deployment. Verify that the FastMCP decorator fix is working consistently across all routes.",
           "status": "pending"
