@@ -382,6 +382,17 @@ Validate deployments using the comprehensive validation suite:
 
 📚 **Full Deployment Documentation**: See [`docs/cloud-run-deployment.md`](docs/cloud-run-deployment.md) for complete setup instructions, troubleshooting, and configuration details.
 
+#### Custom Domain & HTTPS Configuration
+
+For production deployments with custom domains and automatic HTTPS:
+
+- **Current Status**: Domain mapping configured but blocked by service readiness issues
+- **Implementation**: Global External Application Load Balancer (recommended)
+- **SSL Certificates**: Google-managed certificates with automatic provisioning
+- **DNS Configuration**: A/AAAA records pointing to load balancer IP
+
+📚 **Custom Domain Setup Guide**: See [`docs/custom-domain-mapping-guide.md`](docs/custom-domain-mapping-guide.md) for comprehensive HTTPS and custom domain implementation.
+
 ## GitHub Actions CI/CD
 
 The project uses GitHub Actions for automated testing and validation. **Deployments are handled by Cloud Build** to avoid duplication and optimize costs.
