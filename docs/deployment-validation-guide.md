@@ -212,7 +212,7 @@ Archive reports for compliance and troubleshooting.
 - [Rollback Procedures](./deployment-rollback-procedure.md)
 - [Troubleshooting Guide](./troubleshooting-deployment.md)
 - [Cloud Run Deployment](./cloud-run-deployment.md)
-- [MCP Testing](./local-testing-mcp.md)
+- [MCP Testing](./mcp-testing-guide.md)
 
 ---
 

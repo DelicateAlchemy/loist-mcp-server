@@ -2,7 +2,7 @@
 
 ## Server Overview
 
-Your MCP server is a **Music Library MCP Server** built with FastMCP that provides audio processing, storage, and embedding capabilities. It's currently configured to run on `stdio` transport by default.
+Your MCP server is a **Music Library MCP Server** built with FastMCP that provides audio processing, storage, and embedding capabilities. It's designed for **Google Cloud Run deployment** and defaults to `http` transport for web compatibility.
 
 ## Available MCP Tools
 
@@ -12,28 +12,33 @@ Your MCP server is a **Music Library MCP Server** built with FastMCP that provid
 - **Usage**: Basic connectivity test
 - **Example**: `health_check()`
 
-### 2. `process_audio_complete(source, options=None)`
+### 2. `process_audio_complete(source, options=None)` - **Async**
 - **Purpose**: Complete audio processing pipeline
 - **Parameters**:
   - `source`: Dict with `type`, `url`, `headers`, `filename`, `mimeType`
   - `options`: Dict with `maxSizeMB`, `timeout`, `validateFormat`
 - **Returns**: Audio ID, metadata, and resource URIs
 - **Pipeline**: Download → Extract metadata → Upload to GCS → Save to DB
-- **Example**: 
+- **Example**:
   ```python
-  await process_audio_complete(
+  result = await process_audio_complete(
       source={"type": "http_url", "url": "https://example.com/song.mp3"},
       options={"maxSizeMB": 100}
   )
+  print(f"Processed audio ID: {result['audioId']}")
   ```
 
-### 3. `get_audio_metadata(audioId)`
+### 3. `get_audio_metadata(audioId)` - **Async**
 - **Purpose**: Retrieve metadata for processed audio track
 - **Parameters**: `audioId` (UUID string)
 - **Returns**: Complete metadata and resource URIs
-- **Example**: `await get_audio_metadata("550e8400-e29b-41d4-a716-446655440000")`
+- **Example**:
+  ```python
+  metadata = await get_audio_metadata("550e8400-e29b-41d4-a716-446655440000")
+  print(f"Title: {metadata['metadata']['Product']['Title']}")
+  ```
 
-### 4. `search_library(query, filters=None, limit=20, offset=0, sortBy="relevance", sortOrder="desc")`
+### 4. `search_library(query, filters=None, limit=20, offset=0, sortBy="relevance", sortOrder="desc")` - **Async**
 - **Purpose**: Search across all processed audio
 - **Parameters**:
   - `query`: Search string (1-500 chars)
@@ -43,13 +48,14 @@ Your MCP server is a **Music Library MCP Server** built with FastMCP that provid
   - `sortBy`: Field to sort by
   - `sortOrder`: "asc" or "desc"
 - **Returns**: Search results with pagination
-- **Example**: 
+- **Example**:
   ```python
-  await search_library(
+  results = await search_library(
       query="beatles",
       filters={"genre": ["Rock"], "year": {"min": 1960, "max": 1970}},
       limit=20
   )
+  print(f"Found {results['total']} results")
   ```
 
 ## Available MCP Resources
@@ -112,11 +118,48 @@ Your MCP server is a **Music Library MCP Server** built with FastMCP that provid
 
 ## Server Configuration
 
-- **Transport**: `stdio` (default), `http`, or `sse`
-- **Port**: 8080 (when using HTTP/SSE)
-- **Authentication**: Bearer token (optional)
-- **CORS**: Configurable for iframe embedding
+- **Transport**: `http` (default for Cloud Run), `stdio` (for MCP clients), or `sse`
+- **Port**: 8080 (HTTP/SSE), auto-assigned (Cloud Run)
+- **Authentication**: Bearer token (optional, disabled by default)
+- **CORS**: Enabled for iframe embedding
+- **Database**: PostgreSQL (Cloud SQL)
+- **Storage**: Google Cloud Storage (GCS)
 - **Logging**: Configurable level and format
+
+## Prerequisites
+
+Before testing, ensure you have:
+
+1. **Google Cloud Project** with required APIs enabled
+2. **GCS Bucket** for audio file storage
+3. **PostgreSQL Database** (local or Cloud SQL)
+4. **Service Account Key** (optional, uses ADC by default)
+5. **Python Dependencies** installed
+
+### Required Environment Variables
+
+```bash
+# Google Cloud Configuration
+PROJECT_ID=your-gcp-project-id
+GCS_BUCKET_NAME=your-audio-bucket-name
+GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json  # Optional
+
+# Database Configuration
+DB_HOST=localhost  # or Cloud SQL instance IP
+DB_PORT=5432
+DB_NAME=music_library
+DB_USER=your_db_user
+DB_PASSWORD=your_db_password
+
+# Server Configuration
+SERVER_TRANSPORT=http  # or stdio, sse
+SERVER_PORT=8080
+LOG_LEVEL=DEBUG
+
+# Authentication (optional)
+AUTH_ENABLED=false  # Set to true to enable
+BEARER_TOKEN=test-token-123  # Required if AUTH_ENABLED=true
+```
 
 ## Authentication System
 
@@ -395,18 +438,21 @@ curl "http://localhost:8080/oembed?url=https://loist.io/embed/00000000-0000-0000
 
 ### Testing with Docker
 
-#### 1. Build and Run with Docker Compose
+#### 1. Run with Docker Compose (Recommended)
 ```bash
-# From project root
-docker-compose up --build
+# From project root - run MCP server in Docker
+docker-compose run --rm mcp-server python src/server.py
 
 # Server will be available at http://localhost:8080
-# Authentication is disabled by default in docker-compose.yml
+# Authentication is disabled by default
 ```
 
 #### 2. Test Docker Setup
 ```bash
 # Test health check
+curl http://localhost:8080/health_check
+
+# Test MCP health check
 curl http://localhost:8080/mcp/health_check
 
 # Test embed page (if you have audio)
@@ -414,6 +460,18 @@ curl http://localhost:8080/embed/test-audio-id
 
 # Test oEmbed endpoint
 curl "http://localhost:8080/oembed?url=https://loist.io/embed/test-audio-id&maxwidth=500&maxheight=200"
+```
+
+#### 3. Automated Testing Scripts
+```bash
+# Run comprehensive MCP tests
+./test_mcp_tools.sh      # Test all MCP tools
+./test_mcp_resources.sh  # Test all MCP resources
+
+# Validate infrastructure
+./scripts/validate-gcs.sh          # Test GCS bucket access
+./scripts/validate-database.sh     # Test database connectivity
+./scripts/test-container-build.sh  # Test Docker build
 ```
 
 ### Testing MCP Resources
@@ -497,31 +555,50 @@ export SERVER_PORT=8081
 #### 4. GCS Connection Issues
 **Problem**: "No credentials found" or GCS errors
 ```bash
-# Check service account key
-ls -la service-account-key.json
+# Check GCS bucket name
+echo $GCS_BUCKET_NAME
 
-# Set credentials path
+# Test GCS access
+./scripts/validate-gcs.sh
+
+# Check service account key (if using key file)
+ls -la service-account-key.json
 export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account-key.json
+
+# Or use Application Default Credentials
+gcloud auth application-default login
 ```
 
 #### 5. Database Connection Issues
 **Problem**: "Connection refused" or database errors
 ```bash
-# Check if PostgreSQL is running
-docker-compose ps
+# Check database environment variables
+env | grep DB_
 
-# Start database
+# Test database connectivity
+./scripts/validate-database.sh
+
+# For local PostgreSQL
+docker-compose ps
 docker-compose up postgres -d
+
+# For Cloud SQL, check connection string
+echo $DB_CONNECTION_NAME
 ```
 
 #### 6. MCP Client Can't Connect
 **Problem**: MCP client (like Cursor) can't connect to server
 ```bash
-# Check transport mode
+# Check transport mode (default is http for Cloud Run compatibility)
 echo $SERVER_TRANSPORT
 
-# For MCP clients, use stdio
+# For MCP clients like Cursor, use stdio transport
 export SERVER_TRANSPORT=stdio
+python src/server.py
+
+# For HTTP testing (default), use http transport
+export SERVER_TRANSPORT=http
+python src/server.py
 ```
 
 ### Debug Mode
@@ -535,22 +612,37 @@ python src/server.py
 ### Health Check Endpoints
 Test server health at different levels:
 ```bash
-# Basic health check
+# MCP health check
 curl http://localhost:8080/mcp/health_check
+
+# Basic HTTP health check
+curl http://localhost:8080/health_check
 
 # Check server logs
 docker-compose logs mcp-server
 
-# Check database connection
-docker-compose exec mcp-server python -c "from database import test_connection; test_connection()"
+# Test database connectivity
+./scripts/validate-database.sh
+
+# Test GCS connectivity
+./scripts/validate-gcs.sh
 ```
 
 ### Environment Validation
 Verify your environment is properly configured:
 ```bash
-# Check all environment variables
-env | grep -E "(AUTH|SERVER|GCS|DB)"
+# Check all critical environment variables
+env | grep -E "(AUTH|SERVER|GCS|DB|PROJECT_ID)"
 
-# Validate configuration
-python -c "from src.config import config; print(config.validate_credentials())"
+# Validate server configuration
+python -c "from src.config import config; print('Server config loaded successfully')"
+
+# Test GCS access
+./scripts/validate-gcs.sh
+
+# Test database connection
+./scripts/validate-database.sh
+
+# Run full MCP validation
+./test_mcp_tools.sh && ./test_mcp_resources.sh
 ```

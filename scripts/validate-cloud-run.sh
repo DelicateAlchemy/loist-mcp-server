@@ -41,7 +41,7 @@ HTTP_CODE=$(echo "$MCP_RESPONSE" | grep "HTTP_CODE:" | cut -d: -f2)
 if [ "$HTTP_CODE" == "200" ] || [ "$HTTP_CODE" == "405" ] || [ "$HTTP_CODE" == "406" ]; then
     echo "✅ MCP endpoint responding (HTTP $HTTP_CODE)"
     echo "Note: Full MCP protocol testing requires MCP Inspector"
-    echo "      See: docs/local-testing-mcp.md"
+    echo "      See: docs/mcp-testing-guide.md"
 else
     echo "❌ MCP endpoint not responding properly (HTTP $HTTP_CODE)"
     exit 1
