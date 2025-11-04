@@ -47,6 +47,9 @@ services:
       - GCS_BUCKET_NAME=${GCS_BUCKET_NAME:-loist-mvp-audio-files}
       - GCS_PROJECT_ID=${GCS_PROJECT_ID:-}
       
+      # Embed Configuration
+      - EMBED_BASE_URL=https://857daa7fb123.ngrok-free.app
+
       # Python
       - PYTHONUNBUFFERED=1
       - PYTHONDONTWRITEBYTECODE=1

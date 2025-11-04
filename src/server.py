@@ -522,92 +522,102 @@ async def embed_page(request):
     # Extract audioId from path parameters
     audioId = request.path_params['audioId']
     logger.info(f"Embed page requested for audio ID: {audioId}")
-    
+
     try:
         # Get metadata from database
         metadata = get_audio_metadata_by_id(audioId)
-        
-        if not metadata:
-            logger.warning(f"Audio track not found: {audioId}")
-            return HTMLResponse(
-                content="<h1>Audio Not Found</h1><p>The requested audio track could not be found.</p>",
-                status_code=404
-            )
-        
-        # Get GCS paths
-        audio_path = metadata.get("audio_gcs_path")
-        thumbnail_path = metadata.get("thumbnail_gcs_path")
-        
-        if not audio_path:
-            logger.error(f"No audio path for {audioId}")
-            return HTMLResponse(
-                content="<h1>Error</h1><p>Audio file not available.</p>",
-                status_code=500
-            )
-        
-        # Generate signed URLs using cache
-        cache = get_cache()
-        
+    except ValidationError as e:
+        logger.warning(f"Invalid audio ID format for embed: {audioId} - {e}")
+        return HTMLResponse(
+            content="<h1>Invalid Audio ID</h1><p>The audio ID format is invalid.</p>",
+            status_code=400
+        )
+
+    if not metadata:
+        logger.warning(f"Audio track not found: {audioId}")
+        return HTMLResponse(
+            content="<h1>Audio Not Found</h1><p>The requested audio track could not be found.</p>",
+            status_code=404
+        )
+
+    logger.info("Metadata retrieved successfully, getting GCS paths")
+
+    # Get GCS paths
+    audio_path = metadata.get("audio_gcs_path")
+    thumbnail_path = metadata.get("thumbnail_gcs_path")
+    logger.info(f"Audio path: {audio_path}")
+
+    if not audio_path:
+        logger.error(f"No audio path for {audioId}")
+        return HTMLResponse(
+            content="<h1>Error</h1><p>Audio file not available.</p>",
+            status_code=500
+        )
+
+    # Generate signed URLs using cache
+    cache = get_cache()
+
+    try:
+        stream_url = cache.get(audio_path, url_expiration_minutes=15)
+    except Exception as e:
+        logger.error(f"Failed to generate signed URL for audio: {e}")
+        return HTMLResponse(
+            content="<h1>Error</h1><p>Failed to generate audio stream.</p>",
+            status_code=500
+        )
+
+    # Generate thumbnail URL if available
+    thumbnail_url = None
+    if thumbnail_path:
         try:
-            stream_url = cache.get(audio_path, url_expiration_minutes=15)
+            thumbnail_url = cache.get(thumbnail_path, url_expiration_minutes=15)
         except Exception as e:
-            logger.error(f"Failed to generate signed URL for audio: {e}")
-            return HTMLResponse(
-                content="<h1>Error</h1><p>Failed to generate audio stream.</p>",
-                status_code=500
-            )
-        
-        # Generate thumbnail URL if available
-        thumbnail_url = None
-        if thumbnail_path:
-            try:
-                thumbnail_url = cache.get(thumbnail_path, url_expiration_minutes=15)
-            except Exception as e:
-                logger.warning(f"Failed to generate signed URL for thumbnail: {e}")
-                # Continue without thumbnail
-        
-        # Format metadata for template
-        template_metadata = {
-            "Product": {
-                "Title": metadata.get("title", "Untitled"),
-                "Artist": metadata.get("artist", "Unknown Artist"),
-                "Album": metadata.get("album"),
-                "Year": metadata.get("year"),
-            },
-            "Format": {
-                "Duration": metadata.get("duration", 0.0),
-                "Channels": metadata.get("channels", 2),
-                "SampleRate": metadata.get("sample_rate", 44100),
-                "Bitrate": metadata.get("bitrate", 0),
-                "Format": metadata.get("format", "MP3"),
-            }
+            logger.warning(f"Failed to generate signed URL for thumbnail: {e}")
+            # Continue without thumbnail
+
+    # Format metadata for template
+    template_metadata = {
+        "Product": {
+            "Title": metadata.get("title", "Untitled"),
+            "Artist": metadata.get("artist", "Unknown Artist"),
+            "Album": metadata.get("album"),
+            "Year": metadata.get("year"),
+        },
+        "Format": {
+            "Duration": metadata.get("duration", 0.0),
+            "Channels": metadata.get("channels", 2),
+            "SampleRate": metadata.get("sample_rate", 44100),
+            "Bitrate": metadata.get("bitrate", 0),
+            "Format": metadata.get("format", "MP3"),
         }
-        
-        # Format duration for display
-        duration_seconds = metadata.get("duration", 0)
-        minutes = int(duration_seconds // 60)
-        seconds = int(duration_seconds % 60)
-        duration_formatted = f"{minutes}:{seconds:02d}"
-        
-        # Determine MIME type
-        audio_format = metadata.get("format", "MP3").upper()
-        mime_types = {
-            "MP3": "audio/mpeg",
-            "FLAC": "audio/flac",
-            "M4A": "audio/mp4",
-            "OGG": "audio/ogg",
-            "WAV": "audio/wav",
-            "AAC": "audio/aac",
-        }
-        mime_type = mime_types.get(audio_format, "audio/mpeg")
-        
-        logger.info(f"Rendering embed page for: {template_metadata['Product']['Title']}")
-        
-        # Render template
+    }
+
+    # Format duration for display
+    duration_seconds = metadata.get("duration", 0)
+    minutes = int(duration_seconds // 60)
+    seconds = int(duration_seconds % 60)
+    duration_formatted = f"{minutes}:{seconds:02d}"
+
+    # Determine MIME type
+    audio_format = metadata.get("format", "MP3").upper()
+    mime_types = {
+        "MP3": "audio/mpeg",
+        "FLAC": "audio/flac",
+        "M4A": "audio/mp4",
+        "OGG": "audio/ogg",
+        "WAV": "audio/wav",
+        "AAC": "audio/aac",
+    }
+    mime_type = mime_types.get(audio_format, "audio/mpeg")
+
+    logger.info(f"Rendering embed page for: {template_metadata['Product']['Title']}")
+
+    # Render template
+    try:
         # Create a mock request object for Jinja2Templates
         from starlette.requests import Request
         from starlette.datastructures import Headers, URL
-        
+
         # Create minimal request object
         scope = {
             "type": "http",
@@ -615,24 +625,25 @@ async def embed_page(request):
             "headers": [],
             "query_string": b"",
         }
-        request = Request(scope)
-        
+        mock_request = Request(scope)
+
         response = templates.TemplateResponse("embed.html", {
-            "request": request,
+            "request": mock_request,
             "audio_id": audioId,
             "metadata": template_metadata,
             "stream_url": stream_url,
             "thumbnail_url": thumbnail_url,
             "mime_type": mime_type,
-            "duration_formatted": duration_formatted
+            "duration_formatted": duration_formatted,
+            "embed_base_url": config.embed_base_url
         })
-        
+
         # Add security headers for iframe embedding
         response.headers["X-Frame-Options"] = "ALLOWALL"
         response.headers["Content-Security-Policy"] = "frame-ancestors *"
-        
+
         return response
-        
+
     except Exception as e:
         logger.exception(f"Error rendering embed page: {e}")
         return HTMLResponse(
@@ -708,8 +719,15 @@ async def oembed_endpoint(request):
             )
         
         # Get metadata from database
-        metadata = get_audio_metadata_by_id(audio_id)
-        
+        try:
+            metadata = get_audio_metadata_by_id(audio_id)
+        except ValidationError as e:
+            logger.warning(f"Invalid audio ID format for oEmbed: {audio_id} - {e}")
+            return JSONResponse(
+                {"error": "Invalid audio ID format"},
+                status_code=400
+            )
+
         if not metadata:
             logger.warning(f"Audio track not found for oEmbed: {audio_id}")
             return JSONResponse(
@@ -750,7 +768,7 @@ async def oembed_endpoint(request):
             "provider_url": config.embed_base_url,
             "title": title,
             "author_name": artist,
-            "html": f'<iframe src="{embed_url}" width="{maxwidth}" height="{maxheight}" frameborder="0" allow="autoplay" style="border-radius: 12px;"></iframe>',
+            "html": f'<iframe src="{embed_url}?compact=true" width="{maxwidth}" height="{maxheight}" frameborder="0" allow="autoplay" style="border-radius: 12px;"></iframe>',
             "width": maxwidth,
             "height": maxheight,
             "cache_age": 3600,  # Cache for 1 hour
@@ -778,6 +796,38 @@ async def oembed_endpoint(request):
             {"error": "Internal server error"},
             status_code=500
         )
+
+
+@mcp.custom_route("/.well-known/oembed.json", methods=["GET"])
+async def oembed_discovery(request):
+    """
+    oEmbed provider discovery endpoint.
+
+    Returns provider information for oEmbed consumers to discover
+    available endpoints and capabilities.
+
+    Args:
+        request: Starlette Request object
+
+    Returns:
+        JSONResponse: oEmbed provider discovery information
+    """
+    from starlette.responses import JSONResponse
+
+    discovery_response = {
+        "provider_name": "Loist Music Library",
+        "provider_url": config.embed_base_url,
+        "endpoints": [
+            {
+                "url": f"{config.embed_base_url}/oembed",
+                "formats": ["json"],
+                "discovery": True
+            }
+        ]
+    }
+
+    logger.info("oEmbed discovery endpoint accessed")
+    return JSONResponse(discovery_response)
 
 
 def create_http_app():

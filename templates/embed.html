@@ -6,8 +6,8 @@
     <title>{{ metadata.Product.Title }} by {{ metadata.Product.Artist }} - Loist Music Library</title>
     
     <!-- oEmbed Discovery -->
-    <link rel="alternate" type="application/json+oembed" 
-          href="https://loist.io/oembed?url=https://loist.io/embed/{{ audio_id }}&format=json" 
+    <link rel="alternate" type="application/json+oembed"
+          href="{{ embed_base_url }}/oembed?url={{ embed_base_url }}/embed/{{ audio_id }}&format=json"
           title="{{ metadata.Product.Title }}" />
     
     <!-- Open Graph Meta Tags -->
@@ -276,6 +276,65 @@
             font-size: 14px;
         }
         
+        /* Compact view for oEmbed cards */
+        .player-container.compact {
+            max-width: 400px;
+            padding: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .player-container.compact:hover {
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            transform: translateY(-2px);
+        }
+
+        .player-container.compact .controls-container {
+            display: none;
+        }
+
+        .player-container.compact .metadata {
+            text-align: center;
+        }
+
+        .player-container.compact .title {
+            font-size: 16px;
+            margin-bottom: 4px;
+        }
+
+        .player-container.compact .artist {
+            font-size: 14px;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .player-container.compact .album {
+            display: none;
+        }
+
+        .player-container.compact .artwork {
+            width: 60px;
+            height: 60px;
+            margin: 0 auto 12px auto;
+            border-radius: 8px;
+        }
+
+        .player-container.compact .format-badge {
+            display: none;
+        }
+
+        /* Expand button hint */
+        .player-container.compact::after {
+            content: "▶ Click to expand player";
+            position: absolute;
+            bottom: 8px;
+            right: 12px;
+            font-size: 10px;
+            color: var(--text-tertiary);
+            opacity: 0.7;
+            font-weight: 500;
+        }
+
         /* Responsive adjustments */
         @media (max-width: 480px) {
             .player-container {
@@ -284,25 +343,25 @@
                 border-radius: 0;
                 box-shadow: none;
             }
-            
+
             .artwork {
                 width: 60px;
                 height: 60px;
                 min-width: 60px;
             }
-            
+
             .title {
                 font-size: 16px;
             }
-            
+
             .artist {
                 font-size: 13px;
             }
-            
+
             .album {
                 display: none; /* Hide on small screens */
             }
-            
+
             .volume-container {
                 display: none; /* Volume via device controls on mobile */
             }
@@ -331,7 +390,7 @@
     </style>
 </head>
 <body>
-    <div class="player-container" role="region" aria-label="Audio player">
+    <div class="player-container {{ 'compact' if request.query_params.get('compact', 'false').lower() == 'true' else '' }}" role="region" aria-label="Audio player">
         <div class="player-header">
             {% if thumbnail_url %}
             <div class="artwork" 
@@ -632,12 +691,49 @@
                 }
             });
             
+            // Compact/Expanded view toggle
+            const playerContainer = document.querySelector('.player-container');
+            let isCompact = playerContainer.classList.contains('compact');
+
+            function togglePlayerView() {
+                if (!isCompact) return; // Only allow toggling if initially compact
+
+                playerContainer.classList.remove('compact');
+                isCompact = false;
+
+                // Focus on play button for accessibility
+                setTimeout(() => {
+                    playButton.focus();
+                }, 300);
+            }
+
+            // Click to expand functionality
+            if (isCompact) {
+                playerContainer.addEventListener('click', function(e) {
+                    // Don't toggle if clicking on interactive elements
+                    if (e.target.closest('button, input, .progress-container')) {
+                        return;
+                    }
+                    togglePlayerView();
+                });
+
+                playerContainer.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        togglePlayerView();
+                    }
+                });
+            }
+
             // Initialize
             updateVolumeIcon();
             updateVolumePercentage();
-            
+
             // Log player ready
             console.log('Music player initialized for: {{ metadata.Product.Title }}');
+            if (isCompact) {
+                console.log('Player in compact mode - click to expand');
+            }
         })();
     </script>
 </body>
