@@ -10,7 +10,7 @@ from typing import Dict, Any
 import re
 import json
 
-from database import get_audio_metadata_by_id
+from src.repositories import get_audio_repository
 from src.exceptions import ResourceNotFoundError, ValidationError
 
 logger = logging.getLogger(__name__)
@@ -49,9 +49,10 @@ async def get_metadata_resource(uri: str) -> Dict[str, Any]:
         audio_id = match.group(1)
         logger.debug(f"Requesting metadata for ID: {audio_id}")
         
-        # Get metadata from database
+        # Get metadata from repository (decoupled from database)
         try:
-            metadata = get_audio_metadata_by_id(audio_id)
+            repository = get_audio_repository()
+            metadata = repository.get_metadata_by_id(audio_id)
         except Exception as e:
             logger.error(f"Database error fetching metadata: {e}")
             raise

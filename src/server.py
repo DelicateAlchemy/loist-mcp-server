@@ -23,12 +23,16 @@ from auth import SimpleBearerAuth
 # ============================================================================
 # Centralized Exception Import Strategy
 # ============================================================================
-# Import ALL custom exceptions at module level BEFORE FastMCP initialization
-# This ensures they're available in the global namespace when FastMCP's
-# internal serialization code tries to access exception class information.
-# FastMCP serializes exceptions to JSON-RPC, and needs exception classes
-# to be importable/accessible to format error responses correctly.
+# Clean FastMCP Setup - No more workarounds or globals manipulation
 
+from src.fastmcp_setup import (
+    create_fastmcp_server,
+    setup_jinja_templates,
+    validate_server_setup,
+    log_server_startup_info,
+)
+
+# Import exceptions (clean and simple - no complex loading needed)
 from src.exceptions import (
     MusicLibraryError,
     AudioProcessingError,
@@ -40,68 +44,26 @@ from src.exceptions import (
     RateLimitError,
     ExternalServiceError,
     DatabaseOperationError,
-    get_error_code,
-    ERROR_CODES,
 )
 
-def ensure_exceptions_loaded():
-    """
-    Explicitly ensure all custom exceptions are loaded and available.
-    
-    This function performs runtime checks to verify exception classes
-    are accessible, which helps catch import issues early and ensures
-    FastMCP can access them during exception serialization.
-    
-    Returns:
-        dict: Status of exception loading with verification results
-    """
-    exception_classes = {
-        'MusicLibraryError': MusicLibraryError,
-        'AudioProcessingError': AudioProcessingError,
-        'StorageError': StorageError,
-        'ValidationError': ValidationError,
-        'ResourceNotFoundError': ResourceNotFoundError,
-        'TimeoutError': TimeoutError,
-        'AuthenticationError': AuthenticationError,
-        'RateLimitError': RateLimitError,
-        'ExternalServiceError': ExternalServiceError,
-        'DatabaseOperationError': DatabaseOperationError,
-    }
-    
-    # Verify all exceptions are accessible
-    verification = {}
-    for name, exc_class in exception_classes.items():
-        verification[name] = {
-            'available': True,
-            'module': exc_class.__module__,
-            'qualified_name': f"{exc_class.__module__}.{exc_class.__name__}",
-        }
-    
-    # Make exceptions available in global namespace explicitly
-    # This ensures FastMCP's serialization can access them
-    globals().update(exception_classes)
-    
-    logger.debug(f"Loaded {len(exception_classes)} custom exception classes for FastMCP")
-    logger.debug(f"Exception modules: {set(e['module'] for e in verification.values())}")
-    
-    return {
-        'status': 'success',
-        'exceptions_loaded': len(exception_classes),
-        'verification': verification
-    }
-
-# Configure logging FIRST (needed for exception loading function)
+# Configure logging
 config.configure_logging()
 logger = logging.getLogger(__name__)
 
-# Execute exception loading BEFORE FastMCP initialization
-# This ensures exceptions are available when FastMCP is created
-_exception_status = ensure_exceptions_loaded()
-logger.info(f"✅ Exception classes loaded and verified: {_exception_status['exceptions_loaded']} classes")
+# Validate server setup before proceeding
+validation = validate_server_setup()
+if not validation["valid"]:
+    logger.error("❌ Server setup validation failed - cannot proceed")
+    for error in validation["errors"]:
+        logger.error(f"  - {error}")
+    raise RuntimeError("Server setup validation failed")
 
-# Configure Jinja2 templates
-TEMPLATE_DIR = Path(__file__).parent.parent / "templates"
-templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
+logger.info("✅ Server setup validation passed")
+
+# Initialize FastMCP server cleanly
+mcp = create_fastmcp_server()
+
+# Configure Jinja2 templates (already done in setup_jinja_templates)
 
 
 @asynccontextmanager
@@ -133,79 +95,8 @@ else:
     logger.info("🔓 Running without authentication (development mode)")
 
 
-def verify_exceptions_for_fastmcp():
-    """
-    Verify all custom exceptions are accessible before FastMCP initialization.
-    
-    This ensures FastMCP's serialization code can access exception classes
-    when it needs to format error responses. FastMCP may access exception
-    class information via __class__, __name__, __module__, etc.
-    """
-    exceptions_to_verify = [
-        'MusicLibraryError',
-        'AudioProcessingError',
-        'StorageError',
-        'ValidationError',
-        'ResourceNotFoundError',  # The problematic one
-        'TimeoutError',
-        'AuthenticationError',
-        'RateLimitError',
-        'ExternalServiceError',
-        'DatabaseOperationError',
-    ]
-    
-    verification_results = {}
-    all_passed = True
-    
-    for exc_name in exceptions_to_verify:
-        try:
-            exc_class = globals().get(exc_name)
-            if exc_class is None:
-                raise NameError(f"{exc_name} not found in globals()")
-            
-            # Verify we can access class attributes FastMCP might use
-            _ = exc_class.__name__
-            _ = exc_class.__module__
-            _ = exc_class.__bases__
-            
-            verification_results[exc_name] = {
-                'accessible': True,
-                'module': exc_class.__module__,
-                'qualified_name': f"{exc_class.__module__}.{exc_class.__name__}"
-            }
-            logger.debug(f"✅ {exc_name} verified: {verification_results[exc_name]['qualified_name']}")
-        except (NameError, AttributeError) as e:
-            all_passed = False
-            verification_results[exc_name] = {
-                'accessible': False,
-                'error': str(e)
-            }
-            logger.error(f"❌ {exc_name} verification failed: {e}")
-    
-    if not all_passed:
-        logger.error("❌ CRITICAL: Some exception classes are not accessible!")
-        logger.error(f"Failed verifications: {[k for k, v in verification_results.items() if not v.get('accessible', False)]}")
-        raise RuntimeError("Exception classes must be accessible before FastMCP initialization")
-    
-    logger.info(f"✅ All {len(exceptions_to_verify)} exception classes verified and accessible for FastMCP")
-    return verification_results
-
-# Verify exception classes are accessible before FastMCP initialization
-# This ensures FastMCP's serialization code can access them
-_verification_results = verify_exceptions_for_fastmcp()
-
-# Initialize FastMCP server with advanced configuration
-# All custom exceptions are now guaranteed to be in global scope
-mcp = FastMCP(
-    name=config.server_name,
-    instructions=config.server_instructions,
-    lifespan=lifespan,
-    auth=auth,
-    on_duplicate_tools=config.on_duplicate_tools,
-    on_duplicate_resources=config.on_duplicate_resources,
-    on_duplicate_prompts=config.on_duplicate_prompts,
-    include_fastmcp_meta=config.include_fastmcp_meta
-)
+# Log startup information for debugging
+log_server_startup_info()
 
 
 @mcp.tool()
