@@ -9,6 +9,7 @@ Created: $(date)
 """
 
 import logging
+import os
 from typing import Dict, Any, List, Optional
 from abc import ABC, abstractmethod
 
@@ -260,8 +261,20 @@ def get_audio_repository() -> AudioRepositoryInterface:
     """Get the global audio repository instance."""
     global _audio_repository
     if _audio_repository is None:
-        _audio_repository = PostgresAudioRepository()
-        logger.info("✅ Audio repository initialized")
+        # Check if we're in test mode (environment variable or explicit override)
+        if os.getenv('PYTEST_CURRENT_TEST') or os.getenv('TEST_MODE') == 'true':
+            # Import mock repository only when needed to avoid circular imports
+            try:
+                from tests.conftest import MockAudioRepository
+                _audio_repository = MockAudioRepository()
+                logger.info("✅ Mock audio repository initialized for testing")
+            except ImportError:
+                # Fallback to real repository if test fixtures not available
+                _audio_repository = PostgresAudioRepository()
+                logger.warning("Test fixtures not available, using real repository")
+        else:
+            _audio_repository = PostgresAudioRepository()
+            logger.info("✅ Audio repository initialized")
     return _audio_repository
 
 

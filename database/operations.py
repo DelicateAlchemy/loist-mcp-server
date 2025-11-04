@@ -207,6 +207,95 @@ def save_audio_metadata(
         )
 
 
+def _extract_year(year_value: Any) -> Optional[int]:
+    """Extract and validate year value."""
+    if year_value is not None:
+        try:
+            year_int = int(year_value)
+            if year_int < 1800 or year_int > 2100:
+                raise ValidationError(f"Year must be between 1800 and 2100, got: {year_int}")
+            return year_int
+        except (ValueError, TypeError):
+            raise ValidationError(f"Invalid year value: {year_value}")
+    return None
+
+
+def _extract_channels(channels_value: Any) -> Optional[int]:
+    """Extract and validate channels value."""
+    if channels_value is not None:
+        try:
+            channels_int = int(channels_value)
+            if channels_int < 1 or channels_int > 16:
+                raise ValidationError(f"Channels must be between 1 and 16, got: {channels_int}")
+            return channels_int
+        except (ValueError, TypeError):
+            raise ValidationError(f"Invalid channels value: {channels_value}")
+    return None
+
+
+def _validate_audio_metadata(
+    metadata: Dict[str, Any],
+    audio_gcs_path: Optional[str],
+    thumbnail_gcs_path: Optional[str] = None,
+    track_id: Optional[str] = None
+) -> None:
+    """
+    Validate audio metadata and paths.
+
+    Args:
+        metadata: Audio metadata dictionary
+        audio_gcs_path: GCS path to audio file
+        thumbnail_gcs_path: Optional GCS path to thumbnail
+        track_id: Optional track UUID
+
+    Raises:
+        ValidationError: If validation fails
+    """
+    # Validate required fields
+    if not metadata.get('title'):
+        raise ValidationError("Title is required for audio metadata")
+
+    if not metadata.get('format'):
+        raise ValidationError("Format is required for audio metadata")
+
+    if not audio_gcs_path or not audio_gcs_path.startswith('gs://'):
+        raise ValidationError(
+            f"Invalid audio_gcs_path: must start with 'gs://', got: {audio_gcs_path}"
+        )
+
+    if thumbnail_gcs_path and not thumbnail_gcs_path.startswith('gs://'):
+        raise ValidationError(
+            f"Invalid thumbnail_gcs_path: must start with 'gs://', got: {thumbnail_gcs_path}"
+        )
+
+    # Validate year range if provided
+    year = metadata.get('year')
+    if year is not None:
+        try:
+            year_int = int(year)
+            if year_int < 1800 or year_int > 2100:
+                raise ValidationError(f"Year must be between 1800 and 2100, got: {year_int}")
+        except (ValueError, TypeError):
+            raise ValidationError(f"Invalid year value: {year}")
+
+    # Validate channels if provided
+    channels = metadata.get('channels')
+    if channels is not None:
+        try:
+            channels_int = int(channels)
+            if channels_int < 1 or channels_int > 16:
+                raise ValidationError(f"Channels must be between 1 and 16, got: {channels_int}")
+        except (ValueError, TypeError):
+            raise ValidationError(f"Invalid channels value: {channels}")
+
+    # Validate track_id if provided
+    if track_id is not None:
+        try:
+            uuid.UUID(track_id)
+        except ValueError:
+            raise ValidationError(f"Invalid track_id format: {track_id}")
+
+
 def save_audio_metadata_batch(
     metadata_list: List[Dict[str, Any]]
 ) -> Dict[str, Any]:

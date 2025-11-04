@@ -189,35 +189,43 @@ def test_parse_gcs_path_invalid():
 
 
 @pytest.mark.asyncio
-@patch('src.resources.audio_stream.get_audio_metadata_by_id')
 @patch('src.resources.audio_stream.get_cache')
-async def test_audio_stream_success(mock_get_cache, mock_get_metadata, mock_audio_metadata):
+async def test_audio_stream_success(mock_get_cache, mock_repository, mock_audio_metadata):
     """Test successful audio stream resource retrieval"""
-    mock_get_metadata.return_value = mock_audio_metadata
-    
-    # Mock cache
-    mock_cache = Mock()
-    mock_cache.get.return_value = "https://storage.googleapis.com/signed-url"
-    mock_get_cache.return_value = mock_cache
-    
-    uri = "music-library://audio/550e8400-e29b-41d4-a716-446655440000/stream"
-    response = await get_audio_stream_resource(uri)
-    
-    assert response["uri"] == "https://storage.googleapis.com/signed-url"
-    assert response["mimeType"] == "audio/mpeg"  # MP3
-    assert mock_cache.get.called
+    # Set up mock repository with test data
+    mock_repository.save_metadata(mock_audio_metadata, mock_audio_metadata['audio_path'])
+    from src.repositories.audio_repository import set_audio_repository
+    set_audio_repository(mock_repository)
+
+    try:
+        # Mock cache
+        mock_cache = Mock()
+        mock_cache.get.return_value = "https://storage.googleapis.com/signed-url"
+        mock_get_cache.return_value = mock_cache
+
+        uri = "music-library://audio/550e8400-e29b-41d4-a716-446655440000/stream"
+        response = await get_audio_stream_resource(uri)
+
+        assert response["uri"] == "https://storage.googleapis.com/signed-url"
+        assert response["mimeType"] == "audio/mpeg"  # MP3
+        assert mock_cache.get.called
+    finally:
+        set_audio_repository(None)
 
 
 @pytest.mark.asyncio
-@patch('src.resources.audio_stream.get_audio_metadata_by_id')
-async def test_audio_stream_not_found(mock_get_metadata):
+async def test_audio_stream_not_found(mock_repository):
     """Test audio stream resource with non-existent audioId"""
-    mock_get_metadata.return_value = None
-    
-    uri = "music-library://audio/00000000-0000-0000-0000-000000000000/stream"
-    
-    with pytest.raises(ResourceNotFoundError):
-        await get_audio_stream_resource(uri)
+    from src.repositories.audio_repository import set_audio_repository
+    set_audio_repository(mock_repository)
+
+    try:
+        uri = "music-library://audio/00000000-0000-0000-0000-000000000000/stream"
+
+        with pytest.raises(ResourceNotFoundError):
+            await get_audio_stream_resource(uri)
+    finally:
+        set_audio_repository(None)
 
 
 @pytest.mark.asyncio
@@ -243,30 +251,42 @@ def test_audio_headers():
 # ============================================================================
 
 @pytest.mark.asyncio
-@patch('src.resources.metadata.get_audio_metadata_by_id')
-async def test_metadata_resource_success(mock_get_metadata, mock_audio_metadata):
+async def test_metadata_resource_success(mock_repository, mock_audio_metadata):
     """Test successful metadata resource retrieval"""
-    mock_get_metadata.return_value = mock_audio_metadata
-    
-    uri = "music-library://audio/550e8400-e29b-41d4-a716-446655440000/metadata"
-    response = await get_metadata_resource(uri)
-    
-    assert response["mimeType"] == "application/json"
-    assert response["text"] is not None
-    assert "The Beatles" in response["text"]
-    assert "Hey Jude" in response["text"]
+    # Set up mock repository with test data
+    mock_repository.save_metadata(mock_audio_metadata, mock_audio_metadata['audio_path'])
+
+    # Override the global repository for this test
+    from src.repositories.audio_repository import set_audio_repository
+    set_audio_repository(mock_repository)
+
+    try:
+        uri = "music-library://audio/550e8400-e29b-41d4-a716-446655440000/metadata"
+        response = await get_metadata_resource(uri)
+
+        assert response["mimeType"] == "application/json"
+        assert response["text"] is not None
+        assert "The Beatles" in response["text"]
+        assert "Hey Jude" in response["text"]
+    finally:
+        # Reset repository
+        set_audio_repository(None)
 
 
 @pytest.mark.asyncio
-@patch('src.resources.metadata.get_audio_metadata_by_id')
-async def test_metadata_resource_not_found(mock_get_metadata):
+async def test_metadata_resource_not_found(mock_repository):
     """Test metadata resource with non-existent audioId"""
-    mock_get_metadata.return_value = None
-    
-    uri = "music-library://audio/00000000-0000-0000-0000-000000000000/metadata"
-    
-    with pytest.raises(ResourceNotFoundError):
-        await get_metadata_resource(uri)
+    # Set up mock repository with no data
+    from src.repositories.audio_repository import set_audio_repository
+    set_audio_repository(mock_repository)
+
+    try:
+        uri = "music-library://audio/00000000-0000-0000-0000-000000000000/metadata"
+
+        with pytest.raises(ResourceNotFoundError):
+            await get_metadata_resource(uri)
+    finally:
+        set_audio_repository(None)
 
 
 @pytest.mark.asyncio
@@ -283,48 +303,63 @@ async def test_metadata_resource_invalid_uri():
 # ============================================================================
 
 @pytest.mark.asyncio
-@patch('src.resources.thumbnail.get_audio_metadata_by_id')
 @patch('src.resources.thumbnail.get_cache')
-async def test_thumbnail_resource_success(mock_get_cache, mock_get_metadata, mock_audio_metadata):
+async def test_thumbnail_resource_success(mock_get_cache, mock_repository, mock_audio_metadata):
     """Test successful thumbnail resource retrieval"""
-    mock_get_metadata.return_value = mock_audio_metadata
-    
-    # Mock cache
-    mock_cache = Mock()
-    mock_cache.get.return_value = "https://storage.googleapis.com/thumbnail-signed-url"
-    mock_get_cache.return_value = mock_cache
-    
-    uri = "music-library://audio/550e8400-e29b-41d4-a716-446655440000/thumbnail"
-    response = await get_thumbnail_resource(uri)
-    
-    assert response["uri"] == "https://storage.googleapis.com/thumbnail-signed-url"
-    assert response["mimeType"] == "image/jpeg"
-    assert mock_cache.get.called
+    # Set up mock repository with test data
+    mock_repository.save_metadata(mock_audio_metadata, mock_audio_metadata['audio_path'],
+                                mock_audio_metadata['thumbnail_path'])
+    from src.repositories.audio_repository import set_audio_repository
+    set_audio_repository(mock_repository)
+
+    try:
+        # Mock cache
+        mock_cache = Mock()
+        mock_cache.get.return_value = "https://storage.googleapis.com/thumbnail-signed-url"
+        mock_get_cache.return_value = mock_cache
+
+        uri = "music-library://audio/550e8400-e29b-41d4-a716-446655440000/thumbnail"
+        response = await get_thumbnail_resource(uri)
+
+        assert response["uri"] == "https://storage.googleapis.com/thumbnail-signed-url"
+        assert response["mimeType"] == "image/jpeg"
+        assert mock_cache.get.called
+    finally:
+        set_audio_repository(None)
 
 
 @pytest.mark.asyncio
-@patch('src.resources.thumbnail.get_audio_metadata_by_id')
-async def test_thumbnail_resource_no_thumbnail(mock_get_metadata, mock_audio_metadata):
+async def test_thumbnail_resource_no_thumbnail(mock_repository, mock_audio_metadata):
     """Test thumbnail resource when audio has no thumbnail"""
+    # Set up mock repository with audio data but no thumbnail
     mock_audio_metadata["thumbnail_path"] = None
-    mock_get_metadata.return_value = mock_audio_metadata
-    
-    uri = "music-library://audio/550e8400-e29b-41d4-a716-446655440000/thumbnail"
-    
-    with pytest.raises(ResourceNotFoundError, match="Thumbnail not available"):
-        await get_thumbnail_resource(uri)
+    mock_repository.save_metadata(mock_audio_metadata, mock_audio_metadata['audio_path'])
+
+    from src.repositories.audio_repository import set_audio_repository
+    set_audio_repository(mock_repository)
+
+    try:
+        uri = "music-library://audio/550e8400-e29b-41d4-a716-446655440000/thumbnail"
+
+        with pytest.raises(ResourceNotFoundError, match="Thumbnail not available"):
+            await get_thumbnail_resource(uri)
+    finally:
+        set_audio_repository(None)
 
 
 @pytest.mark.asyncio
-@patch('src.resources.thumbnail.get_audio_metadata_by_id')
-async def test_thumbnail_resource_not_found(mock_get_metadata):
+async def test_thumbnail_resource_not_found(mock_repository):
     """Test thumbnail resource with non-existent audioId"""
-    mock_get_metadata.return_value = None
-    
-    uri = "music-library://audio/00000000-0000-0000-0000-000000000000/thumbnail"
-    
-    with pytest.raises(ResourceNotFoundError):
-        await get_thumbnail_resource(uri)
+    from src.repositories.audio_repository import set_audio_repository
+    set_audio_repository(mock_repository)
+
+    try:
+        uri = "music-library://audio/00000000-0000-0000-0000-000000000000/thumbnail"
+
+        with pytest.raises(ResourceNotFoundError):
+            await get_thumbnail_resource(uri)
+    finally:
+        set_audio_repository(None)
 
 
 def test_thumbnail_headers():
@@ -341,56 +376,53 @@ def test_thumbnail_headers():
 # ============================================================================
 
 @pytest.mark.asyncio
-@patch('src.resources.audio_stream.get_audio_metadata_by_id')
-@patch('src.resources.metadata.get_audio_metadata_by_id')
-@patch('src.resources.thumbnail.get_audio_metadata_by_id')
 @patch('src.resources.audio_stream.get_cache')
 @patch('src.resources.thumbnail.get_cache')
 async def test_all_resources_for_track(
     mock_thumb_cache,
     mock_audio_cache,
-    mock_thumb_metadata,
-    mock_meta_metadata,
-    mock_audio_metadata,
-    mock_audio_metadata
+    mock_repository,
+    sample_audio_metadata
 ):
     """Test accessing all resources for a single track"""
-    # Setup mocks
-    mock_audio_metadata.return_value = mock_audio_metadata
-    mock_meta_metadata.return_value = mock_audio_metadata
-    mock_thumb_metadata.return_value = mock_audio_metadata
-    
-    mock_cache = Mock()
-    mock_cache.get.return_value = "https://storage.googleapis.com/signed-url"
-    mock_audio_cache.return_value = mock_cache
-    mock_thumb_cache.return_value = mock_cache
-    
-    audio_id = "550e8400-e29b-41d4-a716-446655440000"
-    
-    # Test audio stream
-    audio_response = await get_audio_stream_resource(
-        f"music-library://audio/{audio_id}/stream"
+    # Setup repository with test data
+    mock_repository.save_metadata(
+        sample_audio_metadata,
+        sample_audio_metadata['audio_path'],
+        sample_audio_metadata['thumbnail_path']
     )
-    assert audio_response["mimeType"] == "audio/mpeg"
-    
-    # Test metadata
-    metadata_response = await get_metadata_resource(
-        f"music-library://audio/{audio_id}/metadata"
-    )
-    assert metadata_response["mimeType"] == "application/json"
-    
-    # Test thumbnail
-    thumbnail_response = await get_thumbnail_resource(
-        f"music-library://audio/{audio_id}/thumbnail"
-    )
-    assert thumbnail_response["mimeType"] == "image/jpeg"
+
+    from src.repositories.audio_repository import set_audio_repository
+    set_audio_repository(mock_repository)
+
+    try:
+        mock_cache = Mock()
+        mock_cache.get.return_value = "https://storage.googleapis.com/signed-url"
+        mock_audio_cache.return_value = mock_cache
+        mock_thumb_cache.return_value = mock_cache
+
+        audio_id = "550e8400-e29b-41d4-a716-446655440000"
+
+        # Test audio stream
+        audio_response = await get_audio_stream_resource(
+            f"music-library://audio/{audio_id}/stream"
+        )
+        assert audio_response["mimeType"] == "audio/mpeg"
+
+        # Test metadata
+        metadata_response = await get_metadata_resource(
+            f"music-library://audio/{audio_id}/metadata"
+        )
+        assert metadata_response["mimeType"] == "application/json"
+
+        # Test thumbnail
+        thumbnail_response = await get_thumbnail_resource(
+            f"music-library://audio/{audio_id}/thumbnail"
+        )
+        assert thumbnail_response["mimeType"] == "image/jpeg"
+    finally:
+        set_audio_repository(None)
 
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-
-<<<<<<< HEAD
-=======
-
-
->>>>>>> task-10-html5-audio-player

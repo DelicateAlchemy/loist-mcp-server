@@ -7,7 +7,7 @@ serialization issues when FastMCP attempts to convert exceptions to JSON-RPC res
 import json
 import logging
 from typing import Any, Dict, Optional, Union
-from src.exceptions import MusicLibraryError
+# Import MusicLibraryError locally to avoid circular imports
 
 logger = logging.getLogger(__name__)
 
@@ -150,6 +150,9 @@ class SafeExceptionSerializer:
                 "message": str(exception),
                 "details": safe_details,
             }
+
+            # Import locally to avoid circular dependency
+            from src.exceptions import MusicLibraryError
 
             # Add additional context for MusicLibraryError subclasses
             if isinstance(exception, MusicLibraryError):

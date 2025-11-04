@@ -52,10 +52,12 @@ async def get_thumbnail_resource(uri: str) -> Dict[str, Any]:
         
         audio_id = match.group(1)
         logger.debug(f"Requesting thumbnail for ID: {audio_id}")
-        
-        # Get metadata from database
+
+        # Get metadata from repository (decoupled from database)
         try:
-            metadata = get_audio_metadata_by_id(audio_id)
+            from src.repositories.audio_repository import get_audio_repository
+            repository = get_audio_repository()
+            metadata = repository.get_metadata_by_id(audio_id)
         except Exception as e:
             logger.error(f"Database error fetching metadata: {e}")
             raise
