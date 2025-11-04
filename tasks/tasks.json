@@ -941,7 +941,7 @@
       "id": 12,
       "title": "Setup Cloud Run Deployment",
       "description": "Configure Docker and Google Cloud Run for production deployment with proper environment variables and security settings.",
-      "status": "in-progress",
+      "status": "done",
       "dependencies": [
         1,
         2,
