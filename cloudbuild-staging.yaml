@@ -18,7 +18,7 @@ steps:
       # Enable BuildKit cache mounts for faster builds
       '--build-arg', 'BUILDKIT_PROGRESS=plain',
       # Optimized tagging: commit SHA and latest only
-      '-t', 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp-staging:$COMMIT_SHA',
+      '-t', 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp-staging:${_COMMIT_SHA}',
       '-t', 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp-staging:latest',
       # Build context
       '.'
@@ -64,7 +64,7 @@ steps:
       - 'run'
       - 'deploy'
       - 'music-library-mcp-staging'
-      - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp-staging:$COMMIT_SHA'
+      - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp-staging:${_COMMIT_SHA}'
       - '--region=us-central1'
       - '--platform=managed'
       - '--allow-unauthenticated'
@@ -92,7 +92,7 @@ steps:
 
 # Automatically tag and push images
 images:
-  - 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp-staging:$COMMIT_SHA'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp-staging:${_COMMIT_SHA}'
   - 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp-staging:latest'
 
 # Build options and configuration
@@ -101,6 +101,7 @@ options:
   logging: CLOUD_LOGGING_ONLY
 
 substitutions:
+  _COMMIT_SHA: 'local-test'
   _DB_CONNECTION_NAME_STAGING: 'db-connection-name-staging'
   _DB_PASSWORD_STAGING: 'db-password-staging'
   _GCS_BUCKET_NAME_STAGING: 'gcs-bucket-name-staging'

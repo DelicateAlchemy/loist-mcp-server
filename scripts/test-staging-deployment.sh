@@ -26,10 +26,13 @@ echo "   Branch: $BRANCH"
 echo "   Config: cloudbuild-staging.yaml"
 echo ""
 
+# Get current commit SHA for build tagging
+COMMIT_SHA=$(git rev-parse --short HEAD)
+
 # Trigger Cloud Build for staging
 BUILD_ID=$(gcloud builds submit . \
     --config=cloudbuild-staging.yaml \
-    --substitutions=BRANCH_NAME=$BRANCH \
+    --substitutions=_COMMIT_SHA=$COMMIT_SHA \
     --project="$PROJECT_ID" \
     --format="value(id)" \
     --quiet 2>&1)

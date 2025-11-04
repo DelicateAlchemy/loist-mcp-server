@@ -11,20 +11,43 @@ echo " Testing EMBED_BASE_URL Configuration Fix"
 echo "========================================="
 echo ""
 
-# Get the actual staging URL from Cloud Run
-echo "Getting staging service URL..."
-STAGING_URL=$(gcloud run services describe music-library-mcp-staging \
-    --project="$PROJECT_ID" \
-    --region=us-central1 \
-    --format="value(status.url)" 2>/dev/null || echo "")
+# Use the custom domain for staging
+STAGING_URL="https://staging.loist.io"
 
-if [ -z "$STAGING_URL" ]; then
-    echo "❌ Could not retrieve staging service URL"
-    echo "Make sure the staging service is deployed and running"
+echo "Using staging domain: $STAGING_URL"
+echo ""
+
+# First test health check
+echo "Testing MCP health_check call..."
+
+# Create MCP health check request
+HEALTH_REQUEST='{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "health_check",
+    "arguments": {}
+  }
+}'
+
+echo "Sending health check request..."
+HEALTH_RESPONSE=$(curl -s -X POST "$STAGING_URL/mcp" \
+    -H "Content-Type: application/json" \
+    -H "Accept: application/json, text/event-stream" \
+    -d "$HEALTH_REQUEST" 2>&1)
+
+echo "Health check response: $HEALTH_RESPONSE"
+echo ""
+
+if echo "$HEALTH_RESPONSE" | grep -q '"result"'; then
+    echo "✅ Health check passed - MCP server is running"
+else
+    echo "❌ Health check failed - MCP server may not be running properly"
+    echo "Response: $HEALTH_RESPONSE"
     exit 1
 fi
 
-echo "Staging URL: $STAGING_URL"
 echo ""
 
 # Test audio processing with MCP call
@@ -36,10 +59,10 @@ TEST_AUDIO_URL="https://tmpfiles.org/dl/6548927/xcd397_04_3yourtaxi_instrumental
 # Create MCP request payload
 MCP_REQUEST='{
   "jsonrpc": "2.0",
-  "id": 1,
+  "id": 2,
   "method": "tools/call",
   "params": {
-    "name": "mcp_loist-music-library-staging_process_audio_complete",
+    "name": "process_audio_complete",
     "arguments": {
       "source": {
         "type": "http_url",
@@ -54,8 +77,9 @@ echo "Request: $MCP_REQUEST"
 echo ""
 
 # Make the HTTP request to the staging server
-RESPONSE=$(curl -s -X POST "$STAGING_URL" \
+RESPONSE=$(curl -s -X POST "$STAGING_URL/mcp" \
     -H "Content-Type: application/json" \
+    -H "Accept: application/json, text/event-stream" \
     -d "$MCP_REQUEST" 2>/dev/null || echo "")
 
 echo "Response: $RESPONSE"
