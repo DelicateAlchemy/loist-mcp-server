@@ -252,53 +252,121 @@ def save_audio_metadata_batch(
     
     track_ids = []
     errors = []
-    
+
+    # Validate all records first and prepare data
+    validated_records = []
+    for idx, record in enumerate(metadata_list):
+        try:
+            metadata = record.get('metadata', {})
+            audio_gcs_path = record.get('audio_gcs_path')
+            thumbnail_gcs_path = record.get('thumbnail_gcs_path')
+            track_id = record.get('track_id')
+
+            # Use the same validation logic as single insert
+            _validate_audio_metadata(
+                metadata=metadata,
+                audio_gcs_path=audio_gcs_path,
+                thumbnail_gcs_path=thumbnail_gcs_path,
+                track_id=track_id
+            )
+
+            # Generate track ID if not provided
+            if track_id is None:
+                track_id = str(uuid.uuid4())
+
+            # Extract validated metadata fields
+            year = _extract_year(metadata.get('year'))
+            channels = _extract_channels(metadata.get('channels'))
+
+            validated_records.append({
+                'id': track_id,
+                'status': 'COMPLETED',
+                'artist': metadata.get('artist'),
+                'title': metadata.get('title'),
+                'album': metadata.get('album'),
+                'genre': metadata.get('genre'),
+                'year': year,
+                'duration_seconds': metadata.get('duration_seconds'),
+                'channels': channels,
+                'sample_rate': metadata.get('sample_rate'),
+                'bitrate': metadata.get('bitrate'),
+                'format': metadata.get('format'),
+                'file_size_bytes': metadata.get('file_size_bytes'),
+                'audio_gcs_path': audio_gcs_path,
+                'thumbnail_gcs_path': thumbnail_gcs_path,
+            })
+
+            track_ids.append(track_id)
+
+        except Exception as e:
+            error_msg = f"Record {idx}: {str(e)}"
+            errors.append(error_msg)
+            logger.error(f"Validation error for record {idx}: {e}")
+            raise ValidationError(f"Batch validation failed: {error_msg}")
+
+    # Perform optimized multi-row insert
     try:
         with get_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                for idx, record in enumerate(metadata_list):
-                    try:
-                        metadata = record.get('metadata', {})
-                        audio_gcs_path = record.get('audio_gcs_path')
-                        thumbnail_gcs_path = record.get('thumbnail_gcs_path')
-                        track_id = record.get('track_id')
-                        
-                        # Validate and insert
-                        result = save_audio_metadata(
-                            metadata=metadata,
-                            audio_gcs_path=audio_gcs_path,
-                            thumbnail_gcs_path=thumbnail_gcs_path,
-                            track_id=track_id
-                        )
-                        
-                        track_ids.append(result['id'])
-                    
-                    except Exception as e:
-                        error_msg = f"Record {idx}: {str(e)}"
-                        errors.append(error_msg)
-                        logger.error(f"Batch insert error for record {idx}: {e}")
-                        # Rollback entire batch on any error
-                        conn.rollback()
-                        raise
-                
-                # Commit entire batch
+                # Build multi-row INSERT query
+                insert_query = """
+                    INSERT INTO audio_tracks (
+                        id, status, artist, title, album, genre, year,
+                        duration_seconds, channels, sample_rate, bitrate,
+                        format, file_size_bytes, audio_gcs_path, thumbnail_gcs_path
+                    ) VALUES
+                """
+
+                # Build VALUES clause for all records
+                values_clauses = []
+                params = []
+
+                for record in validated_records:
+                    values_clauses.append("""
+                        (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """)
+                    params.extend([
+                        record['id'], record['status'], record['artist'], record['title'],
+                        record['album'], record['genre'], record['year'], record['duration_seconds'],
+                        record['channels'], record['sample_rate'], record['bitrate'],
+                        record['format'], record['file_size_bytes'], record['audio_gcs_path'],
+                        record['thumbnail_gcs_path']
+                    ])
+
+                insert_query += ", ".join(values_clauses)
+                insert_query += """
+                    RETURNING id
+                """
+
+                # Execute the multi-row insert
+                cur.execute(insert_query, params)
+                results = cur.fetchall()
+
+                # Verify all records were inserted
+                inserted_count = len(results)
+                if inserted_count != len(validated_records):
+                    raise DatabaseOperationError(
+                        f"Batch insert incomplete: expected {len(validated_records)}, got {inserted_count}"
+                    )
+
+                # Commit the transaction
                 conn.commit()
-                
-                logger.info(f"Successfully saved batch of {len(track_ids)} audio metadata records")
-        
+
+                logger.info(f"Successfully saved batch of {inserted_count} audio metadata records (optimized multi-row insert)")
+
         return {
             'success': True,
-            'inserted_count': len(track_ids),
+            'inserted_count': inserted_count,
             'track_ids': track_ids,
             'errors': []
         }
-    
+
     except Exception as e:
         logger.error(f"Batch metadata save failed: {e}")
         return {
             'success': False,
             'inserted_count': 0,
-            'track_ids': track_ids,
+            'track_ids': [],
             'errors': errors or [str(e)]
         }
 

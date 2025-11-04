@@ -222,25 +222,52 @@ class DatabasePool:
     def _validate_connection(self, conn) -> bool:
         """
         Validate that a connection is still alive and usable.
-        
+
+        Uses optimized validation strategy to reduce expensive queries:
+        - Skip validation for recently used connections
+        - Use lightweight connection state checks first
+        - Only perform full validation when necessary
+
         Args:
             conn: Database connection to validate
-        
+
         Returns:
             True if connection is valid, False otherwise
         """
         if conn is None or conn.closed:
             return False
-        
+
+        # Lightweight validation first - check connection state
         try:
-            # Test the connection with a simple query
+            # Check if connection has been idle too long (configurable threshold)
+            # This avoids expensive queries for healthy connections
+            if hasattr(conn, '_last_validated'):
+                time_since_validation = time.time() - conn._last_validated
+                # Skip full validation if validated within last 30 seconds
+                if time_since_validation < 30:
+                    # Quick state check - much faster than SELECT 1
+                    if not conn.closed and hasattr(conn, 'status'):
+                        conn._last_validated = time.time()
+                        return True
+
+            # Perform full validation with database query
             with conn.cursor() as cur:
+                # Use a very lightweight query
                 cur.execute("SELECT 1")
                 result = cur.fetchone()
-                return result[0] == 1
+
+                if result and result[0] == 1:
+                    # Mark connection as recently validated
+                    conn._last_validated = time.time()
+                    return True
+
         except Exception as e:
             logger.warning(f"Connection validation failed: {e}")
-            return False
+            # Mark connection as invalid
+            if hasattr(conn, '_last_validated'):
+                delattr(conn, '_last_validated')
+
+        return False
     
     def health_check(self) -> Dict[str, Any]:
         """
