@@ -63,6 +63,10 @@ max-complexity = 12
 exclude_dirs = ["tests", "scripts"]
 skips = ["B101", "B601"]  # Skip assert checks and shell usage
 
+[tool.safety]
+# Safety configuration for dependency vulnerability scanning
+# Scans against Safety DB for known vulnerabilities in dependencies
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]

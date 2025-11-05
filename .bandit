@@ -1,0 +1,39 @@
+[bandit]
+# Bandit configuration file for Loist MCP Server
+# Extends default Bandit rules with project-specific security checks
+
+# Exclude directories from scanning
+exclude_dirs = ["tests", "scripts", "__pycache__", ".git"]
+
+# Skip certain tests that are not relevant for this project
+skips = ["B101", "B601", "B404", "B603"]  # Skip assert checks, shell usage, subprocess import, and subprocess without shell
+
+# Severity levels to report (LOW, MEDIUM, HIGH)
+severity = ["LOW", "MEDIUM", "HIGH"]
+
+# Confidence levels to report (LOW, MEDIUM, HIGH)
+confidence = ["LOW", "MEDIUM", "HIGH"]
+
+# Output format (txt, json, xml, html, screen)
+format = json
+
+# Number of processes to use (0 for auto)
+processes = 0
+
+# Base line number for output
+baseline = None
+
+# Recursively scan subdirectories
+recursive = true
+
+# Show only issues with severity >= specified level
+# severity_level = MEDIUM
+
+# Show only issues with confidence >= specified level
+# confidence_level = MEDIUM
+
+# Additional plugins to load
+# plugins =
+
+# Profile to use (empty for all)
+# profile =
