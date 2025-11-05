@@ -50,8 +50,8 @@ steps:
           tests/
 
         # Store test exit code
-        TEST_EXIT_CODE=$?
-        echo "Test exit code: $TEST_EXIT_CODE"
+        test_result=$?
+        echo "Test exit code: $test_result"
 
         # Generate test summary
         echo "📋 Generating test summary..."
@@ -62,7 +62,7 @@ steps:
           "branch": "dev",
           "environment": "staging",
           "test_results": {
-            "exit_code": "$TEST_EXIT_CODE",
+            "exit_code": "$test_result",
             "coverage_required": 70,
             "parallel_execution": true
           }
@@ -70,8 +70,8 @@ steps:
         EOF
 
         # For staging, only warn on test failures (don't block deployment)
-        if [ "$TEST_EXIT_CODE" -ne 0 ]; then
-          echo "⚠️ Tests failed with exit code $TEST_EXIT_CODE (staging - continuing deployment)"
+        if [ "$test_result" -ne 0 ]; then
+          echo "⚠️ Tests failed with exit code $test_result (staging - continuing deployment)"
           echo "Check test artifacts for details"
         else
           echo "✅ All tests passed successfully"

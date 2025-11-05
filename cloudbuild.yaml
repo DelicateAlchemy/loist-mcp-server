@@ -48,8 +48,8 @@ steps:
           tests/
 
         # Store test exit code
-        TEST_EXIT_CODE=$?
-        echo "Test exit code: $TEST_EXIT_CODE"
+        test_result=$?
+        echo "Test exit code: $test_result"
 
         # Generate test summary
         echo "📋 Generating test summary..."
@@ -59,7 +59,7 @@ steps:
           "commit": "$COMMIT_SHA",
           "branch": "main",
           "test_results": {
-            "exit_code": "$TEST_EXIT_CODE",
+            "exit_code": "$test_result",
             "coverage_required": 80,
             "parallel_execution": true
           }
@@ -67,9 +67,9 @@ steps:
         EOF
 
         # Fail build if tests failed
-        if [ "$TEST_EXIT_CODE" -ne 0 ]; then
-          echo "❌ Tests failed with exit code $TEST_EXIT_CODE"
-          exit "$TEST_EXIT_CODE"
+        if [ "$test_result" -ne 0 ]; then
+          echo "❌ Tests failed with exit code $test_result"
+          exit "$test_result"
         fi
 
         echo "✅ All tests passed successfully"
