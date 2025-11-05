@@ -250,11 +250,7 @@ class ExceptionHandler:
         # Import locally to avoid circular dependency
         from ..exceptions import MusicLibraryError
 
-        # Try to get error code from serialized exception
-        if 'error_code' in serialized:
-            return serialized['error_code']
-
-        # Fallback to exception type mapping
+        # Use exception type mapping (prioritize over serialized error_code)
         error_code_map = {
             MusicLibraryError: 'MUSIC_LIBRARY_ERROR',
             ValueError: 'VALIDATION_ERROR',
@@ -270,6 +266,10 @@ class ExceptionHandler:
         for exc_type, code in error_code_map.items():
             if isinstance(exception, exc_type):
                 return code
+
+        # Fallback to serialized error_code if no type mapping found
+        if 'error_code' in serialized:
+            return serialized['error_code']
 
         return 'UNKNOWN_ERROR'
 
