@@ -253,12 +253,145 @@ def test_search_relevance(test_db_manager):
 - **Pagination Testing**: Verify efficient result pagination
 - **Advanced Filtering**: Test search with status, year, format, and rank filters
 
-##### Data Integrity Testing
-- **Constraint Enforcement**: Test foreign keys, unique constraints, check constraints
-- **Data Validation**: Verify application-level validation rules
-- **Consistency Checks**: Ensure data consistency across related tables
-- **Edge Case Handling**: Test NULL values, boundary conditions, special characters
-- **Bulk Operation Validation**: Test integrity during batch operations
+##### Data Integrity and Validation Testing (Task 17.5)
+The data integrity and validation testing infrastructure provides comprehensive testing for database constraints, application-level validation, data consistency, and edge cases.
+
+**ConstraintTests** - Validates database constraint enforcement:
+```python
+from tests.test_data_integrity_validation import ConstraintTests
+
+def test_database_constraints(test_db_manager, db_transaction, clean_database):
+    """Test that all database constraints are properly enforced."""
+    constraint_tests = ConstraintTests()
+
+    # Test unique constraints
+    constraint_tests.test_unique_track_id_constraint(test_db_manager, db_transaction, clean_database)
+
+    # Test check constraints
+    constraint_tests.test_year_range_check_constraint(test_db_manager, db_transaction, clean_database)
+    constraint_tests.test_channels_range_check_constraint(test_db_manager, db_transaction, clean_database)
+    constraint_tests.test_sample_rate_positive_check_constraint(test_db_manager, db_transaction, clean_database)
+    constraint_tests.test_bitrate_positive_check_constraint(test_db_manager, db_transaction, clean_database)
+    constraint_tests.test_file_size_bytes_positive_check_constraint(test_db_manager, db_transaction, clean_database)
+
+    # Test string format constraints
+    constraint_tests.test_audio_gcs_path_format_constraint(test_db_manager, db_transaction, clean_database)
+    constraint_tests.test_thumbnail_gcs_path_format_constraint(test_db_manager, db_transaction, clean_database)
+```
+
+**ValidationTests** - Tests application-level data validation:
+```python
+from tests.test_data_integrity_validation import ValidationTests
+
+def test_application_validation(test_db_manager, db_transaction, clean_database):
+    """Test application-level validation rules."""
+    validation_tests = ValidationTests()
+
+    # Test required field validation
+    validation_tests.test_required_title_validation(test_db_manager, db_transaction, clean_database)
+    validation_tests.test_required_format_validation(test_db_manager, db_transaction, clean_database)
+
+    # Test UUID validation
+    validation_tests.test_uuid_format_validation(test_db_manager, db_transaction, clean_database)
+
+    # Test range validation
+    validation_tests.test_year_validation_range(test_db_manager, db_transaction, clean_database)
+    validation_tests.test_channels_validation_range(test_db_manager, db_transaction, clean_database)
+
+    # Test GCS path validation
+    validation_tests.test_gcs_path_validation(test_db_manager, db_transaction, clean_database)
+```
+
+**ConsistencyTests** - Validates data consistency across operations:
+```python
+from tests.test_data_integrity_validation import ConsistencyTests
+
+def test_data_consistency(test_db_manager, db_transaction, clean_database):
+    """Test data consistency across database operations."""
+    consistency_tests = ConsistencyTests()
+
+    # Test batch operation consistency
+    consistency_tests.test_batch_operation_consistency(test_db_manager, db_transaction, clean_database)
+
+    # Test status update consistency
+    consistency_tests.test_status_update_consistency(test_db_manager, db_transaction, clean_database)
+
+    # Test timestamp consistency
+    consistency_tests.test_timestamp_consistency(test_db_manager, db_transaction, clean_database)
+
+    # Test search vector consistency
+    consistency_tests.test_search_vector_consistency(test_db_manager, db_transaction, clean_database)
+```
+
+**EdgeCaseTests** - Tests edge cases and boundary conditions:
+```python
+from tests.test_data_integrity_validation import EdgeCaseTests
+
+def test_edge_cases(test_db_manager, db_transaction, clean_database):
+    """Test edge cases and boundary conditions."""
+    edge_tests = EdgeCaseTests()
+
+    # Test NULL value handling
+    edge_tests.test_null_value_handling(test_db_manager, db_transaction, clean_database)
+
+    # Test boundary value limits
+    edge_tests.test_boundary_value_limits(test_db_manager, db_transaction, clean_database)
+
+    # Test long string handling
+    edge_tests.test_long_string_handling(test_db_manager, db_transaction, clean_database)
+
+    # Test unicode character handling
+    edge_tests.test_unicode_character_handling(test_db_manager, db_transaction, clean_database)
+
+    # Test special characters
+    edge_tests.test_special_characters_handling(test_db_manager, db_transaction, clean_database)
+
+    # Test empty and whitespace handling
+    edge_tests.test_empty_and_whitespace_handling(test_db_manager, db_transaction, clean_database)
+
+    # Test extreme numeric values
+    edge_tests.test_extreme_numeric_values(test_db_manager, db_transaction, clean_database)
+```
+
+**TestDataGenerator** - Provides diverse test data for comprehensive scenarios:
+```python
+from tests.test_data_integrity_validation import TestDataGenerator
+
+def test_with_comprehensive_data():
+    """Test with comprehensive data scenarios."""
+    generator = TestDataGenerator()
+
+    # Generate comprehensive test dataset
+    test_data = generator.create_comprehensive_test_dataset()
+    assert len(test_data) > 10  # Should have diverse test cases
+
+    # Generate invalid data for negative testing
+    invalid_data = generator.create_invalid_test_dataset()
+    assert len(invalid_data) > 0  # Should have invalid test cases
+
+    # Generate performance test data
+    perf_data = generator.create_performance_test_dataset(1000)
+    assert len(perf_data) == 1000
+
+    # Generate batch test data
+    batch_data = generator.create_batch_test_dataset(5, 10)
+    assert len(batch_data) == 5
+    assert len(batch_data[0]) == 10
+```
+
+**Data Integrity and Validation Testing Features**:
+- **Constraint Enforcement**: Tests all database constraints (unique, check, foreign key)
+- **Application Validation**: Validates business logic rules before database operations
+- **Consistency Checks**: Ensures data remains consistent across operations and tables
+- **Edge Case Coverage**: Tests NULL values, boundaries, unicode, special characters
+- **Boundary Testing**: Validates min/max values for all numeric fields
+- **String Format Validation**: Tests GCS path formats and field length limits
+- **Batch Operation Integrity**: Validates atomicity and consistency in bulk operations
+- **Unicode and Encoding**: Tests international character support and encoding handling
+- **Performance Edge Cases**: Tests with extreme but valid numeric values
+- **Comprehensive Test Data**: Generates diverse scenarios for thorough validation
+- **Negative Testing**: Tests system behavior with intentionally invalid data
+- **Error Recovery**: Validates proper error handling and recovery mechanisms
 
 #### Testing Patterns
 
@@ -1386,4 +1519,4 @@ def test_invalid_token_rejected():
 
 **Last Updated**: November 5, 2025
 **Coverage Target**: 80% (Production), 70% (Staging)
-**Test Categories**: Unit, Integration, Functional, Regression, Migration, Connection Pool Stress, Connection Pool Config, Connection Lifecycle, Transaction Commit/Rollback, Transaction Isolation, Transaction Timeout/Deadlock, Concurrent Transactions, Search Index, Search Query, Search Performance, Search Relevance, Data Integrity
+**Test Categories**: Unit, Integration, Functional, Regression, Migration, Connection Pool Stress, Connection Pool Config, Connection Lifecycle, Transaction Commit/Rollback, Transaction Isolation, Transaction Timeout/Deadlock, Concurrent Transactions, Search Index, Search Query, Search Performance, Search Relevance, Data Integrity, Data Validation, Consistency, Edge Cases
