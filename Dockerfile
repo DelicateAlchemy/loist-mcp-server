@@ -45,7 +45,10 @@ WORKDIR /app
 
 # Install minimal runtime dependencies (Alpine uses apk) with cache mount
 RUN --mount=type=cache,target=/var/cache/apk \
-    apk add --no-cache ca-certificates
+    apk add --no-cache \
+    ca-certificates \
+    postgresql-client \
+    postgresql-dev
 
 # Create non-root user and directories
 RUN addgroup -g 1000 -S fastmcpuser \

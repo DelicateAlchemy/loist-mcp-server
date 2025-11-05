@@ -99,6 +99,49 @@ The testing infrastructure implementation can be verified through the following 
 3. Configure pytest.ini with settings for test discovery, execution, and coverage reporting
 4. Implement base fixtures for application initialization, configuration loading, and logging
 5. Create conftest.py files at appropriate levels to share fixtures between test modules
+<info added on 2025-11-05T14:29:09.507Z>
+**Framework Setup:**
+- Pytest 8.4.2 installed with required plugins (pytest-cov, pytest-mock, pytest-asyncio)
+- pytest.ini configured with comprehensive settings for test discovery, coverage reporting, and custom markers
+- Test directory structure created with unit/, integration/, and functional/ subdirectories
+
+**Configuration:**
+- pytest.ini created with proper test paths, markers (unit, integration, functional), and coverage settings
+- Coverage reporting configured to HTML output with 80% minimum threshold
+- Custom markers registered for different test types
+
+**Fixtures Implementation:**
+- Enhanced conftest.py with application initialization fixtures (test_config, test_app)
+- Added logging setup fixture to reduce test noise
+- Created mock repository fixtures for dependency injection testing
+- Added environment management utilities for test isolation
+
+**Test Structure:**
+- Created subdirectory-specific conftest.py files for unit, integration, and functional tests
+- Added smoke test (test_smoke.py) to verify framework functionality
+- Configured test environment variables for database and authentication settings
+
+**Validation:**
+- Smoke test passes, confirming pytest framework is working correctly
+- Test discovery functioning properly with custom markers
+- No import errors in test environment (circular imports resolved with conditional imports)
+
+**Known Issues:**
+- pytest-postgresql plugin requires PostgreSQL libraries not available in Alpine Docker image
+- Some existing tests may fail due to codebase circular import issues (separate from this subtask)
+- Full integration with database testing will require additional setup in future subtasks
+</info added on 2025-11-05T14:29:09.507Z>
+<info added on 2025-11-05T14:33:52.862Z>
+**Alpine Docker Compatibility Fix:**
+- Identified root cause of pytest-postgresql failure in Alpine Docker images (missing libpq libraries)
+- Added required Alpine packages to Dockerfile: postgresql-client and postgresql-dev
+- Updated Dockerfile with proper cache mounting for efficient builds
+- Verified pytest-postgresql fixtures now create successfully in Alpine containers
+- Confirmed psycopg library can properly load PostgreSQL pq wrapper at runtime
+- Documented solution in development wiki for future reference
+- Updated CI/CD pipeline configuration to include these dependencies
+- Resolved "Known Issue" related to pytest-postgresql in Alpine Docker images
+</info added on 2025-11-05T14:33:52.862Z>
 
 ## 2. Implement Database Testing Infrastructure [pending]
 ### Dependencies: 16.1
