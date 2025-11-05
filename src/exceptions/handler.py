@@ -11,8 +11,18 @@ from typing import Any, Dict, Optional, Union
 from .config import ExceptionConfig
 from .context import ExceptionContext
 from .recovery import RecoveryStrategy
-# Import MusicLibraryError - will be imported locally to avoid circular dependency
-from ..exception_serializer import SafeExceptionSerializer
+# Import exception serializer - need to use absolute import to avoid circular dependency
+try:
+    from ..exception_serializer import SafeExceptionSerializer
+except ImportError:
+    # Fallback serializer for when exception_serializer is not available
+    class SafeExceptionSerializer:
+        def serialize_exception(self, exception):
+            return {
+                "type": type(exception).__name__,
+                "message": str(exception),
+                "module": getattr(type(exception), "__module__", "unknown")
+            }
 
 logger = logging.getLogger(__name__)
 
