@@ -250,9 +250,12 @@ class ExceptionHandler:
         # Import locally to avoid circular dependency
         from ..exceptions import (
             MusicLibraryError, ValidationError, DatabaseOperationError, StorageError,
-            AuthenticationError, TimeoutError, RateLimitError, ExternalServiceError,
+            AuthenticationError, RateLimitError, ExternalServiceError,
             ResourceNotFoundError, AudioProcessingError
         )
+        # Import built-in TimeoutError explicitly to avoid naming conflict
+        import builtins
+        BuiltinTimeoutError = builtins.TimeoutError
 
         # Use exception type mapping (prioritize over serialized error_code)
         # Order matters: more specific types first
@@ -267,11 +270,12 @@ class ExceptionHandler:
             ExternalServiceError: 'EXTERNAL_SERVICE_ERROR',
             ResourceNotFoundError: 'RESOURCE_NOT_FOUND_ERROR',
             AudioProcessingError: 'AUDIO_PROCESSING_ERROR',
-            # General exception types
+            # General exception types (more specific first)
             ValueError: 'VALIDATION_ERROR',  # Fallback for non-MusicLibraryError ValueError
             KeyError: 'MISSING_KEY_ERROR',
             TypeError: 'TYPE_ERROR',
             ConnectionError: 'CONNECTION_ERROR',
+            BuiltinTimeoutError: 'TIMEOUT_ERROR',  # Built-in TimeoutError (subclass of OSError)
             PermissionError: 'PERMISSION_ERROR',
             FileNotFoundError: 'FILE_NOT_FOUND_ERROR',
             OSError: 'OS_ERROR',
