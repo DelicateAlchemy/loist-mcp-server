@@ -9,6 +9,20 @@ This module provides a comprehensive exception handling system that:
 - Integrates cleanly with FastMCP without workarounds
 """
 
+# Import old exception classes for backward compatibility
+from ..exceptions import (
+    MusicLibraryError,
+    AudioProcessingError,
+    StorageError,
+    ValidationError,
+    ResourceNotFoundError,
+    TimeoutError,
+    AuthenticationError,
+    RateLimitError,
+    ExternalServiceError,
+    DatabaseOperationError,
+)
+
 # Temporarily disable new framework imports to resolve circular dependencies
 # TODO: Re-enable after fixing circular import issues
 
@@ -19,6 +33,17 @@ from .recovery import RecoveryStrategy, DatabaseRecoveryStrategy
 from .fastmcp_integration import FastMCPExceptionMiddleware
 
 __all__ = [
+    # Old exception classes for backward compatibility
+    'MusicLibraryError',
+    'AudioProcessingError',
+    'StorageError',
+    'ValidationError',
+    'ResourceNotFoundError',
+    'TimeoutError',
+    'AuthenticationError',
+    'RateLimitError',
+    'ExternalServiceError',
+    'DatabaseOperationError',
     # New unified framework
     'ExceptionHandler',
     'ExceptionConfig',
