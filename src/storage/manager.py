@@ -160,7 +160,7 @@ class FilenameGenerator:
         try:
             uuid.UUID(audio_id)
             return True
-        except (ValueError, AttributeError):
+        except (ValueError, AttributeError, TypeError):
             return False
 
 

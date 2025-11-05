@@ -154,7 +154,7 @@ class TestAudioStorageManager:
     @pytest.fixture
     def mock_gcs_client(self):
         """Mock GCS client."""
-        with patch('src.storage.manager.GCSClient') as mock:
+        with patch('src.storage.gcs_client.GCSClient') as mock:
             client = Mock()
             client.bucket_name = "test-bucket"
             mock.return_value = client
