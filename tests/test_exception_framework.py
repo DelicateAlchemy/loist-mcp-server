@@ -13,6 +13,7 @@ Tests cover:
 import pytest
 import json
 from unittest.mock import Mock, patch, MagicMock
+from src.exceptions import MusicLibraryError
 from src.exceptions_new import (
     ExceptionHandler,
     ExceptionConfig,
@@ -436,7 +437,7 @@ class TestFastMCPIntegration:
 
     def test_create_fastmcp_error_handler(self, handler):
         """Test FastMCP error handler creation."""
-        from src.exceptions.fastmcp_integration import create_fastmcp_error_handler
+        from src.exceptions_new.fastmcp_integration import create_fastmcp_error_handler
 
         error_handler = create_fastmcp_error_handler(handler)
 
@@ -446,10 +447,10 @@ class TestFastMCPIntegration:
 
         assert response["success"] is False
 
-    @patch('src.exceptions.fastmcp_integration.get_mcp_instance')
+    @patch('src.exceptions_new.fastmcp_integration.get_mcp_instance')
     def test_setup_fastmcp_integration(self, mock_get_mcp, handler):
         """Test FastMCP integration setup."""
-        from src.exceptions.fastmcp_integration import setup_fastmcp_exception_handling
+        from src.exceptions_new.fastmcp_integration import setup_fastmcp_exception_handling
 
         mock_mcp = Mock()
         mock_get_mcp.return_value = mock_mcp
@@ -459,7 +460,7 @@ class TestFastMCPIntegration:
 
     def test_global_handler_management(self, handler):
         """Test global exception handler management."""
-        from src.exceptions.fastmcp_integration import (
+        from src.exceptions_new.fastmcp_integration import (
             set_global_exception_handler,
             get_global_exception_handler
         )
@@ -477,7 +478,7 @@ class TestFastMCPIntegration:
 
     def test_initialize_exception_framework(self):
         """Test complete framework initialization."""
-        from src.exceptions.fastmcp_integration import initialize_exception_framework
+        from src.exceptions_new.fastmcp_integration import initialize_exception_framework
 
         handler = initialize_exception_framework()
 
@@ -491,7 +492,7 @@ class TestExceptionFrameworkIntegration:
     def test_end_to_end_exception_handling(self):
         """Test complete exception handling flow."""
         # Initialize framework
-        from src.exceptions.fastmcp_integration import initialize_exception_framework
+        from src.exceptions_new.fastmcp_integration import initialize_exception_framework
 
         handler = initialize_exception_framework()
 

@@ -161,6 +161,11 @@ class CircuitBreakerRecoveryStrategy(RecoveryStrategy):
         self.failure_count += 1
         self.last_failure_time = time.time()
 
+        # Check if we should open the circuit
+        if self.state == "closed" and self.failure_count >= self.failure_threshold:
+            self.state = "open"
+            logger.info(f"Circuit breaker opened after {self.failure_count} failures")
+
     def _reset(self):
         """Reset circuit breaker to closed state."""
         self.failure_count = 0
