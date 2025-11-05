@@ -742,6 +742,145 @@ def test_connection_pool_stress(db_pool):
     assert results.qsize() == 50  # 5 threads * 10 operations each
 ```
 
+### Full-Text Search Testing
+
+Full-text search testing validates PostgreSQL's powerful search capabilities with comprehensive coverage of index creation, query accuracy, performance, and relevance.
+
+#### Search Index Testing
+```python
+from tests.test_full_text_search import SearchIndexTests
+
+def test_search_index_maintenance(test_db_manager):
+    """Test full-text search index creation and updates."""
+    search_tests = SearchIndexTests(test_db_manager)
+
+    # Verify GIN index creation in test schema
+    search_tests.test_search_index_creation()
+
+    # Test automatic search vector updates
+    search_tests.test_search_index_updates()
+
+    # Validate multi-field search vector composition
+    search_tests.test_search_vector_composition()
+```
+
+#### Search Query Testing
+```python
+from tests.test_full_text_search import SearchQueryTests
+
+def test_search_query_patterns(test_db_manager):
+    """Test various search query patterns and accuracy."""
+    search_tests = SearchQueryTests(test_db_manager)
+
+    # Exact word matching
+    search_tests.test_exact_match_search()
+
+    # Multi-word AND operations
+    search_tests.test_multi_word_search()
+
+    # Prefix and suffix matching
+    search_tests.test_prefix_suffix_matching()
+
+    # Fuzzy and partial matching
+    search_tests.test_fuzzy_search_patterns()
+
+    # Result ranking validation
+    search_tests.test_search_ranking()
+
+    # Edge case handling
+    search_tests.test_empty_and_invalid_queries()
+```
+
+#### Search Performance Testing
+```python
+from tests.test_full_text_search import SearchPerformanceTests
+
+def test_search_performance_scaling(test_db_manager):
+    """Test search performance across different dataset sizes."""
+    perf_tests = SearchPerformanceTests(test_db_manager)
+
+    # Small dataset performance (< 0.1s target)
+    perf_tests.test_small_dataset_performance()
+
+    # Medium dataset performance (< 0.2s target)
+    perf_tests.test_medium_dataset_performance()
+
+    # Pagination efficiency
+    perf_tests.test_search_pagination_performance()
+
+    # Advanced filtering performance
+    perf_tests.test_search_with_filters_performance()
+```
+
+#### Search Relevance Testing
+```python
+from tests.test_full_text_search import SearchRelevanceTests
+
+def test_search_relevance_accuracy(test_db_manager):
+    """Test search result relevance and ranking accuracy."""
+    relevance_tests = SearchRelevanceTests(test_db_manager)
+
+    # Ranking matches expected patterns
+    relevance_tests.test_relevance_ranking_accuracy()
+
+    # Multi-field relevance calculation
+    relevance_tests.test_multiple_field_relevance()
+
+    # Score distribution analysis
+    relevance_tests.test_relevance_score_distribution()
+```
+
+#### Full-Text Search Best Practices
+
+**Index Optimization:**
+```sql
+-- ✅ Good: GIN index for full-text search
+CREATE INDEX idx_audio_tracks_fts ON audio_tracks
+USING gin (to_tsvector('english',
+    coalesce(title, '') || ' ' ||
+    coalesce(artist, '') || ' ' ||
+    coalesce(album, '') || ' ' ||
+    coalesce(genre, '')
+));
+```
+
+**Query Construction:**
+```python
+# ✅ Good: Safe parameterized queries with tsquery
+def search_tracks_safe(query_string, limit=20):
+    tsquery_string = ' & '.join(query_string.split())
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT *, ts_rank(search_vector, to_tsquery('english', %s)) as rank
+                FROM audio_tracks
+                WHERE search_vector @@ to_tsquery('english', %s)
+                ORDER BY rank DESC
+                LIMIT %s
+            """, (tsquery_string, tsquery_string, limit))
+            return cur.fetchall()
+
+# ❌ Bad: SQL injection vulnerable
+def search_tracks_unsafe(query_string):
+    # Never construct queries this way
+    sql = f"SELECT * FROM audio_tracks WHERE title ILIKE '%{query_string}%'"
+    # ...
+```
+
+**Performance Considerations:**
+- Use `ts_rank()` for relevance scoring instead of simple `@@` matching
+- Implement pagination with `OFFSET` and `LIMIT` for large result sets
+- Consider `ts_rank_cd()` for cover density ranking in longer documents
+- Use appropriate normalization methods (0, 1, 2, 4, 8, 16, 32) for rank calculation
+- Monitor search performance with `EXPLAIN ANALYZE` for query optimization
+
+**Testing Coverage:**
+- Test with diverse datasets (exact matches, partial matches, unicode text)
+- Validate ranking algorithms with known relevance patterns
+- Performance test with realistic data volumes (100s to 1000s of records)
+- Test edge cases (empty queries, special characters, very long text)
+- Verify search index maintenance during data updates
+
 ## Migration Guide
 
 ### From Direct Database Calls

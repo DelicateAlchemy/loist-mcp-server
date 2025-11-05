@@ -82,6 +82,7 @@ The server implements a layered architecture with clear separation of concerns:
 
 #### Comprehensive Testing Strategy
 - **85%+ Coverage**: Unit, integration, and performance tests
+- **Database Testing Infrastructure**: Complete testing for migrations, connection pools, transactions, full-text search, and data integrity
 - **Automated Validation**: Performance regression detection
 - **Docker Integration**: Isolated test database environment
 - **CI/CD Integration**: Automated testing on every deployment
@@ -172,6 +173,7 @@ pytest tests/test_database_operations_integration.py::TestBatchOperations -v
 - **Performance Testing**: Automated regression detection
 - **Exception Testing**: Unified framework validation
 - **Repository Testing**: Dependency injection and mocking
+- **Full-Text Search Testing**: Index validation, query accuracy, performance, and relevance testing
 
 #### Security Scanning
 ```bash
@@ -621,63 +623,100 @@ For production deployments with custom domains and automatic HTTPS:
 
 📚 **Custom Domain Setup Guide**: See [`docs/custom-domain-mapping-guide.md`](docs/custom-domain-mapping-guide.md) for comprehensive HTTPS and custom domain implementation.
 
-## GitHub Actions CI/CD
+## Cloud Build CI/CD - GitHub Triggers Only
 
-The project uses GitHub Actions for automated testing and validation. **Deployments are handled by Cloud Build** to avoid duplication and optimize costs.
+The project uses **Google Cloud Build exclusively** for all CI/CD operations. GitHub serves only as a trigger mechanism for Cloud Build pipelines.
 
-### Testing & Validation (GitHub Actions)
+### Architecture
 
-GitHub Actions handles code quality, testing, and MCP protocol validation:
-
-### Available Workflows
-
-#### 1. MCP Server Validation (New!)
-**Automated MCP protocol compliance and testing**
-
-| Trigger | Description |
-|---------|-------------|
-| Push to `main`, `develop` | Full validation suite |
-| Pull requests to `main` | Quality gates and compliance checks |
-
-**Features:**
-- 🧪 **Protocol Compliance**: Validates JSON-RPC 2.0 and MCP protocol adherence
-- 🔍 **Error Format Validation**: Ensures standardized error responses
-- ⚡ **Performance Monitoring**: Tracks response times and regression detection
-- 📊 **Quality Gates**: Fails CI on protocol violations or performance issues
-- 📁 **Test Artifacts**: Uploads detailed test results for debugging
-- 💬 **PR Integration**: Comments on pull requests with validation results
-
-#### 2. Database Provisioning
-**Cloud SQL instance management and migrations**
-
-| Action | Description | Trigger |
-|--------|-------------|---------|
-| `provision` | Create Cloud SQL instance | Manual dispatch |
-| `migrate` | Run database migrations | Manual dispatch / Push to main |
-| `test` | Run database tests | Manual dispatch / Pull requests |
-| `health-check` | Verify instance health | Manual dispatch |
-
-### Quick Setup
-
-Configure GitHub Secrets for database workflows:
-
-```bash
-# 1. Create service account and key
-gcloud iam service-accounts create github-actions \
-    --display-name="GitHub Actions CI/CD" \
-    --project=loist-music-library
-
-gcloud iam service-accounts keys create github-actions-key.json \
-    --iam-account=github-actions@loist-music-library.iam.gserviceaccount.com
-
-# 2. Add to GitHub Secrets:
-# - GCLOUD_SERVICE_KEY (contents of github-actions-key.json)
-# - DB_USER (music_library_user)
-# - DB_PASSWORD (from .env.database)
-
-# 3. Clean up local key
-rm github-actions-key.json
 ```
+GitHub (Triggers Only)
+    ↓
+Google Cloud Build (Full CI/CD)
+    ↓
+Production/Staging Deployment
+```
+
+### Cloud Build Pipelines
+
+#### Production Pipeline (`cloudbuild.yaml`)
+**Triggered by pushes to `main` branch**
+
+1. **Unit Tests** - Fast tests without external dependencies (75% coverage required)
+2. **Database Tests** - Integration tests using testcontainers (70% coverage required)
+3. **Migration Check** - Database migration validation
+4. **MCP Validation** - Protocol compliance testing
+5. **Static Analysis** - Code quality checks (black, isort, mypy, flake8, bandit)
+6. **Build & Deploy** - Container build and Cloud Run deployment
+
+#### Staging Pipeline (`cloudbuild-staging.yaml`)
+**Triggered by pushes to `dev` branch**
+
+Same comprehensive pipeline as production but with:
+- Relaxed coverage thresholds (65% unit, 60% database)
+- Warning-only test failures (continues deployment)
+- Staging-specific environment variables and secrets
+
+### Test Strategy
+
+**Marker-based automatic filtering** using root `conftest.py`:
+
+```python
+# Database tests: pytest -m "requires_db" (with testcontainers)
+# Unit tests: pytest -m "not (requires_db or requires_gcs or slow)"
+# GCS tests: pytest -m "requires_gcs"
+```
+
+**Test Execution:**
+
+| Environment | Unit Tests | Database Tests | Failure Behavior |
+|-------------|------------|----------------|------------------|
+| Production  | ✅ Blocking | ✅ Blocking    | Fail build       |
+| Staging     | ⚠️ Warning  | ⚠️ Warning     | Continue deploy  |
+
+### Database Testing with TestContainers
+
+- **Isolated Testing**: Fresh PostgreSQL container per test run
+- **No External Dependencies**: Self-contained CI/CD environment
+- **Parallel Execution**: Tests run concurrently for speed
+- **Production Ready**: Validates real database interactions
+
+### Artifact Storage
+
+All test artifacts automatically stored in Google Cloud Storage:
+- `gs://$PROJECT_ID-build-artifacts/$COMMIT_SHA/`
+- Test results, coverage reports, MCP validation, migration status
+
+### GitHub Configuration
+
+**Minimal trigger workflow** (`.github/workflows/cloud-build-trigger.yml`):
+
+```yaml
+name: Cloud Build Trigger
+on:
+  push:
+    branches: [ main, dev ]
+jobs:
+  trigger-cloud-build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Trigger Cloud Build
+      run: gcloud builds submit --config=cloudbuild.yaml
+```
+
+### Benefits
+
+- ✅ **Single Source of Truth**: All CI/CD logic in Cloud Build
+- ✅ **Cost Effective**: No duplicate GitHub Actions infrastructure
+- ✅ **Better Performance**: Optimized for Google Cloud
+- ✅ **Security**: Secrets in Google Secret Manager
+- ✅ **Scalability**: Handles large builds and complex testing
+
+### Documentation
+
+- [Cloud Build CI/CD Setup](docs/cloud-build-ci-cd-setup.md) - Complete Cloud Build configuration guide
+- [Testing Practices Guide](docs/testing-practices-guide.md) - Comprehensive testing infrastructure
+- [Cloud Run Deployment](docs/cloud-run-deployment.md) - Production deployment details
 
 📚 **Full Documentation:**
 - [Testing Practices Guide](docs/testing-practices-guide.md) - Comprehensive testing infrastructure and CI/CD

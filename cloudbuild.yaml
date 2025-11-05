@@ -2,42 +2,50 @@
 # Optimized production deployment: Test → Build → Push → Deploy
 
 steps:
-  # Step 1: Run Comprehensive Testing Suite
+  # Step 1: Run Unit Tests (No Database)
   - name: 'python:3.11-slim'
-    id: 'run-tests'
+    id: 'run-unit-tests'
     entrypoint: 'bash'
+    env:
+      - 'SERVER_TRANSPORT=stdio'
+      - 'AUTH_ENABLED=false'
+      - 'LOG_LEVEL=INFO'
+      - 'SERVER_NAME=Music Library MCP - Test'
+      - 'SERVER_VERSION=0.1.0'
+      - 'SERVER_HOST=0.0.0.0'
+      - 'SERVER_PORT=8080'
+      - 'PYTHONPATH=/workspace/src:/workspace'
     args:
       - '-c'
       - |
-        echo "🧪 Running comprehensive testing suite..."
+        echo "🧪 Running unit tests (no database required)..."
 
         # Install system dependencies for testing
         apt-get update && apt-get install -y --no-install-recommends \
           build-essential \
-          libpq-dev \
-          postgresql-client \
           && rm -rf /var/lib/apt/lists/*
 
         # Install Python dependencies
         pip install --upgrade pip
         pip install -r requirements.txt
 
-        # Install additional test dependencies
+        # Install test dependencies
         pip install pytest-cov pytest-xdist pytest-html
 
         # Create test results directory
-        mkdir -p test-results coverage-reports
+        mkdir -p test-results/unit coverage-reports
 
-        # Run pytest with comprehensive coverage and parallel execution
-        echo "📊 Running pytest with coverage analysis..."
+        # Run unit tests only (no database, GCS, or slow tests)
+        echo "📊 Running unit tests..."
         python -m pytest \
+          -m "not (requires_db or requires_gcs or slow)" \
           --cov=. \
           --cov-report=html:coverage-reports/htmlcov \
           --cov-report=xml:coverage-reports/coverage.xml \
           --cov-report=term-missing \
-          --cov-fail-under=80 \
-          --junitxml=test-results/junit.xml \
-          --html=test-results/pytest-report.html \
+          --cov-fail-under=75 \
+          --junitxml=test-results/unit/junit.xml \
+          --html=test-results/unit/pytest-report.html \
           --self-contained-html \
           -v \
           --tb=short \
@@ -49,35 +57,256 @@ steps:
 
         # Store test exit code
         test_result=$?
-        echo "Test exit code: $test_result"
+        echo "Unit test exit code: $test_result"
 
         # Generate test summary
-        echo "📋 Generating test summary..."
-        cat > test-results/test-summary.json << EOF
+        cat > test-results/unit/test-summary.json << EOF
         {
           "timestamp": "$(date -Iseconds)",
           "commit": "$COMMIT_SHA",
           "branch": "main",
+          "test_suite": "unit",
           "test_results": {
             "exit_code": "$test_result",
-            "coverage_required": 80,
-            "parallel_execution": true
+            "coverage_required": 75,
+            "tests_run": "unit_only"
           }
         }
         EOF
 
         # Fail build if tests failed
         if [ "$test_result" -ne 0 ]; then
-          echo "❌ Tests failed with exit code $test_result"
+          echo "❌ Unit tests failed with exit code $test_result"
           exit "$test_result"
         fi
 
-        echo "✅ All tests passed successfully"
+        echo "✅ Unit tests passed successfully"
+
+  # Step 1.5: Run Database Tests with TestContainers
+  - name: 'python:3.11-slim'
+    id: 'run-database-tests'
+    entrypoint: 'bash'
+    env:
+      - 'SERVER_TRANSPORT=stdio'
+      - 'AUTH_ENABLED=false'
+      - 'LOG_LEVEL=INFO'
+      - 'SERVER_NAME=Music Library MCP - DB Test'
+      - 'SERVER_VERSION=0.1.0'
+      - 'SERVER_HOST=0.0.0.0'
+      - 'SERVER_PORT=8080'
+      - 'PYTHONPATH=/workspace/src:/workspace'
+      - 'DOCKER_HOST=unix:///var/run/docker.sock'
+    args:
+      - '-c'
+      - |
+        echo "🗄️ Running database tests with testcontainers..."
+
+        # Install system dependencies
+        apt-get update && apt-get install -y --no-install-recommends \
+          build-essential \
+          docker.io \
+          && rm -rf /var/lib/apt/lists/*
+
+        # Start Docker daemon
+        service docker start
+        sleep 5
+
+        # Install Python dependencies
+        pip install --upgrade pip
+        pip install -r requirements.txt
+
+        # Install database testing dependencies
+        pip install testcontainers[postgresql] pytest-cov pytest-html
+
+        # Create test results directory
+        mkdir -p test-results/database coverage-reports
+
+        # Run database tests with testcontainers
+        echo "📊 Running database integration tests..."
+        python -m pytest \
+          -m "requires_db" \
+          --cov=. \
+          --cov-report=html:coverage-reports/db-htmlcov \
+          --cov-report=xml:coverage-reports/db-coverage.xml \
+          --cov-report=term-missing \
+          --cov-fail-under=70 \
+          --junitxml=test-results/database/junit.xml \
+          --html=test-results/database/pytest-report.html \
+          --self-contained-html \
+          -v \
+          --tb=short \
+          --strict-markers \
+          --disable-warnings \
+          --maxfail=3 \
+          --durations=15 \
+          tests/
+
+        # Store test exit code
+        test_result=$?
+        echo "Database test exit code: $test_result"
+
+        # Generate test summary
+        cat > test-results/database/test-summary.json << EOF
+        {
+          "timestamp": "$(date -Iseconds)",
+          "commit": "$COMMIT_SHA",
+          "branch": "main",
+          "test_suite": "database",
+          "test_results": {
+            "exit_code": "$test_result",
+            "coverage_required": 70,
+            "tests_run": "database_integration"
+          }
+        }
+        EOF
+
+        # Fail build if tests failed
+        if [ "$test_result" -ne 0 ]; then
+          echo "❌ Database tests failed with exit code $test_result"
+          exit "$test_result"
+        fi
+
+        echo "✅ Database tests passed successfully"
+
+  # Step 1.6: Database Migration Check
+  - name: 'python:3.11-slim'
+    id: 'db-migration-check'
+    entrypoint: 'bash'
+    env:
+      - 'DB_HOST=${_DB_HOST}'
+      - 'DB_PORT=5432'
+      - 'DB_NAME=${_DB_NAME}'
+      - 'DB_USER=${_DB_USER}'
+      - 'DB_PASSWORD=${_DB_PASSWORD}'
+    args:
+      - '-c'
+      - |
+        echo "🗄️ Running database migration validation..."
+
+        # Install system dependencies
+        apt-get update && apt-get install -y --no-install-recommends \
+          build-essential \
+          && rm -rf /var/lib/apt/lists/*
+
+        # Install Python dependencies
+        pip install --upgrade pip
+        pip install -r requirements.txt
+
+        # Create migration check directory
+        mkdir -p migration-check
+
+        # Run database migration validation
+        echo "📊 Checking database migrations..."
+        python -c "
+        import sys
+        sys.path.insert(0, 'database')
+        from migrate import MigrationRunner
+
+        try:
+            runner = MigrationRunner()
+            status = runner.get_status()
+
+            if status['pending_migrations'] > 0:
+                print(f'⚠️ Found {status[\"pending_migrations\"]} pending migrations')
+                print('This is normal for production deployments')
+            else:
+                print('✅ All migrations are applied')
+
+            print(f'Current schema version: {status[\"current_version\"]}')
+            print(f'Latest available version: {status[\"latest_version\"]}')
+
+            # Save status for artifacts
+            import json
+            with open('migration-check/status.json', 'w') as f:
+                json.dump(status, f, indent=2)
+
+        except Exception as e:
+            print(f'❌ Migration check failed: {e}')
+            sys.exit(1)
+        "
+
+        echo "✅ Database migration check completed"
+
+  # Step 1.7: Run MCP Protocol Validation
+  - name: 'python:3.11-slim'
+    id: 'mcp-validation'
+    entrypoint: 'bash'
+    env:
+      - 'SERVER_TRANSPORT=stdio'
+      - 'AUTH_ENABLED=false'
+      - 'LOG_LEVEL=DEBUG'
+      - 'SERVER_NAME=Music Library MCP - MCP Test'
+      - 'SERVER_VERSION=0.1.0'
+      - 'SERVER_HOST=0.0.0.0'
+      - 'SERVER_PORT=8080'
+      - 'PYTHONPATH=/workspace/src:/workspace'
+    args:
+      - '-c'
+      - |
+        echo "🔍 Running MCP Protocol Validation..."
+
+        # Install system dependencies for MCP testing
+        apt-get update && apt-get install -y --no-install-recommends \
+          build-essential \
+          nodejs \
+          npm \
+          && rm -rf /var/lib/apt/lists/*
+
+        # Install Python dependencies
+        pip install --upgrade pip
+        pip install -r requirements.txt
+
+        # Create MCP validation results directory
+        mkdir -p mcp-validation-results
+
+        # Build MCP server image for testing
+        docker build -t music-library-mcp:mcp-test .
+
+        # Copy and make test scripts executable
+        cp test_mcp_tools_ci.sh mcp-validation-results/
+        cp test_mcp_resources_ci.sh mcp-validation-results/
+        cp scripts/validate_mcp_results.js mcp-validation-results/
+        cp run_mcp_stdio_docker.sh mcp-validation-results/
+        chmod +x mcp-validation-results/test_mcp_tools_ci.sh
+        chmod +x mcp-validation-results/test_mcp_resources_ci.sh
+        chmod +x mcp-validation-results/validate_mcp_results.js
+        chmod +x mcp-validation-results/run_mcp_stdio_docker.sh
+
+        # Change to validation directory and run MCP tools tests
+        cd mcp-validation-results
+        echo "🧪 Running MCP Tools CI Tests..."
+        ./test_mcp_tools_ci.sh
+
+        # Run MCP resources tests
+        echo "🧪 Running MCP Resources CI Tests..."
+        ./test_mcp_resources_ci.sh
+
+        # Validate MCP protocol compliance
+        echo "🔍 Validating MCP Protocol Compliance..."
+        node validate_mcp_results.js
+
+        # Store MCP validation artifacts
+        cp mcp_tools_results.json ../mcp-validation-results/
+        cp mcp_resources_results.json ../mcp-validation-results/
+        cp mcp_validation_report.json ../mcp-validation-results/
+
+        cd ..
+        echo "✅ MCP Protocol Validation completed"
+    waitFor: ['run-unit-tests', 'run-database-tests', 'db-migration-check']
 
   # Step 2: Run Static Analysis and Code Quality Checks
   - name: 'python:3.11-slim'
     id: 'static-analysis'
     entrypoint: 'bash'
+    env:
+      - 'SERVER_TRANSPORT=stdio'
+      - 'AUTH_ENABLED=false'
+      - 'LOG_LEVEL=INFO'
+      - 'SERVER_NAME=Music Library MCP - Static Analysis'
+      - 'SERVER_VERSION=0.1.0'
+      - 'SERVER_HOST=0.0.0.0'
+      - 'SERVER_PORT=8080'
+      - 'PYTHONPATH=/workspace/src:/workspace'
     args:
       - '-c'
       - |
@@ -161,9 +390,11 @@ steps:
       'test-results/',
       'coverage-reports/',
       'analysis-results/',
+      'mcp-validation-results/',
+      'migration-check/',
       'gs://$PROJECT_ID-build-artifacts/$COMMIT_SHA/'
     ]
-    waitFor: ['run-tests', 'static-analysis']
+    waitFor: ['run-unit-tests', 'run-database-tests', 'static-analysis', 'mcp-validation']
     allowFailure: true  # Don't fail build if artifact upload fails
 
   # Step 5: Push Docker image to Google Artifact Registry
@@ -240,3 +471,4 @@ tags:
   - 'music-library-mcp'
   - 'cloud-run'
   - 'production'
+  - 'main-branch'

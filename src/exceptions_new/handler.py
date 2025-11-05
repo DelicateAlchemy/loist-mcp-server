@@ -248,28 +248,48 @@ class ExceptionHandler:
     def _get_error_code(self, exception: Exception, serialized: Dict[str, Any]) -> str:
         """Get standardized error code for exception."""
         # Import locally to avoid circular dependency
-        from ..exceptions import MusicLibraryError
+        from ..exceptions import (
+            MusicLibraryError, ValidationError, DatabaseOperationError, StorageError,
+            AuthenticationError, RateLimitError, ExternalServiceError,
+            ResourceNotFoundError, AudioProcessingError
+        )
+        # Import built-in TimeoutError explicitly to avoid naming conflict
+        import builtins
+        BuiltinTimeoutError = builtins.TimeoutError
 
-        # Try to get error code from serialized exception
-        if 'error_code' in serialized:
-            return serialized['error_code']
-
-        # Fallback to exception type mapping
+        # Use exception type mapping (prioritize over serialized error_code)
+        # Order matters: more specific types first
         error_code_map = {
-            MusicLibraryError: 'MUSIC_LIBRARY_ERROR',
-            ValueError: 'VALIDATION_ERROR',
+            # Specific MusicLibraryError subclasses
+            ValidationError: 'VALIDATION_ERROR',
+            DatabaseOperationError: 'DATABASE_ERROR',
+            StorageError: 'STORAGE_ERROR',
+            AuthenticationError: 'AUTHENTICATION_ERROR',
+            TimeoutError: 'TIMEOUT_ERROR',
+            RateLimitError: 'RATE_LIMIT_ERROR',
+            ExternalServiceError: 'EXTERNAL_SERVICE_ERROR',
+            ResourceNotFoundError: 'RESOURCE_NOT_FOUND_ERROR',
+            AudioProcessingError: 'AUDIO_PROCESSING_ERROR',
+            # General exception types (more specific first)
+            ValueError: 'VALIDATION_ERROR',  # Fallback for non-MusicLibraryError ValueError
             KeyError: 'MISSING_KEY_ERROR',
             TypeError: 'TYPE_ERROR',
             ConnectionError: 'CONNECTION_ERROR',
-            TimeoutError: 'TIMEOUT_ERROR',
+            BuiltinTimeoutError: 'TIMEOUT_ERROR',  # Built-in TimeoutError (subclass of OSError)
             PermissionError: 'PERMISSION_ERROR',
             FileNotFoundError: 'FILE_NOT_FOUND_ERROR',
             OSError: 'OS_ERROR',
+            # Base MusicLibraryError (must be last)
+            MusicLibraryError: 'MUSIC_LIBRARY_ERROR',
         }
 
         for exc_type, code in error_code_map.items():
             if isinstance(exception, exc_type):
                 return code
+
+        # Fallback to serialized error_code if no type mapping found
+        if 'error_code' in serialized:
+            return serialized['error_code']
 
         return 'UNKNOWN_ERROR'
 

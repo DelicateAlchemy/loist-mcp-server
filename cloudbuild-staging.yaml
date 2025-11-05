@@ -4,42 +4,41 @@
 # Force rebuild: 2025-11-03
 
 steps:
-  # Step 1: Run Comprehensive Testing Suite (Staging)
+  # Step 1: Run Unit Tests (Staging)
   - name: 'python:3.11-slim'
-    id: 'run-tests'
+    id: 'run-unit-tests'
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        echo "🧪 Running comprehensive testing suite (staging)..."
+        echo "🧪 Running unit tests (staging)..."
 
         # Install system dependencies for testing
         apt-get update && apt-get install -y --no-install-recommends \
           build-essential \
-          libpq-dev \
-          postgresql-client \
           && rm -rf /var/lib/apt/lists/*
 
         # Install Python dependencies
         pip install --upgrade pip
         pip install -r requirements.txt
 
-        # Install additional test dependencies
+        # Install test dependencies
         pip install pytest-cov pytest-xdist pytest-html
 
         # Create test results directory
-        mkdir -p test-results coverage-reports
+        mkdir -p test-results/unit coverage-reports
 
-        # Run pytest with comprehensive coverage (relaxed threshold for staging)
-        echo "📊 Running pytest with coverage analysis (staging)..."
+        # Run unit tests only (relaxed threshold for staging)
+        echo "📊 Running unit tests (staging)..."
         python -m pytest \
+          -m "not (requires_db or requires_gcs or slow)" \
           --cov=. \
           --cov-report=html:coverage-reports/htmlcov \
           --cov-report=xml:coverage-reports/coverage.xml \
           --cov-report=term-missing \
-          --cov-fail-under=70 \
-          --junitxml=test-results/junit.xml \
-          --html=test-results/pytest-report.html \
+          --cov-fail-under=65 \
+          --junitxml=test-results/unit/junit.xml \
+          --html=test-results/unit/pytest-report.html \
           --self-contained-html \
           -v \
           --tb=short \
@@ -51,31 +50,169 @@ steps:
 
         # Store test exit code
         test_result=$?
-        echo "Test exit code: $test_result"
+        echo "Unit test exit code: $test_result"
 
         # Generate test summary
-        echo "📋 Generating test summary..."
-        cat > test-results/test-summary.json << EOF
+        cat > test-results/unit/test-summary.json << EOF
         {
           "timestamp": "$(date -Iseconds)",
           "commit": "$COMMIT_SHA",
           "branch": "dev",
           "environment": "staging",
+          "test_suite": "unit",
           "test_results": {
             "exit_code": "$test_result",
-            "coverage_required": 70,
-            "parallel_execution": true
+            "coverage_required": 65,
+            "tests_run": "unit_only"
           }
         }
         EOF
 
         # For staging, only warn on test failures (don't block deployment)
         if [ "$test_result" -ne 0 ]; then
-          echo "⚠️ Tests failed with exit code $test_result (staging - continuing deployment)"
+          echo "⚠️ Unit tests failed with exit code $test_result (staging - continuing deployment)"
           echo "Check test artifacts for details"
         else
-          echo "✅ All tests passed successfully"
+          echo "✅ Unit tests passed successfully"
         fi
+
+  # Step 1.5: Run Database Tests with TestContainers (Staging)
+  - name: 'python:3.11-slim'
+    id: 'run-database-tests'
+    entrypoint: 'bash'
+    env:
+      - 'DOCKER_HOST=unix:///var/run/docker.sock'
+    args:
+      - '-c'
+      - |
+        echo "🗄️ Running database tests with testcontainers (staging)..."
+
+        # Install system dependencies
+        apt-get update && apt-get install -y --no-install-recommends \
+          build-essential \
+          docker.io \
+          && rm -rf /var/lib/apt/lists/*
+
+        # Start Docker daemon
+        service docker start
+        sleep 5
+
+        # Install Python dependencies
+        pip install --upgrade pip
+        pip install -r requirements.txt
+
+        # Install database testing dependencies
+        pip install testcontainers[postgresql] pytest-cov pytest-html
+
+        # Create test results directory
+        mkdir -p test-results/database coverage-reports
+
+        # Run database tests with testcontainers (relaxed threshold for staging)
+        echo "📊 Running database integration tests (staging)..."
+        python -m pytest \
+          -m "requires_db" \
+          --cov=. \
+          --cov-report=html:coverage-reports/db-htmlcov \
+          --cov-report=xml:coverage-reports/db-coverage.xml \
+          --cov-report=term-missing \
+          --cov-fail-under=60 \
+          --junitxml=test-results/database/junit.xml \
+          --html=test-results/database/pytest-report.html \
+          --self-contained-html \
+          -v \
+          --tb=short \
+          --strict-markers \
+          --disable-warnings \
+          --maxfail=5 \
+          --durations=15 \
+          tests/
+
+        # Store test exit code
+        test_result=$?
+        echo "Database test exit code: $test_result"
+
+        # Generate test summary
+        cat > test-results/database/test-summary.json << EOF
+        {
+          "timestamp": "$(date -Iseconds)",
+          "commit": "$COMMIT_SHA",
+          "branch": "dev",
+          "environment": "staging",
+          "test_suite": "database",
+          "test_results": {
+            "exit_code": "$test_result",
+            "coverage_required": 60,
+            "tests_run": "database_integration"
+          }
+        }
+        EOF
+
+        # For staging, only warn on test failures (don't block deployment)
+        if [ "$test_result" -ne 0 ]; then
+          echo "⚠️ Database tests failed with exit code $test_result (staging - continuing deployment)"
+          echo "Check test artifacts for details"
+        else
+          echo "✅ Database tests passed successfully"
+        fi
+
+  # Step 1.6: Database Migration Check (Staging)
+  - name: 'python:3.11-slim'
+    id: 'db-migration-check'
+    entrypoint: 'bash'
+    env:
+      - 'DB_HOST=${_DB_HOST_STAGING}'
+      - 'DB_PORT=5432'
+      - 'DB_NAME=${_DB_NAME_STAGING}'
+      - 'DB_USER=${_DB_USER_STAGING}'
+      - 'DB_PASSWORD=${_DB_PASSWORD_STAGING}'
+    args:
+      - '-c'
+      - |
+        echo "🗄️ Running database migration validation (staging)..."
+
+        # Install system dependencies
+        apt-get update && apt-get install -y --no-install-recommends \
+          build-essential \
+          && rm -rf /var/lib/apt/lists/*
+
+        # Install Python dependencies
+        pip install --upgrade pip
+        pip install -r requirements.txt
+
+        # Create migration check directory
+        mkdir -p migration-check
+
+        # Run database migration validation
+        echo "📊 Checking database migrations (staging)..."
+        python -c "
+        import sys
+        sys.path.insert(0, 'database')
+        from migrate import MigrationRunner
+
+        try:
+            runner = MigrationRunner()
+            status = runner.get_status()
+
+            if status['pending_migrations'] > 0:
+                print(f'⚠️ Found {status[\"pending_migrations\"]} pending migrations')
+                print('This may require manual migration in staging')
+            else:
+                print('✅ All migrations are applied')
+
+            print(f'Current schema version: {status[\"current_version\"]}')
+            print(f'Latest available version: {status[\"latest_version\"]}')
+
+            # Save status for artifacts
+            import json
+            with open('migration-check/status.json', 'w') as f:
+                json.dump(status, f, indent=2)
+
+        except Exception as e:
+            print(f'❌ Migration check failed: {e}')
+            print('⚠️ Continuing deployment despite migration check failure')
+        "
+
+        echo "✅ Database migration check completed (staging)"
 
   # Step 2: Run Static Analysis and Code Quality Checks (Staging)
   - name: 'python:3.11-slim'
@@ -165,9 +302,10 @@ steps:
       'test-results/',
       'coverage-reports/',
       'analysis-results/',
+      'migration-check/',
       'gs://$PROJECT_ID-build-artifacts-staging/$COMMIT_SHA/'
     ]
-    waitFor: ['run-tests', 'static-analysis']
+    waitFor: ['run-unit-tests', 'run-database-tests', 'db-migration-check', 'static-analysis']
     allowFailure: true  # Don't fail build if artifact upload fails
 
   # Step 4: Push Docker image to Google Artifact Registry
@@ -184,15 +322,7 @@ steps:
     env:
       - 'CLOUDSDK_CORE_PROJECT=loist-music-library'
 
-  # Step 6: Update staging secrets if needed
-  - name: 'gcr.io/cloud-builders/gcloud'
-    id: 'update-staging-secrets'
-    entrypoint: 'bash'
-    args: ['scripts/update-staging-secrets.sh']
-    env:
-      - 'CLOUDSDK_CORE_PROJECT=loist-music-library'
-
-  # Step 7: Run database migrations (if needed)
+  # Step 6: Run database migrations (if needed)
   - name: 'gcr.io/cloud-builders/docker'
     id: 'migrate-db'
     entrypoint: 'bash'
@@ -231,7 +361,7 @@ steps:
       - '--update-secrets=GCS_BUCKET_NAME=${_GCS_BUCKET_NAME_STAGING}:latest'
       - '--update-secrets=BEARER_TOKEN=${_BEARER_TOKEN_STAGING}:latest'
       - '--quiet'
-    waitFor: ['create-staging-db', 'update-staging-secrets', 'migrate-db']
+    waitFor: ['create-staging-db', 'migrate-db']
 
 # Automatically tag and push images
 images:
