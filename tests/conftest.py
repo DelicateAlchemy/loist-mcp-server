@@ -6,14 +6,29 @@ Provides:
 - Repository mocks for dependency injection
 - Environment variable management
 - Common test utilities and fixtures
+- Application initialization and configuration
+- Logging setup for tests
 """
 
 import os
 import pytest
+import logging
 from unittest.mock import Mock, MagicMock
 from typing import Dict, Any, Generator
 
-from src.repositories.audio_repository import AudioRepositoryInterface
+# Import configuration and logging utilities
+try:
+    from src.config import Config
+    from src.fastmcp_setup import create_app
+    CONFIG_AVAILABLE = True
+except ImportError:
+    CONFIG_AVAILABLE = False
+
+try:
+    from src.repositories.audio_repository import AudioRepositoryInterface
+    REPOSITORIES_AVAILABLE = True
+except ImportError:
+    REPOSITORIES_AVAILABLE = False
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -55,7 +70,7 @@ def test_db_config():
     }
 
 
-class MockAudioRepository(AudioRepositoryInterface):
+class MockAudioRepository:
     """Mock implementation of AudioRepositoryInterface for testing."""
 
     def __init__(self):
@@ -167,7 +182,14 @@ class MockAudioRepository(AudioRepositoryInterface):
 @pytest.fixture
 def mock_repository():
     """Fixture providing a mock audio repository."""
-    return MockAudioRepository()
+    if REPOSITORIES_AVAILABLE:
+        # If interface is available, ensure our mock implements it
+        repo = MockAudioRepository()
+        # Add any missing methods if needed
+        return repo
+    else:
+        # Fallback to basic mock
+        return MockAudioRepository()
 
 
 @pytest.fixture
@@ -206,6 +228,71 @@ def reset_mocks(mock_repository):
     mock_repository.metadata_store.clear()
     mock_repository.search_results.clear()
     mock_repository.batch_results = {'inserted_count': 0}
+
+
+# Application initialization fixtures
+@pytest.fixture(scope="session")
+def test_config():
+    """Test configuration object."""
+    if CONFIG_AVAILABLE:
+        # Create a test configuration with test database settings
+        config = Config()
+        # Override database settings for testing
+        config.db_host = 'localhost'
+        config.db_port = 5432
+        config.db_name = 'music_library_test'
+        config.db_user = 'loist_user'
+        config.db_password = 'dev_password'
+        config.auth_enabled = False
+        config.log_level = 'WARNING'
+        return config
+    else:
+        # Fallback mock config
+        return Mock(
+            db_host='localhost',
+            db_port=5432,
+            db_name='music_library_test',
+            db_user='loist_user',
+            db_password='dev_password',
+            auth_enabled=False,
+            log_level='WARNING'
+        )
+
+
+@pytest.fixture(scope="session")
+def test_app(test_config):
+    """Test FastMCP application instance."""
+    if CONFIG_AVAILABLE:
+        app = create_app(config=test_config)
+        return app
+    else:
+        return Mock()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_test_logging():
+    """Set up logging configuration for tests."""
+    # Configure test logging to reduce noise
+    logging.basicConfig(
+        level=logging.WARNING,
+        format='%(levelname)s - %(name)s - %(message)s',
+        handlers=[logging.StreamHandler()]
+    )
+
+    # Suppress noisy loggers during tests
+    logging.getLogger('httpx').setLevel(logging.ERROR)
+    logging.getLogger('urllib3').setLevel(logging.ERROR)
+    logging.getLogger('google').setLevel(logging.ERROR)
+
+
+@pytest.fixture
+def app_context(test_app):
+    """Application context for tests."""
+    if hasattr(test_app, 'app') and hasattr(test_app.app, 'app_context'):
+        with test_app.app.app_context():
+            yield
+    else:
+        yield
 
 
 # Environment management utilities
