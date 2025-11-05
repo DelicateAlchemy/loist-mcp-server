@@ -33,11 +33,7 @@ def create_fastmcp_server() -> FastMCP:
     mcp = FastMCP(
         name=config.server_name,
         version=config.server_version,
-        instructions=config.server_instructions,
-        modelPreferences={
-            "temperature": 0.1,
-            "maxTokens": 4096,
-        }
+        instructions=config.server_instructions
     )
 
     logger.info(f"✅ FastMCP server initialized: {config.server_name} v{config.server_version}")
