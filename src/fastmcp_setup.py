@@ -15,7 +15,7 @@ from starlette.templating import Jinja2Templates
 from pathlib import Path
 
 from src.config import config
-from exceptions import MusicLibraryError
+from src.exceptions import MusicLibraryError
 
 logger = logging.getLogger(__name__)
 
