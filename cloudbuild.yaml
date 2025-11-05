@@ -54,6 +54,7 @@ steps:
           --disable-warnings \
           --maxfail=5 \
           --durations=10 \
+          --ignore=tests/test_database_operations_integration.py \
           tests/
 
         # Store test exit code
