@@ -1,6 +1,6 @@
 # Pre-PR Testing Guide
 
-This guide helps you test your changes locally before creating a pull request.
+This guide helps you test your changes locally before creating a pull request. For comprehensive testing practices and CI/CD integration details, see [Testing Practices Guide](./testing-practices-guide.md).
 
 ## 🚀 Quick Start
 
@@ -303,6 +303,7 @@ Before creating your PR, ensure:
 - [ ] Existing tests still pass
 - [ ] Documentation updated (if applicable)
 - [ ] Commit messages are clear and descriptive
+- [ ] **CI/CD will run**: Automated testing on push to `main` (production) or `dev` (staging)
 
 ## 🎯 Recommended Pre-PR Test Commands
 
@@ -332,14 +333,21 @@ python -m py_compile src/tools/*.py
 
 Your local tests should match what runs in CI/CD:
 
-| Test Type | Local | CI/CD |
-|-----------|-------|-------|
-| Unit Tests | ✅ Run locally | ✅ Run in CI |
-| Integration Tests (mocked) | ✅ Run locally | ✅ Run in CI |
-| Database Tests | ⚠️ May fail (no DB) | ✅ Run in CI (Cloud SQL) |
-| Storage Tests | ⚠️ May fail (no GCS) | ✅ Run in CI (GCS access) |
+| Test Type | Local | CI/CD Production | CI/CD Staging |
+|-----------|-------|------------------|---------------|
+| Unit Tests | ✅ Run locally | ✅ Run in CI | ✅ Run in CI |
+| Integration Tests (mocked) | ✅ Run locally | ✅ Run in CI | ✅ Run in CI |
+| Database Tests | ⚠️ May fail (no DB) | ✅ Run in CI (Cloud SQL) | ✅ Run in CI (Staging DB) |
+| Storage Tests | ⚠️ May fail (no GCS) | ✅ Run in CI (GCS) | ✅ Run in CI (Staging GCS) |
+| Static Analysis | ✅ Run locally | ✅ **Required** (fails build) | ⚠️ **Warns** (continues) |
+| Security Scanning | ✅ Run locally | ✅ **Required** (fails build) | ⚠️ **Warns** (continues) |
+| Coverage Check | ✅ Run locally | ✅ **80% minimum** (fails build) | ⚠️ **70% minimum** (warns) |
 
-**Tip:** Focus on unit and mocked integration tests locally. Full integration tests will run in CI/CD with proper infrastructure.
+**Quality Gates:**
+- **Production**: Tests must pass, 80%+ coverage, no static analysis errors
+- **Staging**: Tests can fail but warn, 70%+ coverage recommended, static analysis warnings allowed
+
+**Tip:** Focus on unit and mocked integration tests locally. Full integration tests will run in CI/CD with proper infrastructure. See [Testing Practices Guide](./testing-practices-guide.md) for detailed CI/CD pipeline information.
 
 ## 🔍 Debugging Failed Tests
 

@@ -84,6 +84,7 @@ The server implements a layered architecture with clear separation of concerns:
 - **85%+ Coverage**: Unit, integration, and performance tests
 - **Automated Validation**: Performance regression detection
 - **Docker Integration**: Isolated test database environment
+- **CI/CD Integration**: Automated testing on every deployment
 
 ### Configuration Details
 
@@ -679,8 +680,10 @@ rm github-actions-key.json
 ```
 
 📚 **Full Documentation:**
-- [GitHub Actions Setup Guide](docs/github-actions-setup.md) - Detailed setup instructions
-- [Quick Setup Guide](docs/github-secrets-quick-setup.md) - 5-minute quick start
+- [Testing Practices Guide](docs/testing-practices-guide.md) - Comprehensive testing infrastructure and CI/CD
+- [Pre-PR Testing Guide](docs/pre-pr-testing-guide.md) - Local testing before pull requests
+- [Cloud Run Deployment](docs/cloud-run-deployment.md) - Production deployment details
+- [Security Scanning](docs/security-scanning.md) - Security scanning and vulnerability management
 
 ### Running Workflows
 
