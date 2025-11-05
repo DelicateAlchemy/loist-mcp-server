@@ -52,42 +52,78 @@ open htmlcov/index.html
 - ✅ Critical paths should have >90% coverage
 - ⚠️ Some integration tests may require mocks for external services
 
-### 3. Linting & Code Style
+### 3. Static Analysis & Code Quality
 
-Ensure code follows project standards:
+Run comprehensive static analysis to ensure code quality:
 
 ```bash
-# Check code style with Black (currently not installed)
-# black src/ tests/ --check
+# Install all quality tools (if not already installed)
+pip install black isort flake8 pylint mypy bandit safety pre-commit
 
-# Lint with Ruff (currently not installed)  
-# ruff check src/ tests/
+# Install pre-commit hooks (recommended for automated checks)
+pre-commit install
 
-# For now, verify manually or install:
-# pip install black ruff
+# Run all quality checks at once
+pre-commit run --all-files
+
+# Or run individual checks manually:
 ```
 
-### 4. Type Checking (Optional)
-
-If using type hints:
+#### Code Formatting & Style
 
 ```bash
-# Install mypy if not already installed
-# pip install mypy
+# Format code with Black (100 char line length)
+black src/ tests/ database/
 
-# Run type checker
-# mypy src/
+# Sort imports with isort (compatible with Black)
+isort src/ tests/ database/
+
+# Check formatting without making changes
+black --check --diff src/ tests/ database/
+isort --check-only --diff src/ tests/ database/
+```
+
+#### Linting & Quality Analysis
+
+```bash
+# Fast linting with flake8 (PEP8 + PyFlakes + McCabe)
+flake8 src/ tests/ database/
+
+# Comprehensive analysis with pylint
+pylint src/ tests/ database/
+
+# Security vulnerability scanning
+bandit -r src/ database/
+
+# Dependency vulnerability scanning
+safety check
+```
+
+#### Type Checking
+
+```bash
+# Run type checking with strict settings
+mypy src/ database/
+
+# Run with detailed error codes
+mypy src/ database/ --show-error-codes
+
+# Check specific problematic files
+mypy src/server.py --ignore-missing-imports
 ```
 
 ### 5. Import Validation
 
-Verify all imports work correctly:
+Verify all imports work correctly and are properly sorted:
 
 ```bash
 # Test that modules can be imported
 python -c "from src.tools import process_audio_complete; print('✅ Imports OK')"
 python -c "from database import save_audio_metadata; print('✅ Database imports OK')"
 python -c "from src.downloader import download_from_url; print('✅ Downloader imports OK')"
+
+# Verify import sorting is consistent
+isort --check-only --diff src/ tests/
 ```
 
 ### 6. Quick Smoke Test

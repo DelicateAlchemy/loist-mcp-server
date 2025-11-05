@@ -714,43 +714,76 @@ pytest --cov=src --cov-report=html
 pytest tests/test_process_audio_complete.py
 ```
 
-### Code Formatting
+### Code Quality & Static Analysis
+
+The project uses comprehensive static analysis tools for code quality assurance:
+
+#### Automated Quality Checks (Recommended)
 
 ```bash
-# Install formatting tools first (if not already installed)
-pip install black
+# Install pre-commit hooks for automated quality checks
+pip install pre-commit
+pre-commit install
 
-# Format code
-black src/ tests/
+# Run all quality checks on staged files
+pre-commit run
+
+# Run all quality checks on all files
+pre-commit run --all-files
 ```
 
-### Linting
+#### Manual Quality Checks
+
+##### Code Formatting & Import Sorting
 
 ```bash
-# Install linting tools first (if not already installed)
-pip install ruff pylint flake8 bandit
+# Install formatting tools
+pip install black isort
 
-# Fast linting with ruff
-ruff check src/ tests/
+# Format code with black (100 char line length)
+black src/ tests/ database/
 
-# More comprehensive linting with pylint
-pylint src/ tests/
+# Sort imports with isort (compatible with black)
+isort src/ tests/ database/
 
-# Security linting
-bandit -r src/
+# Check formatting without making changes
+black --check --diff src/ tests/ database/
+isort --check-only --diff src/ tests/ database/
 ```
 
-### Type Checking
+##### Linting & Code Quality
 
 ```bash
-# Install type checking tools first (if not already installed)
+# Install linting tools
+pip install flake8 pylint bandit safety
+
+# Fast linting with flake8 (PEP8 + PyFlakes + McCabe)
+flake8 src/ tests/ database/
+
+# Comprehensive analysis with pylint
+pylint src/ tests/ database/
+
+# Security vulnerability scanning
+bandit -r src/ database/
+
+# Dependency vulnerability scanning
+safety check
+```
+
+##### Type Checking
+
+```bash
+# Install type checking tools
 pip install mypy
 
-# Run type checking
-mypy src/
+# Run type checking with strict settings
+mypy src/ database/
 
-# Run type checking with detailed output
-mypy src/ --show-error-codes
+# Run with detailed error codes
+mypy src/ database/ --show-error-codes
+
+# Check specific module
+mypy src/server.py
 ```
 
 ## Configuration
