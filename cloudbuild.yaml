@@ -6,6 +6,14 @@ steps:
   - name: 'python:3.11-slim'
     id: 'run-tests'
     entrypoint: 'bash'
+    env:
+      - 'SERVER_TRANSPORT=stdio'
+      - 'AUTH_ENABLED=false'
+      - 'LOG_LEVEL=INFO'
+      - 'SERVER_NAME=Music Library MCP - Test'
+      - 'SERVER_VERSION=0.1.0'
+      - 'SERVER_HOST=0.0.0.0'
+      - 'SERVER_PORT=8080'
     args:
       - '-c'
       - |
@@ -78,6 +86,14 @@ steps:
   - name: 'python:3.11-slim'
     id: 'mcp-validation'
     entrypoint: 'bash'
+    env:
+      - 'SERVER_TRANSPORT=stdio'
+      - 'AUTH_ENABLED=false'
+      - 'LOG_LEVEL=DEBUG'
+      - 'SERVER_NAME=Music Library MCP - MCP Test'
+      - 'SERVER_VERSION=0.1.0'
+      - 'SERVER_HOST=0.0.0.0'
+      - 'SERVER_PORT=8080'
     args:
       - '-c'
       - |
@@ -136,6 +152,14 @@ steps:
   - name: 'python:3.11-slim'
     id: 'static-analysis'
     entrypoint: 'bash'
+    env:
+      - 'SERVER_TRANSPORT=stdio'
+      - 'AUTH_ENABLED=false'
+      - 'LOG_LEVEL=INFO'
+      - 'SERVER_NAME=Music Library MCP - Static Analysis'
+      - 'SERVER_VERSION=0.1.0'
+      - 'SERVER_HOST=0.0.0.0'
+      - 'SERVER_PORT=8080'
     args:
       - '-c'
       - |
