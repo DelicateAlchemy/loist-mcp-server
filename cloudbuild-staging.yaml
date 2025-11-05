@@ -62,7 +62,7 @@ steps:
           "branch": "dev",
           "environment": "staging",
           "test_results": {
-            "exit_code": $TEST_EXIT_CODE,
+            "exit_code": "$TEST_EXIT_CODE",
             "coverage_required": 70,
             "parallel_execution": true
           }
@@ -70,7 +70,7 @@ steps:
         EOF
 
         # For staging, only warn on test failures (don't block deployment)
-        if [ $TEST_EXIT_CODE -ne 0 ]; then
+        if [ "$TEST_EXIT_CODE" -ne 0 ]; then
           echo "⚠️ Tests failed with exit code $TEST_EXIT_CODE (staging - continuing deployment)"
           echo "Check test artifacts for details"
         else

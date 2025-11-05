@@ -59,7 +59,7 @@ steps:
           "commit": "$COMMIT_SHA",
           "branch": "main",
           "test_results": {
-            "exit_code": $TEST_EXIT_CODE,
+            "exit_code": "$TEST_EXIT_CODE",
             "coverage_required": 80,
             "parallel_execution": true
           }
@@ -67,9 +67,9 @@ steps:
         EOF
 
         # Fail build if tests failed
-        if [ $TEST_EXIT_CODE -ne 0 ]; then
+        if [ "$TEST_EXIT_CODE" -ne 0 ]; then
           echo "❌ Tests failed with exit code $TEST_EXIT_CODE"
-          exit $TEST_EXIT_CODE
+          exit "$TEST_EXIT_CODE"
         fi
 
         echo "✅ All tests passed successfully"
