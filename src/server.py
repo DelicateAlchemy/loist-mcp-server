@@ -2,6 +2,7 @@
 Music Library MCP Server
 FastMCP-based server for audio ingestion and embedding
 """
+
 import sys
 from pathlib import Path
 
@@ -14,37 +15,40 @@ if str(app_dir) not in sys.path:
 import logging
 from contextlib import asynccontextmanager
 from typing import Optional
+
 from fastmcp import FastMCP
-from starlette.templating import Jinja2Templates
 from starlette.responses import HTMLResponse
-from config import config
+from starlette.templating import Jinja2Templates
+
 from auth import SimpleBearerAuth
+from config import config
+
+# Import exceptions (clean and simple - no complex loading needed)
+from src.exceptions import (
+    AudioProcessingError,
+    AuthenticationError,
+    DatabaseOperationError,
+    ExternalServiceError,
+    MusicLibraryError,
+    RateLimitError,
+    ResourceNotFoundError,
+    StorageError,
+    TimeoutError,
+    ValidationError,
+)
+from src.fastmcp_setup import (
+    create_fastmcp_server,
+    log_server_startup_info,
+    setup_jinja_templates,
+    validate_server_setup,
+)
 
 # ============================================================================
 # Centralized Exception Import Strategy
 # ============================================================================
 # Clean FastMCP Setup - No more workarounds or globals manipulation
 
-from src.fastmcp_setup import (
-    create_fastmcp_server,
-    setup_jinja_templates,
-    validate_server_setup,
-    log_server_startup_info,
-)
 
-# Import exceptions (clean and simple - no complex loading needed)
-from src.exceptions import (
-    MusicLibraryError,
-    AudioProcessingError,
-    StorageError,
-    ValidationError,
-    ResourceNotFoundError,
-    TimeoutError,
-    AuthenticationError,
-    RateLimitError,
-    ExternalServiceError,
-    DatabaseOperationError,
-)
 
 # Configure logging
 config.configure_logging()
@@ -77,9 +81,9 @@ async def lifespan(app):
     logger.info(f"🔧 Log Level: {config.log_level}")
     logger.info(f"🔐 Authentication: {'enabled' if config.auth_enabled else 'disabled'}")
     logger.info(f"✅ Health check enabled: {config.enable_healthcheck}")
-    
+
     yield
-    
+
     # Shutdown
     logger.info(f"🛑 Shutting down {config.server_name}")
 
@@ -103,19 +107,19 @@ log_server_startup_info()
 def health_check() -> dict:
     """
     Health check endpoint to verify server is running
-    
+
     Returns:
         dict: Server status information including version and configuration
-        
+
     Raises:
         Exception: If health check fails (demonstrates error handling)
     """
-    from src.exceptions import MusicLibraryError, ResourceNotFoundError
     from src.error_utils import handle_tool_error
-    
+    from src.exceptions import MusicLibraryError, ResourceNotFoundError
+
     try:
         logger.debug("Health check requested")
-        
+
         # Verify server is operational
         response = {
             "status": "healthy",
@@ -123,12 +127,12 @@ def health_check() -> dict:
             "version": config.server_version,
             "transport": config.server_transport,
             "log_level": config.log_level,
-            "authentication": "enabled" if config.auth_enabled else "disabled"
+            "authentication": "enabled" if config.auth_enabled else "disabled",
         }
-        
+
         logger.info("Health check passed")
         return response
-        
+
     except Exception as e:
         # Log and return error response
         error_response = handle_tool_error(e, "health_check")
@@ -140,21 +144,19 @@ def health_check() -> dict:
 # Task 7: Audio Processing Tool
 # ============================================================================
 
+
 @mcp.tool()
-async def process_audio_complete(
-    source: dict,
-    options: dict = None
-) -> dict:
+async def process_audio_complete(source: dict, options: dict = None) -> dict:
     """
     Process audio from HTTP URL and return complete metadata.
-    
+
     This tool orchestrates the complete audio processing pipeline:
     1. Download audio from HTTP/HTTPS URL
     2. Extract metadata (artist, title, album, etc.) and artwork
     3. Upload to Google Cloud Storage
     4. Save metadata to PostgreSQL database
     5. Return complete metadata and resource URIs
-    
+
     Args:
         source: Audio source specification
             - type: Source type ("http_url")
@@ -166,10 +168,10 @@ async def process_audio_complete(
             - maxSizeMB: Maximum file size in MB (default: 100)
             - timeout: Download timeout in seconds (default: 300)
             - validateFormat: Whether to validate audio format (default: true)
-    
+
     Returns:
         dict: Success response with audioId, metadata, and resource URIs, or error response
-        
+
     Example:
         >>> result = await process_audio_complete(
         ...     source={"type": "http_url", "url": "https://example.com/song.mp3"},
@@ -178,18 +180,15 @@ async def process_audio_complete(
         >>> print(result["audioId"])
         "550e8400-e29b-41d4-a716-446655440000"
     """
-    from src.tools import process_audio_complete as process_audio_func
     from src.error_utils import handle_tool_error
+    from src.tools import process_audio_complete as process_audio_func
 
     try:
         # All custom exceptions are already in global scope from centralized import
         # FastMCP can now serialize them correctly since they're available in module namespace
 
         # Build input data
-        input_data = {
-            "source": source,
-            "options": options or {}
-        }
+        input_data = {"source": source, "options": options or {}}
 
         # Call the async processing function
         # Exceptions raised here will be serialized by FastMCP using the
@@ -205,6 +204,7 @@ async def process_audio_complete(
 # ============================================================================
 # Task 8: Query/Retrieval Tools
 # ============================================================================
+
 
 @mcp.tool()
 async def get_audio_metadata(audioId: str) -> dict:
@@ -226,8 +226,8 @@ async def get_audio_metadata(audioId: str) -> dict:
         >>> print(result["metadata"]["Product"]["Title"])
         "Hey Jude"
     """
-    from src.tools.query_tools import get_audio_metadata as get_metadata_func
     from src.error_utils import handle_tool_error
+    from src.tools.query_tools import get_audio_metadata as get_metadata_func
 
     try:
         # Call the async function
@@ -246,14 +246,14 @@ async def search_library(
     limit: int = 20,
     offset: int = 0,
     sortBy: str = "relevance",
-    sortOrder: str = "desc"
+    sortOrder: str = "desc",
 ) -> dict:
     """
     Search across all processed audio in the library.
-    
+
     Performs full-text search across audio metadata (title, artist, album, genre)
     with optional advanced filters.
-    
+
     Args:
         query: Search query string (1-500 characters)
         filters: Optional filters (genre, year, duration, format, artist, album)
@@ -262,11 +262,11 @@ async def search_library(
         offset: Number of results to skip (default: 0, max: 10000)
         sortBy: Field to sort by (relevance, title, artist, year, duration, created_at)
         sortOrder: Sort order (asc or desc, default: desc)
-        
+
     Returns:
         dict: Success response with search results, relevance scores, and pagination info,
               or error response if search fails
-        
+
     Example:
         >>> result = await search_library(
         ...     query="beatles",
@@ -276,8 +276,8 @@ async def search_library(
         >>> print(f"Found {result['total']} results")
         Found 150 results
     """
-    from src.tools.query_tools import search_library as search_func
     from src.error_utils import handle_tool_error
+    from src.tools.query_tools import search_library as search_func
 
     try:
         # Build input data
@@ -287,7 +287,7 @@ async def search_library(
             "limit": limit,
             "offset": offset,
             "sortBy": sortBy,
-            "sortOrder": sortOrder
+            "sortOrder": sortOrder,
         }
 
         # Call the async function
@@ -303,29 +303,31 @@ async def search_library(
 # Task 9: MCP Resources
 # ============================================================================
 
+
 @mcp.resource("music-library://audio/{audioId}/stream")
 async def audio_stream_resource(audioId: str) -> str:
     """
     MCP resource for streaming audio files.
-    
+
     Returns a signed GCS URL for secure audio streaming with support for:
     - HTTP Range requests (seeking)
     - Proper Content-Type headers
     - Caching for performance
-    
+
     URI Format: music-library://audio/{audioId}/stream
-    
+
     Args:
         audioId: Audio file identifier
-        
+
     Returns:
         str: MCP resource response with signed streaming URL
-        
+
     Example:
         URI: music-library://audio/550e8400-e29b-41d4-a716-446655440000/stream
         Returns: Signed GCS URL for audio file
     """
     from src.resources.audio_stream import get_audio_stream_resource
+
     uri = f"music-library://audio/{audioId}/stream"
     return await get_audio_stream_resource(uri)
 
@@ -334,22 +336,23 @@ async def audio_stream_resource(audioId: str) -> str:
 async def metadata_resource(audioId: str) -> str:
     """
     MCP resource for audio metadata.
-    
+
     Returns complete metadata as JSON including Product and Format information.
-    
+
     URI Format: music-library://audio/{audioId}/metadata
-    
+
     Args:
         audioId: Audio file identifier
-        
+
     Returns:
         str: MCP resource response with JSON metadata
-        
+
     Example:
         URI: music-library://audio/550e8400-e29b-41d4-a716-446655440000/metadata
         Returns: JSON with complete track metadata
     """
     from src.resources.metadata import get_metadata_resource
+
     uri = f"music-library://audio/{audioId}/metadata"
     return await get_metadata_resource(uri)
 
@@ -358,22 +361,23 @@ async def metadata_resource(audioId: str) -> str:
 async def thumbnail_resource(audioId: str) -> str:
     """
     MCP resource for audio thumbnails/artwork.
-    
+
     Returns a signed GCS URL for thumbnail image with caching.
-    
+
     URI Format: music-library://audio/{audioId}/thumbnail
-    
+
     Args:
         audioId: Audio file identifier
-        
+
     Returns:
         str: MCP resource response with signed image URL
-        
+
     Example:
         URI: music-library://audio/550e8400-e29b-41d4-a716-446655440000/thumbnail
         Returns: Signed GCS URL for thumbnail image
     """
     from src.resources.thumbnail import get_thumbnail_resource
+
     uri = f"music-library://audio/{audioId}/thumbnail"
     return await get_thumbnail_resource(uri)
 
@@ -382,11 +386,12 @@ async def thumbnail_resource(audioId: str) -> str:
 # Task 10: HTML5 Audio Player Embed Page
 # ============================================================================
 
+
 @mcp.custom_route("/embed/{audioId}", methods=["GET"])
 async def embed_page(request):
     """
     Serve HTML5 audio player embed page.
-    
+
     This route provides a standalone audio player page that can be embedded
     in iframes or accessed directly. It includes:
     - Custom audio player UI
@@ -395,23 +400,24 @@ async def embed_page(request):
     - oEmbed discovery
     - Keyboard shortcuts
     - Responsive design
-    
+
     Args:
         request: Starlette Request object with path parameters
-        
+
     Returns:
         HTMLResponse: Rendered HTML page with audio player
-        
+
     Example:
         GET /embed/550e8400-e29b-41d4-a716-446655440000
         Returns: HTML page with embedded audio player
     """
     from starlette.requests import Request
+
     from database import get_audio_metadata_by_id
     from src.resources.cache import get_cache
-    
+
     # Extract audioId from path parameters
-    audioId = request.path_params['audioId']
+    audioId = request.path_params["audioId"]
     logger.info(f"Embed page requested for audio ID: {audioId}")
 
     try:
@@ -421,14 +427,14 @@ async def embed_page(request):
         logger.warning(f"Invalid audio ID format for embed: {audioId} - {e}")
         return HTMLResponse(
             content="<h1>Invalid Audio ID</h1><p>The audio ID format is invalid.</p>",
-            status_code=400
+            status_code=400,
         )
 
     if not metadata:
         logger.warning(f"Audio track not found: {audioId}")
         return HTMLResponse(
             content="<h1>Audio Not Found</h1><p>The requested audio track could not be found.</p>",
-            status_code=404
+            status_code=404,
         )
 
     logger.info("Metadata retrieved successfully, getting GCS paths")
@@ -441,8 +447,7 @@ async def embed_page(request):
     if not audio_path:
         logger.error(f"No audio path for {audioId}")
         return HTMLResponse(
-            content="<h1>Error</h1><p>Audio file not available.</p>",
-            status_code=500
+            content="<h1>Error</h1><p>Audio file not available.</p>", status_code=500
         )
 
     # Generate signed URLs using cache
@@ -453,8 +458,7 @@ async def embed_page(request):
     except Exception as e:
         logger.error(f"Failed to generate signed URL for audio: {e}")
         return HTMLResponse(
-            content="<h1>Error</h1><p>Failed to generate audio stream.</p>",
-            status_code=500
+            content="<h1>Error</h1><p>Failed to generate audio stream.</p>", status_code=500
         )
 
     # Generate thumbnail URL if available
@@ -480,7 +484,7 @@ async def embed_page(request):
             "SampleRate": metadata.get("sample_rate", 44100),
             "Bitrate": metadata.get("bitrate", 0),
             "Format": metadata.get("format", "MP3"),
-        }
+        },
     }
 
     # Format duration for display
@@ -506,8 +510,8 @@ async def embed_page(request):
     # Render template
     try:
         # Create a mock request object for Jinja2Templates
+        from starlette.datastructures import URL, Headers
         from starlette.requests import Request
-        from starlette.datastructures import Headers, URL
 
         # Create minimal request object
         scope = {
@@ -518,16 +522,19 @@ async def embed_page(request):
         }
         mock_request = Request(scope)
 
-        response = templates.TemplateResponse("embed.html", {
-            "request": mock_request,
-            "audio_id": audioId,
-            "metadata": template_metadata,
-            "stream_url": stream_url,
-            "thumbnail_url": thumbnail_url,
-            "mime_type": mime_type,
-            "duration_formatted": duration_formatted,
-            "embed_base_url": config.embed_base_url
-        })
+        response = templates.TemplateResponse(
+            "embed.html",
+            {
+                "request": mock_request,
+                "audio_id": audioId,
+                "metadata": template_metadata,
+                "stream_url": stream_url,
+                "thumbnail_url": thumbnail_url,
+                "mime_type": mime_type,
+                "duration_formatted": duration_formatted,
+                "embed_base_url": config.embed_base_url,
+            },
+        )
 
         # Add security headers for iframe embedding
         response.headers["X-Frame-Options"] = "ALLOWALL"
@@ -538,8 +545,7 @@ async def embed_page(request):
     except Exception as e:
         logger.exception(f"Error rendering embed page: {e}")
         return HTMLResponse(
-            content=f"<h1>Error</h1><p>An unexpected error occurred: {str(e)}</p>",
-            status_code=500
+            content=f"<h1>Error</h1><p>An unexpected error occurred: {str(e)}</p>", status_code=500
         )
 
 
@@ -547,89 +553,80 @@ async def embed_page(request):
 async def oembed_endpoint(request):
     """
     oEmbed endpoint for rich media previews.
-    
+
     Implements the oEmbed specification for embedding audio player
     in platforms like Notion, WordPress, and other oEmbed consumers.
-    
+
     Args:
         request: Starlette Request object with query parameters:
             - url (required): The embed URL to generate oEmbed data for
             - format (optional): Response format, 'json' or 'xml' (default: 'json')
             - maxwidth (optional): Maximum width for embed (default: 500)
             - maxheight (optional): Maximum height for embed (default: 200)
-    
+
     Returns:
         JSONResponse: oEmbed JSON response according to spec
-        
+
     Example:
         GET /oembed?url=https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000
         Returns: JSON with oEmbed metadata
     """
-    from starlette.responses import JSONResponse
+    from urllib.parse import unquote
+
     from starlette.requests import Request
+    from starlette.responses import JSONResponse
+
     from database import get_audio_metadata_by_id
     from src.resources.cache import get_cache
-    from urllib.parse import unquote
-    
+
     try:
         # Extract query parameters
         url_param = request.query_params.get("url")
         format_param = request.query_params.get("format", "json")
         maxwidth = int(request.query_params.get("maxwidth", 500))
         maxheight = int(request.query_params.get("maxheight", 200))
-        
+
         # Validate URL parameter
         if not url_param:
             logger.warning("oEmbed request missing url parameter")
-            return JSONResponse(
-                {"error": "Missing required parameter: url"},
-                status_code=400
-            )
-        
+            return JSONResponse({"error": "Missing required parameter: url"}, status_code=400)
+
         # Decode URL-encoded parameter
         url = unquote(url_param)
         logger.info(f"oEmbed request for URL: {url}")
-        
+
         # Validate URL format
         from config import config
+
         expected_prefix = f"{config.embed_base_url}/embed/"
         if not url.startswith(expected_prefix):
             logger.warning(f"Invalid oEmbed URL: {url}")
             return JSONResponse(
                 {"error": f"Invalid URL. Must start with {config.embed_base_url}/embed/"},
-                status_code=400
+                status_code=400,
             )
-        
+
         # Extract audio ID from URL
         audio_id = url.replace(expected_prefix, "").strip()
         if not audio_id:
             logger.warning("oEmbed request with empty audio ID")
-            return JSONResponse(
-                {"error": "Invalid URL format. Missing audio ID."},
-                status_code=400
-            )
-        
+            return JSONResponse({"error": "Invalid URL format. Missing audio ID."}, status_code=400)
+
         # Get metadata from database
         try:
             metadata = get_audio_metadata_by_id(audio_id)
         except ValidationError as e:
             logger.warning(f"Invalid audio ID format for oEmbed: {audio_id} - {e}")
-            return JSONResponse(
-                {"error": "Invalid audio ID format"},
-                status_code=400
-            )
+            return JSONResponse({"error": "Invalid audio ID format"}, status_code=400)
 
         if not metadata:
             logger.warning(f"Audio track not found for oEmbed: {audio_id}")
-            return JSONResponse(
-                {"error": "Audio track not found"},
-                status_code=404
-            )
-        
+            return JSONResponse({"error": "Audio track not found"}, status_code=404)
+
         # Get thumbnail path for preview
         thumbnail_path = metadata.get("thumbnail_gcs_path")
         thumbnail_url = None
-        
+
         if thumbnail_path:
             try:
                 cache = get_cache()
@@ -637,20 +634,20 @@ async def oembed_endpoint(request):
             except Exception as e:
                 logger.warning(f"Failed to generate thumbnail URL for oEmbed: {e}")
                 # Continue without thumbnail
-        
+
         # Build embed URL (full URL to player page)
         embed_url = f"{config.embed_base_url}/embed/{audio_id}"
-        
+
         # Format metadata
         title = metadata.get("title", "Untitled")
         artist = metadata.get("artist", "Unknown Artist")
         album = metadata.get("album")
-        
+
         # Build description
         description = f"{artist}"
         if album:
             description += f" - {album}"
-        
+
         # Build oEmbed response according to spec
         oembed_response = {
             "version": "1.0",
@@ -664,29 +661,23 @@ async def oembed_endpoint(request):
             "height": maxheight,
             "cache_age": 3600,  # Cache for 1 hour
         }
-        
+
         # Add thumbnail if available
         if thumbnail_url:
             oembed_response["thumbnail_url"] = thumbnail_url
             oembed_response["thumbnail_width"] = 500
             oembed_response["thumbnail_height"] = 500
-        
+
         logger.info(f"Generated oEmbed response for {audio_id}: {title}")
-        
+
         return JSONResponse(oembed_response)
-        
+
     except ValueError as e:
         logger.error(f"Invalid oEmbed request parameter: {e}")
-        return JSONResponse(
-            {"error": f"Invalid parameter: {str(e)}"},
-            status_code=400
-        )
+        return JSONResponse({"error": f"Invalid parameter: {str(e)}"}, status_code=400)
     except Exception as e:
         logger.exception(f"Error generating oEmbed response: {e}")
-        return JSONResponse(
-            {"error": "Internal server error"},
-            status_code=500
-        )
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
 
 
 @mcp.custom_route("/.well-known/oembed.json", methods=["GET"])
@@ -709,12 +700,8 @@ async def oembed_discovery(request):
         "provider_name": "Loist Music Library",
         "provider_url": config.embed_base_url,
         "endpoints": [
-            {
-                "url": f"{config.embed_base_url}/oembed",
-                "formats": ["json"],
-                "discovery": True
-            }
-        ]
+            {"url": f"{config.embed_base_url}/oembed", "formats": ["json"], "discovery": True}
+        ],
     }
 
     logger.info("oEmbed discovery endpoint accessed")
@@ -727,14 +714,14 @@ def create_http_app():
     Only used when transport is HTTP or SSE
     """
     from starlette.middleware.cors import CORSMiddleware
-    
+
     if not config.enable_cors:
         logger.info("CORS disabled, returning plain MCP app")
         return None
-    
+
     # Get the FastMCP HTTP app
-    mcp_app = mcp.http_app(path='/mcp')
-    
+    mcp_app = mcp.http_app(path="/mcp")
+
     # Add CORS middleware
     mcp_app.add_middleware(
         CORSMiddleware,
@@ -744,7 +731,7 @@ def create_http_app():
         allow_headers=config.cors_allow_headers_list,
         expose_headers=config.cors_expose_headers_list,
     )
-    
+
     logger.info(f"🌐 CORS enabled for origins: {config.cors_origins_list}")
     return mcp_app
 
@@ -752,22 +739,14 @@ def create_http_app():
 if __name__ == "__main__":
     # Run the FastMCP server
     # CORS is automatically applied when using HTTP/SSE transport
-    
+
     # Check transport mode and run accordingly
     if config.server_transport == "http":
         logger.info(f"🌐 Starting HTTP server on {config.server_host}:{config.server_port}")
-        mcp.run(
-            transport="http",
-            host=config.server_host,
-            port=config.server_port
-        )
+        mcp.run(transport="http", host=config.server_host, port=config.server_port)
     elif config.server_transport == "sse":
         logger.info(f"📡 Starting SSE server on {config.server_host}:{config.server_port}")
-        mcp.run(
-            transport="sse",
-            host=config.server_host,
-            port=config.server_port
-        )
+        mcp.run(transport="sse", host=config.server_host, port=config.server_port)
     elif config.server_transport == "dual":
         # Run both HTTP web server and MCP stdio for Cursor
         logger.info(f"🔄 Starting dual mode: HTTP server + MCP stdio")
@@ -785,11 +764,7 @@ if __name__ == "__main__":
 
         # Run HTTP server in main thread
         logger.info(f"🌐 Starting HTTP server on {config.server_host}:{config.server_port}")
-        mcp.run(
-            transport="http",
-            host=config.server_host,
-            port=config.server_port
-        )
+        mcp.run(transport="http", host=config.server_host, port=config.server_port)
     else:
         # Default to stdio for MCP clients
         logger.info("📡 Starting STDIO server for MCP client communication")
