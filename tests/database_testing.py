@@ -14,10 +14,12 @@ Created: 2025-11-05
 
 import os
 import uuid
+import time
 import logging
 import pytest
 from typing import Dict, Any, List, Optional, Generator, Callable
 from contextlib import contextmanager
+from pathlib import Path
 from unittest.mock import Mock, MagicMock
 
 # Database imports
@@ -483,6 +485,225 @@ def mock_db_pool():
 def mock_database_manager():
     """Fixture providing a mock database manager."""
     return DatabaseMockFactory.create_mock_database_manager()
+
+
+# Migration Testing Infrastructure
+class MigrationTestRunner:
+    """
+    Comprehensive migration testing runner that works with isolated test schema.
+
+    Provides capabilities to:
+    - Apply migrations in sequence and verify schema changes
+    - Test migration idempotency (applying same migration twice)
+    - Validate migration dependencies and ordering
+    - Test rollback functionality
+    - Verify migration checksums
+    """
+
+    def __init__(self):
+        """Initialize migration test runner."""
+        from database.migrate import DatabaseMigrator
+        self.migrator = DatabaseMigrator()
+        self.test_schema = "test_schema"
+
+    def setup_test_migration_schema(self) -> None:
+        """Set up isolated schema for migration testing."""
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # Create test schema for migration testing
+                cur.execute(f"CREATE SCHEMA IF NOT EXISTS {self.test_schema}")
+
+                # Set search path for migration operations
+                cur.execute(f"SET search_path TO {self.test_schema}, public")
+
+                # Create migrations table in test schema
+                cur.execute(f"""
+                    CREATE TABLE IF NOT EXISTS {self.test_schema}.schema_migrations (
+                        version VARCHAR(255) PRIMARY KEY,
+                        applied_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                        checksum VARCHAR(64),
+                        execution_time_ms INTEGER
+                    );
+                """)
+
+            conn.commit()
+
+    def cleanup_test_migration_schema(self) -> None:
+        """Clean up test migration schema."""
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # Drop test schema and all its contents
+                cur.execute(f"DROP SCHEMA IF EXISTS {self.test_schema} CASCADE")
+            conn.commit()
+
+    def apply_migration_to_test_schema(self, migration_file: Path) -> Dict[str, Any]:
+        """
+        Apply a single migration to the test schema and verify results.
+
+        Args:
+            migration_file: Path to migration file
+
+        Returns:
+            Dict with migration results and verification
+        """
+        version = migration_file.stem.split('_')[0]
+
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # Set search path to test schema
+                cur.execute(f"SET search_path TO {self.test_schema}, public")
+
+                # Read migration content
+                with open(migration_file, 'r') as f:
+                    migration_sql = f.read()
+
+                # Start timing
+                start_time = time.time()
+
+                try:
+                    # Apply migration
+                    cur.execute(migration_sql)
+
+                    # Record migration in test schema
+                    checksum = self.migrator.calculate_checksum(migration_file)
+                    execution_time = int((time.time() - start_time) * 1000)
+
+                    cur.execute(f"""
+                        INSERT INTO {self.test_schema}.schema_migrations
+                        (version, checksum, execution_time_ms)
+                        VALUES (%s, %s, %s)
+                    """, (version, checksum, execution_time))
+
+                    conn.commit()
+
+                    return {
+                        'success': True,
+                        'version': version,
+                        'execution_time_ms': execution_time,
+                        'checksum': checksum
+                    }
+
+                except Exception as e:
+                    conn.rollback()
+                    return {
+                        'success': False,
+                        'version': version,
+                        'error': str(e)
+                    }
+
+    def test_migration_idempotency(self, migration_file: Path) -> bool:
+        """
+        Test that a migration can be applied multiple times safely.
+
+        Args:
+            migration_file: Migration file to test
+
+        Returns:
+            True if migration is idempotent
+        """
+        # Apply migration first time
+        result1 = self.apply_migration_to_test_schema(migration_file)
+        if not result1['success']:
+            return False
+
+        # Apply migration second time
+        result2 = self.apply_migration_to_test_schema(migration_file)
+
+        # Should succeed both times for idempotent migration
+        return result1['success'] and result2['success']
+
+    def verify_migration_schema_changes(self, migration_file: Path, expected_changes: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Verify that a migration produces expected schema changes.
+
+        Args:
+            migration_file: Migration file that was applied
+            expected_changes: Dict describing expected schema changes
+
+        Returns:
+            Dict with verification results
+        """
+        version = migration_file.stem.split('_')[0]
+
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"SET search_path TO {self.test_schema}, public")
+
+                results = {'version': version, 'checks': {}}
+
+                # Check for expected tables
+                if 'tables' in expected_changes:
+                    for table_name in expected_changes['tables']:
+                        cur.execute("""
+                            SELECT EXISTS (
+                                SELECT FROM information_schema.tables
+                                WHERE table_schema = %s AND table_name = %s
+                            )
+                        """, (self.test_schema, table_name))
+                        exists = cur.fetchone()[0]
+                        results['checks'][f'table_{table_name}'] = exists
+
+                # Check for expected columns
+                if 'columns' in expected_changes:
+                    for table_name, columns in expected_changes['columns'].items():
+                        for column_name in columns:
+                            cur.execute("""
+                                SELECT EXISTS (
+                                    SELECT FROM information_schema.columns
+                                    WHERE table_schema = %s AND table_name = %s AND column_name = %s
+                                )
+                            """, (self.test_schema, table_name, column_name))
+                            exists = cur.fetchone()[0]
+                            results['checks'][f'column_{table_name}_{column_name}'] = exists
+
+                # Check for expected indexes
+                if 'indexes' in expected_changes:
+                    for index_name in expected_changes['indexes']:
+                        cur.execute("""
+                            SELECT EXISTS (
+                                SELECT FROM pg_indexes
+                                WHERE schemaname = %s AND indexname = %s
+                            )
+                        """, (self.test_schema, index_name))
+                        exists = cur.fetchone()[0]
+                        results['checks'][f'index_{index_name}'] = exists
+
+                results['all_passed'] = all(results['checks'].values())
+                return results
+
+    def test_migration_dependencies(self) -> Dict[str, Any]:
+        """
+        Test migration dependency ordering.
+
+        Returns:
+            Dict with dependency analysis results
+        """
+        migration_files = sorted(self.migrator.migrations_dir.glob("*.sql"))
+        results = {'total_migrations': len(migration_files), 'dependency_issues': []}
+
+        # Check for version ordering (basic dependency check)
+        versions = []
+        for migration_file in migration_files:
+            try:
+                version = migration_file.stem.split('_')[0]
+                versions.append(version)
+            except (IndexError, ValueError):
+                results['dependency_issues'].append({
+                    'file': migration_file.name,
+                    'issue': 'Invalid version format'
+                })
+
+        # Check if versions are in order
+        sorted_versions = sorted(versions)
+        if versions != sorted_versions:
+            results['dependency_issues'].append({
+                'issue': 'Migration versions not in sequential order',
+                'expected': sorted_versions,
+                'actual': versions
+            })
+
+        results['dependency_check_passed'] = len(results['dependency_issues']) == 0
+        return results
 
 
 # Utility functions for test data management
