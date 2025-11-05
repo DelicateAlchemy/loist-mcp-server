@@ -248,6 +248,44 @@ class TestDatabaseManager:
                 except Exception as e:
                     logger.error(f"Error returning connection to pool: {e}")
 
+    @contextmanager
+    def committing_transaction_context(self):
+        """
+        Context manager for database transactions in tests that COMMIT on success.
+
+        This is used for testing transaction commit behavior, unlike transaction_context
+        which always rolls back for test isolation.
+        """
+        if not self._pool:
+            raise RuntimeError("Test database not initialized")
+
+        # Get a connection directly from the pool
+        conn = None
+        try:
+            conn = self._pool._pool.getconn()
+
+            # Set up transaction mode
+            conn.autocommit = False
+
+            try:
+                yield conn
+                # Commit successful transactions
+                conn.commit()
+            except Exception:
+                if conn and not conn.closed:
+                    conn.rollback()
+                raise
+            finally:
+                if conn and not conn.closed:
+                    conn.autocommit = True
+        finally:
+            # Return connection to pool
+            if conn and self._pool and self._pool._pool:
+                try:
+                    self._pool._pool.putconn(conn)
+                except Exception as e:
+                    logger.error(f"Error returning connection to pool: {e}")
+
     def clear_all_test_data(self) -> None:
         """Clear all test data from database."""
         if not self._pool:
