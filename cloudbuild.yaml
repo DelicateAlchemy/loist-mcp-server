@@ -74,6 +74,64 @@ steps:
 
         echo "✅ All tests passed successfully"
 
+  # Step 1.5: Run MCP Protocol Validation
+  - name: 'python:3.11-slim'
+    id: 'mcp-validation'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "🔍 Running MCP Protocol Validation..."
+
+        # Install system dependencies for MCP testing
+        apt-get update && apt-get install -y --no-install-recommends \
+          build-essential \
+          nodejs \
+          npm \
+          && rm -rf /var/lib/apt/lists/*
+
+        # Install Python dependencies
+        pip install --upgrade pip
+        pip install -r requirements.txt
+
+        # Create MCP validation results directory
+        mkdir -p mcp-validation-results
+
+        # Build MCP server image for testing
+        docker build -t music-library-mcp:mcp-test .
+
+        # Copy and make test scripts executable
+        cp test_mcp_tools_ci.sh mcp-validation-results/
+        cp test_mcp_resources_ci.sh mcp-validation-results/
+        cp scripts/validate_mcp_results.js mcp-validation-results/
+        cp run_mcp_stdio_docker.sh mcp-validation-results/
+        chmod +x mcp-validation-results/test_mcp_tools_ci.sh
+        chmod +x mcp-validation-results/test_mcp_resources_ci.sh
+        chmod +x mcp-validation-results/validate_mcp_results.js
+        chmod +x mcp-validation-results/run_mcp_stdio_docker.sh
+
+        # Change to validation directory and run MCP tools tests
+        cd mcp-validation-results
+        echo "🧪 Running MCP Tools CI Tests..."
+        ./test_mcp_tools_ci.sh
+
+        # Run MCP resources tests
+        echo "🧪 Running MCP Resources CI Tests..."
+        ./test_mcp_resources_ci.sh
+
+        # Validate MCP protocol compliance
+        echo "🔍 Validating MCP Protocol Compliance..."
+        node validate_mcp_results.js
+
+        # Store MCP validation artifacts
+        cp mcp_tools_results.json ../mcp-validation-results/
+        cp mcp_resources_results.json ../mcp-validation-results/
+        cp mcp_validation_report.json ../mcp-validation-results/
+
+        cd ..
+        echo "✅ MCP Protocol Validation completed"
+    waitFor: ['run-tests']
+
   # Step 2: Run Static Analysis and Code Quality Checks
   - name: 'python:3.11-slim'
     id: 'static-analysis'
@@ -161,9 +219,10 @@ steps:
       'test-results/',
       'coverage-reports/',
       'analysis-results/',
+      'mcp-validation-results/',
       'gs://$PROJECT_ID-build-artifacts/$COMMIT_SHA/'
     ]
-    waitFor: ['run-tests', 'static-analysis']
+    waitFor: ['run-tests', 'static-analysis', 'mcp-validation']
     allowFailure: true  # Don't fail build if artifact upload fails
 
   # Step 5: Push Docker image to Google Artifact Registry

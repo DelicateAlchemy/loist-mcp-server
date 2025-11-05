@@ -35,7 +35,7 @@ After comprehensive audit of the codebase, significant staging infrastructure is
 
 ### 4. Secrets Management
 **Status:** ✅ IMPLEMENTED
-- **Staging Secrets:** `update-staging-secrets.sh` configures staging-specific secrets
+- **Staging Secrets:** All staging secrets are pre-configured and ready for deployment
 - **Secret Types:**
   - Database connection name (`db-connection-name-staging`)
   - Database password (`db-password-staging`)
