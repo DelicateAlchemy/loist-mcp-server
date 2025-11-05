@@ -172,6 +172,22 @@ pytest tests/test_database_operations_integration.py::TestBatchOperations -v
 - **Exception Testing**: Unified framework validation
 - **Repository Testing**: Dependency injection and mocking
 
+#### Security Scanning
+```bash
+# Run comprehensive security scan
+./scripts/security-scan.sh
+
+# Run individual security tools
+bandit -r src/ -f json -o reports/bandit-scan.json
+safety scan --output json --target .
+```
+
+#### Security Categories
+- **Bandit Analysis**: Python security vulnerability scanning
+- **Safety Checks**: Dependency vulnerability assessment
+- **Custom Security**: Hardcoded secrets, debug code, file permissions
+- **Baseline Enforcement**: Zero-tolerance for high-severity issues
+
 ### Documentation
 
 Comprehensive documentation is available in the `docs/` directory:
@@ -181,6 +197,7 @@ Comprehensive documentation is available in the `docs/` directory:
 - **[Database Best Practices](docs/database-best-practices.md)**: Performance optimizations
 - **[Module Organization Guide](docs/module-organization-guide.md)**: Code structure patterns
 - **[Testing Strategy](docs/testing-strategy-and-recovery.md)**: Comprehensive testing approach
+- **[Security Scanning Guide](docs/security-scanning.md)**: Security infrastructure and scanning tools
 
 ### Key Development Commands
 
@@ -196,6 +213,13 @@ pytest tests/test_database_operations_integration.py
 
 # Generate coverage report
 pytest --cov=src --cov-report=html && open htmlcov/index.html
+
+# Run security scanning
+./scripts/security-scan.sh
+
+# Run individual security tools
+bandit -r src/
+safety scan --target .
 ```
 
 ## Prerequisites
@@ -436,6 +460,8 @@ SERVER_PORT=8080
 - ✅ Repository pattern testing with mocks
 - ✅ Integration testing with Docker database
 - ✅ Exception framework validation
+- ✅ **Security Scanning Infrastructure**: Bandit, Safety, custom checks
+- ✅ **Security Baseline Enforcement**: Zero-tolerance for high-severity issues
 
 #### Development Experience
 - ✅ Task Master integration for structured development
