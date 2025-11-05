@@ -8,6 +8,7 @@ Provides:
 - Common test utilities and fixtures
 - Application initialization and configuration
 - Logging setup for tests
+- Database testing infrastructure
 """
 
 import os
@@ -29,6 +30,38 @@ try:
     REPOSITORIES_AVAILABLE = True
 except ImportError:
     REPOSITORIES_AVAILABLE = False
+
+# Import database testing infrastructure
+try:
+    import sys
+    import os
+    sys.path.insert(0, os.path.dirname(__file__))
+
+    from database_testing import (
+        DatabaseTestHelper,
+        TestDatabaseManager,
+        TestDataFactory,
+        DatabaseMockFactory,
+        insert_test_track,
+        insert_test_track_batch,
+        count_tracks_in_database,
+        verify_track_exists,
+        verify_track_data,
+        temporary_track,
+        temporary_track_batch,
+        assert_track_count,
+        assert_track_exists,
+        assert_track_data_matches,
+    )
+    DATABASE_TESTING_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: Database testing infrastructure not available: {e}")
+    DATABASE_TESTING_AVAILABLE = False
+    # Define dummy classes to avoid NameError
+    DatabaseTestHelper = None
+    TestDatabaseManager = None
+    TestDataFactory = None
+    DatabaseMockFactory = None
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -321,3 +354,134 @@ class TestEnv:
 def test_env():
     """Fixture providing TestEnv context manager."""
     return TestEnv
+
+
+# ============================================================================
+# Database Testing Infrastructure Fixtures
+# ============================================================================
+
+@pytest.fixture(scope="session")
+def test_db_manager():
+    """Session-scoped database manager for tests."""
+    if not DATABASE_TESTING_AVAILABLE or not DatabaseTestHelper.is_database_configured():
+        pytest.skip("Database testing not available or not configured")
+
+    manager = TestDatabaseManager()
+    manager.setup_test_database()
+    yield manager
+    manager.cleanup_test_database()
+
+
+@pytest.fixture
+def db_transaction(test_db_manager):
+    """Transaction fixture that rolls back changes after each test."""
+    with test_db_manager.transaction_context() as conn:
+        yield conn
+
+
+@pytest.fixture
+def clean_database(test_db_manager):
+    """Fixture that ensures clean database state for each test."""
+    test_db_manager.clear_all_test_data()
+    yield
+    # Cleanup happens automatically via transaction rollback
+
+
+@pytest.fixture
+def sample_track_data():
+    """Fixture providing sample track data."""
+    if not DATABASE_TESTING_AVAILABLE or TestDataFactory is None:
+        pytest.skip("Database testing not available")
+    return TestDataFactory.create_basic_track()
+
+
+@pytest.fixture
+def sample_track_batch():
+    """Fixture providing a batch of sample tracks."""
+    if not DATABASE_TESTING_AVAILABLE or TestDataFactory is None:
+        pytest.skip("Database testing not available")
+    return TestDataFactory.create_track_batch(3)
+
+
+@pytest.fixture
+def edge_case_tracks():
+    """Fixture providing tracks with edge case data."""
+    if not DATABASE_TESTING_AVAILABLE or TestDataFactory is None:
+        pytest.skip("Database testing not available")
+    return TestDataFactory.create_edge_case_tracks()
+
+
+@pytest.fixture
+def search_test_tracks():
+    """Fixture providing tracks for search testing."""
+    if not DATABASE_TESTING_AVAILABLE or TestDataFactory is None:
+        pytest.skip("Database testing not available")
+    return TestDataFactory.create_search_test_tracks()
+
+
+@pytest.fixture
+def mock_db_connection():
+    """Fixture providing a mock database connection."""
+    if not DATABASE_TESTING_AVAILABLE or DatabaseMockFactory is None:
+        pytest.skip("Database testing not available")
+    return DatabaseMockFactory.create_mock_connection()
+
+
+@pytest.fixture
+def mock_db_pool():
+    """Fixture providing a mock database connection pool."""
+    if not DATABASE_TESTING_AVAILABLE or DatabaseMockFactory is None:
+        pytest.skip("Database testing not available")
+    return DatabaseMockFactory.create_mock_pool()
+
+
+@pytest.fixture
+def mock_database_manager():
+    """Fixture providing a mock database manager."""
+    if not DATABASE_TESTING_AVAILABLE or DatabaseMockFactory is None:
+        pytest.skip("Database testing not available")
+    return DatabaseMockFactory.create_mock_database_manager()
+
+
+# ============================================================================
+# Database Testing Helper Fixtures
+# ============================================================================
+
+@pytest.fixture
+def db_helper():
+    """Fixture providing database test helper utilities."""
+    if not DATABASE_TESTING_AVAILABLE or DatabaseTestHelper is None:
+        pytest.skip("Database testing not available")
+    return DatabaseTestHelper()
+
+
+@pytest.fixture
+def data_factory():
+    """Fixture providing test data factory."""
+    if not DATABASE_TESTING_AVAILABLE or TestDataFactory is None:
+        pytest.skip("Database testing not available")
+    return TestDataFactory()
+
+
+@pytest.fixture
+def mock_factory():
+    """Fixture providing mock factory."""
+    if not DATABASE_TESTING_AVAILABLE or DatabaseMockFactory is None:
+        pytest.skip("Database testing not available")
+    return DatabaseMockFactory()
+
+
+@pytest.fixture
+def temporary_track_fixture(clean_database):
+    """Fixture providing a context manager for temporary tracks."""
+    if not DATABASE_TESTING_AVAILABLE or temporary_track is None:
+        pytest.skip("Database testing not available")
+    return temporary_track
+
+
+@pytest.fixture
+def temporary_track_batch_fixture(clean_database):
+    """Fixture providing a context manager for temporary track batches."""
+    if not DATABASE_TESTING_AVAILABLE or temporary_track_batch is None:
+        pytest.skip("Database testing not available")
+    return temporary_track_batch
