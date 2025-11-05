@@ -1,0 +1,15 @@
+Custom Security Checks Report
+Generated: Wed Nov  5 14:54:18 GMT 2025
+=================================
+
+🔍 Checking for hardcoded secrets...
+⚠️  Potential hardcoded secrets found: 3 patterns detected
+
+🔍 Checking for debug code...
+⚠️  Debug code found: 115 instances
+
+🔍 Checking file permissions...
+✅ All Python files have appropriate permissions
+
+🔍 Checking for security-related TODOs...
+✅ No security-related TODOs found
