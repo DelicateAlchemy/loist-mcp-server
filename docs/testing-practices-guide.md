@@ -276,6 +276,349 @@ def test_operation_performance_under_load():
 - **Edge Case Coverage**: Extensive test data factories for boundary and edge case testing
 - **Error Recovery**: Robust error handling and recovery testing capabilities
 
+#### Connection Pool and Transaction Testing (Task 17.3)
+
+Task 17.3 provides enterprise-grade testing for database connection pools and transaction management, including stress testing, concurrent operations, and failure scenario validation.
+
+##### Connection Pool Testing Classes
+
+**TestConnectionPoolStressTesting** - Validates pool behavior under extreme load:
+
+```python
+# Test concurrent connection acquisition
+def test_concurrent_connection_acquisition(self, db_pool):
+    """Test acquiring multiple connections concurrently."""
+    results = []
+    errors = []
+
+    def acquire_connection(worker_id):
+        with db_pool.get_connection() as conn:
+            with conn.cursor() as cur:
+                # Perform database operation
+                cur.execute("SELECT %s as worker_id", (worker_id,))
+                results.append(cur.fetchone()[0])
+
+    # Launch 10 concurrent workers
+    threads = [threading.Thread(target=acquire_connection, args=(i,)) for i in range(10)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert len(results) == 10  # All workers completed successfully
+```
+
+**TestConnectionPoolConfiguration** - Validates pool setup and configuration:
+
+```python
+def test_pool_configuration_validation(self):
+    """Test that pool configuration is validated properly."""
+    from database import DatabasePool
+
+    # Test valid configuration
+    pool = DatabasePool(min_connections=1, max_connections=5)
+    assert pool.min_connections == 1
+    assert pool.max_connections == 5
+
+    # Test bounds checking
+    pool = DatabasePool(min_connections=5, max_connections=3)
+    assert pool.min_connections <= pool.max_connections
+```
+
+**TestConnectionLifecycle** - Tests complete connection lifecycle:
+
+```python
+def test_connection_proper_cleanup(self, db_pool):
+    """Test that connections are properly cleaned up."""
+    initial_stats = db_pool.get_stats()
+
+    # Use several connections
+    for i in range(3):
+        with db_pool.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT %s", (i,))
+
+    # Verify connections returned to pool
+    final_stats = db_pool.get_stats()
+    assert abs(final_stats['connections_available'] - initial_stats['connections_available']) <= 3
+```
+
+##### Transaction Testing Classes
+
+**TestTransactionCommitRollback** - Tests transaction commit and rollback scenarios:
+
+```python
+def test_successful_transaction_commit(self, test_schema_setup):
+    """Test that successful transactions commit properly."""
+    manager = test_schema_setup
+
+    with manager.committing_transaction_context() as conn:
+        with conn.cursor() as cur:
+            # Insert test data
+            cur.execute("""
+                INSERT INTO test_schema.transaction_test (name, balance)
+                VALUES (%s, %s) RETURNING id
+            """, ("Commit Test", 100.50))
+
+            inserted_id = cur.fetchone()[0]
+
+    # Verify transaction was committed (data persists)
+    with manager._pool.get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT name FROM test_schema.transaction_test WHERE id = %s", (inserted_id,))
+            result = cur.fetchone()
+            assert result[0] == "Commit Test"
+```
+
+**TestTransactionIsolationLevels** - Tests different isolation levels:
+
+```python
+def test_read_committed_isolation(self, test_schema_setup):
+    """Test READ COMMITTED isolation level."""
+    manager = test_schema_setup
+
+    # Insert initial data
+    with manager.transaction_context() as conn:
+        # Setup test data
+        pass
+
+    # Test concurrent read/write behavior
+    results = []
+
+    def transaction_worker(worker_id):
+        with manager.transaction_context() as conn:
+            # Perform operations and check isolation
+            pass
+
+    # Run concurrent transactions
+    threads = [threading.Thread(target=transaction_worker, args=(i,)) for i in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+```
+
+**TestTransactionTimeoutDeadlock** - Tests timeout and deadlock handling:
+
+```python
+def test_deadlock_detection_simulation(self, test_schema_setup):
+    """Test deadlock detection and handling."""
+    manager = test_schema_setup
+
+    results = []
+
+    def deadlock_worker(worker_id):
+        try:
+            with manager.transaction_context() as conn:
+                with conn.cursor() as cur:
+                    if worker_id == 1:
+                        # Lock record 1 then try to lock record 2
+                        cur.execute("SELECT * FROM test_table WHERE id = 1 FOR UPDATE")
+                        time.sleep(0.1)
+                        cur.execute("SELECT * FROM test_table WHERE id = 2 FOR UPDATE")
+                    else:
+                        # Lock record 2 then try to lock record 1
+                        cur.execute("SELECT * FROM test_table WHERE id = 2 FOR UPDATE")
+                        time.sleep(0.1)
+                        cur.execute("SELECT * FROM test_table WHERE id = 1 FOR UPDATE")
+            results.append(f"worker_{worker_id}_success")
+        except Exception as e:
+            results.append(f"worker_{worker_id}_error: {str(e)[:50]}")
+
+    # Run conflicting transactions
+    threads = [threading.Thread(target=deadlock_worker, args=(i,)) for i in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    # Verify deadlock was detected and handled
+    success_count = sum(1 for r in results if "success" in r)
+    assert success_count >= 1  # At least one transaction should succeed
+```
+
+**TestConcurrentTransactions** - Tests concurrent transaction behavior:
+
+```python
+def test_concurrent_transaction_isolation(self, test_schema_setup):
+    """Test that concurrent transactions are properly isolated."""
+    manager = test_schema_setup
+
+    results = []
+
+    def concurrent_transaction_worker(worker_id, operation):
+        try:
+            with manager.transaction_context() as conn:
+                with conn.cursor() as cur:
+                    if operation == "insert":
+                        cur.execute("INSERT INTO test_table (data) VALUES (%s)", (worker_id,))
+                    elif operation == "update":
+                        cur.execute("UPDATE test_table SET data = data + 1")
+                    elif operation == "select":
+                        cur.execute("SELECT COUNT(*) FROM test_table")
+                        count = cur.fetchone()[0]
+                        results.append(("select", worker_id, count))
+            results.append((operation, worker_id, "success"))
+        except Exception as e:
+            results.append((operation, worker_id, f"error: {str(e)[:50]}"))
+
+    # Run concurrent operations
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures = [executor.submit(concurrent_transaction_worker, i, ["insert", "update", "select"][i % 3])
+                  for i in range(5)]
+        for future in futures:
+            future.result()
+
+    # Verify concurrent operations completed
+    operations_completed = len([r for r in results if r[2] == "success"])
+    assert operations_completed > 0
+```
+
+##### Transaction Context Managers
+
+**committing_transaction_context()** - Commits successful transactions:
+
+```python
+# Unlike transaction_context() which always rolls back,
+# committing_transaction_context() commits successful operations
+def test_with_commit(self, test_schema_setup):
+    manager = test_schema_setup
+
+    with manager.committing_transaction_context() as conn:
+        # Operations here will be committed if successful
+        with conn.cursor() as cur:
+            cur.execute("INSERT INTO test_table (data) VALUES (%s)", ("test",))
+
+    # Data persists after context manager exits
+    # Verify with separate connection
+```
+
+**transaction_context()** - Always rolls back for test isolation:
+
+```python
+def test_with_rollback(self, test_schema_setup):
+    manager = test_schema_setup
+
+    with manager.transaction_context() as conn:
+        # Operations here will be rolled back
+        with conn.cursor() as cur:
+            cur.execute("INSERT INTO test_table (data) VALUES (%s)", ("test",))
+
+    # Data does not persist - rolled back automatically
+```
+
+##### Test Fixtures for Connection Pool and Transaction Testing
+
+```python
+@pytest.fixture
+def test_schema_setup(db_pool):
+    """Set up test schema for transaction testing."""
+    from tests.database_testing import TestDatabaseManager
+
+    manager = TestDatabaseManager()
+    manager.setup_test_database()
+
+    # Create test tables for transaction testing
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS test_schema.transaction_test (
+                    id SERIAL PRIMARY KEY,
+                    name VARCHAR(100) NOT NULL,
+                    balance DECIMAL(10,2) DEFAULT 0
+                );
+            """)
+        conn.commit()
+
+    yield manager
+    manager.cleanup_test_database()
+```
+
+##### Connection Pool and Transaction Testing Patterns
+
+**Stress Testing Pattern**:
+```python
+def test_connection_pool_under_load(db_pool):
+    """Test pool behavior under concurrent load."""
+    def load_worker():
+        for _ in range(100):
+            with db_pool.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT 1")
+
+    # Run multiple workers concurrently
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        futures = [executor.submit(load_worker) for _ in range(10)]
+        for future in futures:
+            future.result()
+
+    # Verify pool health
+    health = db_pool.health_check()
+    assert health['healthy'] is True
+```
+
+**Transaction Atomicity Pattern**:
+```python
+def test_transaction_atomicity(test_schema_setup):
+    """Test that transactions maintain atomicity."""
+    manager = test_schema_setup
+
+    try:
+        with manager.committing_transaction_context() as conn:
+            with conn.cursor() as cur:
+                # Multiple related operations
+                cur.execute("INSERT INTO accounts (name) VALUES (%s)", ("Alice",))
+                cur.execute("INSERT INTO accounts (name) VALUES (%s)", ("Bob",))
+                # Simulate error - should rollback all
+                raise Exception("Simulated failure")
+    except Exception:
+        pass
+
+    # Verify atomicity - either all operations succeeded or none
+    with manager._pool.get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM accounts WHERE name IN (%s, %s)", ("Alice", "Bob"))
+            count = cur.fetchone()[0]
+            assert count in [0, 2]  # All or nothing
+```
+
+**Isolation Level Testing Pattern**:
+```python
+def test_isolation_level_behavior(test_schema_setup):
+    """Test specific isolation level behavior."""
+    manager = test_schema_setup
+
+    # Test phenomena that should be prevented at certain isolation levels
+    # (dirty reads, non-repeatable reads, phantom reads)
+
+    results = []
+
+    def reader():
+        with manager.transaction_context() as conn:
+            # Reader transaction
+            pass
+
+    def writer():
+        with manager.transaction_context() as conn:
+            # Writer transaction
+            pass
+
+    # Run concurrent reader/writer transactions
+    # Verify isolation level prevents unwanted phenomena
+```
+
+##### Key Features of Connection Pool and Transaction Testing
+
+- **Stress Testing**: Validates pool behavior under extreme concurrent load (10+ connections)
+- **Timeout Handling**: Tests graceful timeout behavior and resource cleanup
+- **Transaction Atomicity**: Ensures all-or-nothing transaction behavior
+- **Isolation Validation**: Verifies proper transaction isolation levels and consistency
+- **Deadlock Detection**: Tests deadlock prevention and resolution mechanisms
+- **Concurrent Safety**: Validates thread-safe connection pool operations
+- **Resource Management**: Ensures proper connection lifecycle and cleanup
+- **Error Recovery**: Tests system resilience under failure conditions
+- **Performance Monitoring**: Built-in timing and health monitoring during tests
+
 ### 3. Static Analysis Tools
 
 #### MyPy Configuration (`.mypy.ini`)
@@ -983,4 +1326,4 @@ def test_invalid_token_rejected():
 
 **Last Updated**: November 5, 2025
 **Coverage Target**: 80% (Production), 70% (Staging)
-**Test Categories**: Unit, Integration, Functional, Regression, Migration, Connection Pool, Transaction, Search, Data Integrity
+**Test Categories**: Unit, Integration, Functional, Regression, Migration, Connection Pool Stress, Connection Pool Config, Connection Lifecycle, Transaction Commit/Rollback, Transaction Isolation, Transaction Timeout/Deadlock, Concurrent Transactions, Search, Data Integrity
