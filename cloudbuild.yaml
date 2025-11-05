@@ -14,6 +14,7 @@ steps:
       - 'SERVER_VERSION=0.1.0'
       - 'SERVER_HOST=0.0.0.0'
       - 'SERVER_PORT=8080'
+      - 'PYTHONPATH=/workspace/src:/workspace'
     args:
       - '-c'
       - |
@@ -94,6 +95,7 @@ steps:
       - 'SERVER_VERSION=0.1.0'
       - 'SERVER_HOST=0.0.0.0'
       - 'SERVER_PORT=8080'
+      - 'PYTHONPATH=/workspace/src:/workspace'
     args:
       - '-c'
       - |
@@ -160,6 +162,7 @@ steps:
       - 'SERVER_VERSION=0.1.0'
       - 'SERVER_HOST=0.0.0.0'
       - 'SERVER_PORT=8080'
+      - 'PYTHONPATH=/workspace/src:/workspace'
     args:
       - '-c'
       - |
