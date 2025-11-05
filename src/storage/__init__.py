@@ -6,6 +6,7 @@ including signed URL generation, file uploads, and lifecycle management.
 """
 
 from .gcs_client import (
+    GCSClient,
     create_gcs_client,
     generate_signed_url,
     upload_audio_file,
@@ -15,6 +16,7 @@ from .gcs_client import (
 )
 
 __all__ = [
+    "GCSClient",
     "create_gcs_client",
     "generate_signed_url",
     "upload_audio_file",
