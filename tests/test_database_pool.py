@@ -8,12 +8,19 @@ Tests verify:
 - Connection retry logic
 - Pool statistics
 - Thread safety
+- Stress testing under load
+- Timeout handling
+- Pool configuration validation
+- Connection lifecycle management
 """
 
 import pytest
 import os
+import time
+import threading
 from uuid import uuid4
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, call
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Skip all tests if database is not configured
 pytest_plugins = []
@@ -334,6 +341,363 @@ class TestDatabaseUtils:
         assert result is not None
         assert len(result) == 1
         assert result[0]["num"] == 1
+
+
+class TestConnectionPoolStressTesting:
+    """Stress tests for connection pool under high load and concurrent access."""
+
+    def test_concurrent_connection_acquisition(self, db_pool):
+        """Test acquiring multiple connections concurrently."""
+        if not db_pool:
+            pytest.skip("Database pool not available")
+
+        results = []
+        errors = []
+
+        def acquire_connection(worker_id):
+            """Worker function to acquire and release a connection."""
+            try:
+                with db_pool.get_connection() as conn:
+                    with conn.cursor() as cur:
+                        # Perform a simple operation
+                        cur.execute("SELECT %s as worker_id", (worker_id,))
+                        result = cur.fetchone()
+                        results.append((worker_id, result[0]))
+
+                        # Simulate some work
+                        time.sleep(0.01)
+
+            except Exception as e:
+                errors.append(f"Worker {worker_id}: {e}")
+
+        # Launch 10 concurrent workers
+        threads = []
+        for i in range(10):
+            thread = threading.Thread(target=acquire_connection, args=(i,))
+            threads.append(thread)
+
+        # Start all threads
+        for thread in threads:
+            thread.start()
+
+        # Wait for all threads to complete
+        for thread in threads:
+            thread.join()
+
+        # Verify results
+        assert len(errors) == 0, f"Connection errors occurred: {errors}"
+        assert len(results) == 10, "Not all workers completed successfully"
+
+        # Verify each worker got its own ID back
+        worker_ids = {result[0] for result in results}
+        assert len(worker_ids) == 10, "Worker IDs should be unique"
+
+    def test_connection_pool_limits_under_load(self, db_pool):
+        """Test connection pool behavior when approaching max connections."""
+        if not db_pool:
+            pytest.skip("Database pool not available")
+
+        max_connections = db_pool.max_connections
+        connections = []
+
+        try:
+            # Acquire connections up to the limit
+            for i in range(max_connections):
+                conn = db_pool.get_connection()
+                connections.append(conn)
+
+            # Verify we got all expected connections
+            assert len(connections) == max_connections
+
+            # Try to get one more connection (should work or timeout gracefully)
+            try:
+                extra_conn = db_pool.get_connection(timeout=1.0)  # Short timeout
+                extra_conn.close()
+                # If we get here, the pool allows over-limit connections
+            except Exception:
+                # Expected behavior - pool is at capacity
+                pass
+
+        finally:
+            # Clean up all connections
+            for conn in connections:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+    def test_connection_pool_timeout_handling(self, db_pool):
+        """Test connection pool timeout behavior."""
+        if not db_pool:
+            pytest.skip("Database pool not available")
+
+        # Acquire all available connections
+        connections = []
+        try:
+            for i in range(db_pool.max_connections):
+                try:
+                    conn = db_pool.get_connection(timeout=1.0)
+                    connections.append(conn)
+                except Exception:
+                    break  # Pool exhausted
+
+            # Now try to get another connection with a short timeout
+            start_time = time.time()
+            try:
+                db_pool.get_connection(timeout=0.5)
+                pytest.fail("Expected timeout exception")
+            except Exception as e:
+                # Verify it failed within reasonable time
+                elapsed = time.time() - start_time
+                assert elapsed < 1.0, f"Timeout took too long: {elapsed}s"
+                # Exception type depends on pool implementation
+
+        finally:
+            # Clean up
+            for conn in connections:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+    def test_connection_pool_rapid_acquire_release(self, db_pool):
+        """Test rapid acquisition and release of connections."""
+        if not db_pool:
+            pytest.skip("Database pool not available")
+
+        def rapid_acquire_release(iterations):
+            """Perform rapid acquire/release cycles."""
+            for i in range(iterations):
+                try:
+                    with db_pool.get_connection() as conn:
+                        with conn.cursor() as cur:
+                            cur.execute("SELECT 1")
+                            cur.fetchone()
+                except Exception as e:
+                    pytest.fail(f"Connection failed on iteration {i}: {e}")
+
+        # Run rapid cycles in parallel
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            futures = [executor.submit(rapid_acquire_release, 20) for _ in range(5)]
+
+            # Wait for all to complete
+            for future in as_completed(futures):
+                future.result()  # Will raise exception if any failed
+
+    def test_connection_pool_health_under_load(self, db_pool):
+        """Test connection pool health monitoring under load."""
+        if not db_pool:
+            pytest.skip("Database pool not available")
+
+        # Perform health checks while under load
+        initial_health = db_pool.health_check()
+
+        def load_worker():
+            """Worker that performs database operations."""
+            for _ in range(50):
+                with db_pool.get_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("SELECT pg_backend_pid()")
+                        cur.fetchone()
+
+        # Start load workers
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            futures = [executor.submit(load_worker) for _ in range(10)]
+
+            # Monitor health during load
+            health_checks = []
+            for _ in range(5):
+                time.sleep(0.1)
+                health = db_pool.health_check()
+                health_checks.append(health)
+
+            # Wait for workers to complete
+            for future in as_completed(futures):
+                future.result()
+
+        # Verify health remained good throughout
+        final_health = db_pool.health_check()
+        assert final_health['healthy'] is True
+
+        # Verify connection counts were reasonable
+        for health in health_checks:
+            assert health.get('connections_used', 0) <= db_pool.max_connections
+
+
+class TestConnectionPoolConfiguration:
+    """Test connection pool configuration validation and behavior."""
+
+    def test_pool_configuration_validation(self):
+        """Test that pool configuration is validated properly."""
+        from database import DatabasePool
+
+        # Test valid configuration
+        pool = DatabasePool(min_connections=1, max_connections=5)
+        assert pool.min_connections == 1
+        assert pool.max_connections == 5
+
+        # Test default values
+        default_pool = DatabasePool()
+        assert default_pool.min_connections >= 1
+        assert default_pool.max_connections > default_pool.min_connections
+
+    def test_pool_configuration_bounds(self):
+        """Test pool configuration boundary conditions."""
+        from database import DatabasePool
+
+        # Test minimum bounds
+        pool = DatabasePool(min_connections=0, max_connections=1)
+        assert pool.min_connections >= 0
+        assert pool.max_connections > 0
+
+        # Test that max > min
+        pool = DatabasePool(min_connections=5, max_connections=3)
+        # Implementation should handle this gracefully
+        assert pool.min_connections <= pool.max_connections
+
+    def test_pool_initialization_with_custom_config(self):
+        """Test pool initialization with custom configuration."""
+        from database import DatabasePool
+
+        config = {
+            'min_connections': 2,
+            'max_connections': 8,
+            'connection_timeout': 30,
+            'max_idle_time': 300
+        }
+
+        pool = DatabasePool(**config)
+        assert pool.min_connections == config['min_connections']
+        assert pool.max_connections == config['max_connections']
+
+    def test_connection_validation_configuration(self, db_pool):
+        """Test connection validation configuration."""
+        if not db_pool:
+            pytest.skip("Database pool not available")
+
+        # Test that connection validation works
+        with db_pool.get_connection() as conn:
+            assert conn is not None
+            assert not conn.closed
+
+            # Test validation method if available
+            if hasattr(db_pool, '_validate_connection'):
+                is_valid = db_pool._validate_connection(conn)
+                assert is_valid in [True, False]  # Should return boolean
+
+    def test_pool_statistics_accuracy(self, db_pool):
+        """Test that pool statistics are accurate."""
+        if not db_pool:
+            pytest.skip("Database pool not available")
+
+        initial_stats = db_pool.get_stats()
+
+        # Perform some operations
+        for _ in range(5):
+            with db_pool.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT 1")
+                    cur.fetchone()
+
+        # Check stats after operations
+        updated_stats = db_pool.get_stats()
+
+        # Statistics should be reasonable
+        assert 'connections_used' in updated_stats
+        assert 'connections_available' in updated_stats
+        assert updated_stats['connections_used'] >= 0
+        assert updated_stats['connections_available'] >= 0
+
+
+class TestConnectionLifecycle:
+    """Test complete connection lifecycle management."""
+
+    def test_connection_proper_cleanup(self, db_pool):
+        """Test that connections are properly cleaned up."""
+        if not db_pool:
+            pytest.skip("Database pool not available")
+
+        initial_stats = db_pool.get_stats()
+
+        # Use several connections
+        for i in range(3):
+            with db_pool.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT %s", (i,))
+                    result = cur.fetchone()
+                    assert result[0] == i
+
+        # Check that connections were returned to pool
+        final_stats = db_pool.get_stats()
+
+        # Available connections should be similar (allowing for timing)
+        assert abs(final_stats.get('connections_available', 0) - initial_stats.get('connections_available', 0)) <= 3
+
+    def test_connection_error_recovery(self, db_pool):
+        """Test connection error recovery."""
+        if not db_pool:
+            pytest.skip("Database pool not available")
+
+        # Cause a connection error and verify recovery
+        try:
+            with db_pool.get_connection() as conn:
+                with conn.cursor() as cur:
+                    # Execute invalid SQL to cause error
+                    cur.execute("INVALID SQL STATEMENT")
+        except Exception:
+            pass  # Expected error
+
+        # Verify pool still works after error
+        with db_pool.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+                result = cur.fetchone()
+                assert result[0] == 1
+
+    def test_connection_context_manager_properly(self, db_pool):
+        """Test that connection context manager works properly."""
+        if not db_pool:
+            pytest.skip("Database pool not available")
+
+        conn = None
+        try:
+            conn = db_pool.get_connection()
+            assert conn is not None
+            assert not conn.closed
+
+            with conn.cursor() as cur:
+                cur.execute("SELECT 42 as answer")
+                result = cur.fetchone()
+                assert result[0] == 42
+
+        finally:
+            if conn:
+                conn.close()
+
+        # Verify connection is closed
+        assert conn.closed
+
+    def test_connection_reuse_efficiency(self, db_pool):
+        """Test that connections are efficiently reused."""
+        if not db_pool:
+            pytest.skip("Database pool not available")
+
+        # Get initial stats
+        initial_stats = db_pool.get_stats()
+
+        # Perform multiple operations
+        for i in range(20):
+            with db_pool.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT %s", (i,))
+                    cur.fetchone()
+
+        # Check that we didn't create excessive connections
+        final_stats = db_pool.get_stats()
+
+        # Should not have created more than needed
+        total_connections_created = final_stats.get('connections_created', 0)
+        assert total_connections_created <= db_pool.max_connections
 
 
 if __name__ == "__main__":
