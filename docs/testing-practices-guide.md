@@ -186,12 +186,72 @@ def test_business_logic_without_database():
 - **Timeout Handling**: Test transaction timeouts and deadlock detection
 - **Concurrency Testing**: Verify transaction behavior under concurrent access
 
-##### Full-Text Search Testing
-- **Index Creation**: Verify search indexes are built correctly
-- **Query Accuracy**: Test various search query types (exact, fuzzy, prefix)
-- **Performance Validation**: Monitor search operation response times
-- **Relevance Testing**: Validate search result ranking and relevance
-- **Index Updates**: Test search index updates after data changes
+##### Full-Text Search Testing (Task 17.4)
+The full-text search testing infrastructure provides comprehensive validation of PostgreSQL full-text search functionality with dedicated test classes for different aspects of search behavior.
+
+**SearchIndexTests** - Validates search index creation and maintenance:
+```python
+from tests.test_full_text_search import SearchIndexTests
+
+def test_search_index_creation(test_db_manager):
+    """Test that full-text search indexes are properly created."""
+    search_tests = SearchIndexTests(test_db_manager)
+    search_tests.test_search_index_creation()
+    search_tests.test_search_index_updates()
+    search_tests.test_search_vector_composition()
+```
+
+**SearchQueryTests** - Tests various search query patterns and types:
+```python
+from tests.test_full_text_search import SearchQueryTests
+
+def test_search_query_functionality(test_db_manager):
+    """Test exact match, fuzzy search, and multi-word queries."""
+    search_tests = SearchQueryTests(test_db_manager)
+    search_tests.test_exact_match_search()
+    search_tests.test_multi_word_search()
+    search_tests.test_prefix_suffix_matching()
+    search_tests.test_fuzzy_search_patterns()
+    search_tests.test_search_ranking()
+    search_tests.test_empty_and_invalid_queries()
+```
+
+**SearchPerformanceTests** - Benchmarks search performance across dataset sizes:
+```python
+from tests.test_full_text_search import SearchPerformanceTests
+
+def test_search_performance(test_db_manager):
+    """Test search performance with different dataset sizes."""
+    perf_tests = SearchPerformanceTests(test_db_manager)
+    perf_tests.test_small_dataset_performance()      # < 0.1s target
+    perf_tests.test_medium_dataset_performance()     # < 0.2s target
+    perf_tests.test_search_pagination_performance()
+    perf_tests.test_search_with_filters_performance()
+```
+
+**SearchRelevanceTests** - Validates result ranking and relevance accuracy:
+```python
+from tests.test_full_text_search import SearchRelevanceTests
+
+def test_search_relevance(test_db_manager):
+    """Test search result relevance and ranking."""
+    relevance_tests = SearchRelevanceTests(test_db_manager)
+    relevance_tests.test_relevance_ranking_accuracy()
+    relevance_tests.test_multiple_field_relevance()
+    relevance_tests.test_relevance_score_distribution()
+```
+
+**Full-Text Search Testing Features**:
+- **Index Creation**: Verify GIN indexes are built correctly in test schema
+- **Query Accuracy**: Test exact matches, fuzzy search, prefix/suffix matching
+- **Multi-Word Queries**: Validate AND operations for complex search terms
+- **Performance Validation**: Monitor response times with configurable thresholds
+- **Relevance Testing**: Validate search result ranking and score distribution
+- **Index Updates**: Test automatic search vector updates after data changes
+- **Edge Case Handling**: Validate behavior with empty/invalid queries
+- **Dataset Scaling**: Test performance with small (25), medium (200), and large datasets
+- **Pagination Testing**: Verify efficient result pagination
+- **Advanced Filtering**: Test search with status, year, format, and rank filters
 
 ##### Data Integrity Testing
 - **Constraint Enforcement**: Test foreign keys, unique constraints, check constraints
@@ -1326,4 +1386,4 @@ def test_invalid_token_rejected():
 
 **Last Updated**: November 5, 2025
 **Coverage Target**: 80% (Production), 70% (Staging)
-**Test Categories**: Unit, Integration, Functional, Regression, Migration, Connection Pool Stress, Connection Pool Config, Connection Lifecycle, Transaction Commit/Rollback, Transaction Isolation, Transaction Timeout/Deadlock, Concurrent Transactions, Search, Data Integrity
+**Test Categories**: Unit, Integration, Functional, Regression, Migration, Connection Pool Stress, Connection Pool Config, Connection Lifecycle, Transaction Commit/Rollback, Transaction Isolation, Transaction Timeout/Deadlock, Concurrent Transactions, Search Index, Search Query, Search Performance, Search Relevance, Data Integrity

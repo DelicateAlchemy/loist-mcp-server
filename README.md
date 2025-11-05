@@ -172,6 +172,7 @@ pytest tests/test_database_operations_integration.py::TestBatchOperations -v
 - **Performance Testing**: Automated regression detection
 - **Exception Testing**: Unified framework validation
 - **Repository Testing**: Dependency injection and mocking
+- **Full-Text Search Testing**: Index validation, query accuracy, performance, and relevance testing
 
 #### Security Scanning
 ```bash
