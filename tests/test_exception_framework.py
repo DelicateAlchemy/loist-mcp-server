@@ -374,7 +374,7 @@ class TestExceptionHandler:
             _, status_code = handler.handle_for_http(exception, context)
             assert status_code == expected_status
 
-    @patch('src.exceptions.handler.logger')
+    @patch('src.exceptions_new.handler.logger')
     def test_structured_logging(self, mock_logger, context):
         """Test structured logging functionality."""
         config = ExceptionConfig(enable_structured_logging=True, include_stack_traces=False)
