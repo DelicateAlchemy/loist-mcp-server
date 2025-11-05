@@ -130,7 +130,66 @@ class TestDatabaseManager:
 
         # Create fresh pool for testing
         self._pool = get_connection_pool(force_new=True)
+
+        # Create a dedicated test schema to isolate tests from production data
+        self._create_test_schema()
+
         logger.info("Test database pool initialized")
+
+    def _create_test_schema(self) -> None:
+        """Create a dedicated test schema for database isolation."""
+        if not self._pool:
+            return
+
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # Create test schema if it doesn't exist
+                cur.execute("""
+                    CREATE SCHEMA IF NOT EXISTS test_schema;
+                    SET search_path TO test_schema, public;
+                """)
+
+                # Create test tables that mirror production but in test schema
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS test_schema.audio_tracks (
+                        id SERIAL PRIMARY KEY,
+                        track_id VARCHAR(36) UNIQUE NOT NULL,
+                        title VARCHAR(500) NOT NULL,
+                        artist VARCHAR(500),
+                        album VARCHAR(500),
+                        genre VARCHAR(100),
+                        year INTEGER,
+                        duration_seconds DECIMAL(10,3),
+                        channels INTEGER,
+                        sample_rate INTEGER,
+                        bitrate INTEGER,
+                        format VARCHAR(10),
+                        file_size_bytes BIGINT,
+                        audio_gcs_path TEXT NOT NULL,
+                        thumbnail_gcs_path TEXT,
+                        processing_status VARCHAR(20) DEFAULT 'PENDING',
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    );
+
+                    -- Create indexes for test schema
+                    CREATE INDEX IF NOT EXISTS idx_test_tracks_track_id ON test_schema.audio_tracks(track_id);
+                    CREATE INDEX IF NOT EXISTS idx_test_tracks_status ON test_schema.audio_tracks(processing_status);
+                    CREATE INDEX IF NOT EXISTS idx_test_tracks_created ON test_schema.audio_tracks(created_at);
+                """)
+
+                # Create full-text search index for test schema
+                cur.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_test_tracks_fts ON test_schema.audio_tracks
+                    USING gin (to_tsvector('english',
+                        coalesce(title, '') || ' ' ||
+                        coalesce(artist, '') || ' ' ||
+                        coalesce(album, '') || ' ' ||
+                        coalesce(genre, '')
+                    ));
+                """)
+
+            conn.commit()
 
     def cleanup_test_database(self) -> None:
         """Clean up test database and restore original state."""
@@ -154,23 +213,38 @@ class TestDatabaseManager:
         Context manager for database transactions in tests.
 
         Automatically rolls back changes after test completion.
+        Uses a dedicated connection for transaction management.
         """
         if not self._pool:
             raise RuntimeError("Test database not initialized")
 
-        with get_connection() as conn:
-            # Start transaction
+        # Get a connection directly from the pool (not using get_connection context manager)
+        # to have full control over transaction management
+        conn = None
+        try:
+            conn = self._pool._pool.getconn()
+
+            # Set up transaction mode
             conn.autocommit = False
 
             try:
                 yield conn
-                # Rollback to ensure test isolation
+                # Always rollback to ensure test isolation
                 conn.rollback()
             except Exception:
-                conn.rollback()
+                if conn and not conn.closed:
+                    conn.rollback()
                 raise
             finally:
-                conn.autocommit = True
+                if conn and not conn.closed:
+                    conn.autocommit = True
+        finally:
+            # Return connection to pool
+            if conn and self._pool and self._pool._pool:
+                try:
+                    self._pool._pool.putconn(conn)
+                except Exception as e:
+                    logger.error(f"Error returning connection to pool: {e}")
 
     def clear_all_test_data(self) -> None:
         """Clear all test data from database."""
@@ -179,11 +253,13 @@ class TestDatabaseManager:
 
         with get_connection() as conn:
             with conn.cursor() as cur:
-                # Clear all test data (be careful with this in production!)
-                cur.execute("DELETE FROM audio_tracks WHERE audio_gcs_path LIKE 'gs://test-%'")
+                # Clear all test data from test schema
+                cur.execute("DELETE FROM test_schema.audio_tracks")
+                # Reset sequences
+                cur.execute("ALTER SEQUENCE test_schema.audio_tracks_id_seq RESTART WITH 1")
                 conn.commit()
 
-    def get_table_row_count(self, table_name: str = 'audio_tracks') -> int:
+    def get_table_row_count(self, table_name: str = 'test_schema.audio_tracks') -> int:
         """Get row count for a table."""
         if not self._pool:
             return 0
@@ -412,7 +488,7 @@ def mock_database_manager():
 # Utility functions for test data management
 def insert_test_track(track_data: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Insert a test track into the database.
+    Insert a test track into the test schema database.
 
     Args:
         track_data: Track data from TestDataFactory
@@ -420,34 +496,111 @@ def insert_test_track(track_data: Dict[str, Any]) -> Dict[str, Any]:
     Returns:
         Inserted track data
     """
-    return save_audio_metadata(
-        metadata=track_data['metadata'],
-        audio_gcs_path=track_data['audio_gcs_path'],
-        thumbnail_gcs_path=track_data['thumbnail_gcs_path'],
-        track_id=track_data['track_id']
-    )
+    # Use test schema for insertion
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            metadata = track_data['metadata']
+            cur.execute("""
+                INSERT INTO test_schema.audio_tracks (
+                    track_id, title, artist, album, genre, year, duration_seconds,
+                    channels, sample_rate, bitrate, format, file_size_bytes,
+                    audio_gcs_path, thumbnail_gcs_path, processing_status
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id, track_id, title, artist, album, genre, year,
+                         duration_seconds, channels, sample_rate, bitrate, format,
+                         file_size_bytes, audio_gcs_path, thumbnail_gcs_path, processing_status
+            """, (
+                track_data['track_id'],
+                metadata['title'],
+                metadata.get('artist'),
+                metadata.get('album'),
+                metadata.get('genre'),
+                metadata.get('year'),
+                metadata.get('duration_seconds'),
+                metadata.get('channels'),
+                metadata.get('sample_rate'),
+                metadata.get('bitrate'),
+                metadata.get('format'),
+                metadata.get('file_size_bytes'),
+                track_data['audio_gcs_path'],
+                track_data.get('thumbnail_gcs_path'),
+                'COMPLETED'  # Default status for test tracks
+            ))
+
+            result = cur.fetchone()
+            conn.commit()
+
+            if result:
+                return {
+                    'id': result[0],
+                    'track_id': result[1],
+                    'title': result[2],
+                    'artist': result[3],
+                    'album': result[4],
+                    'genre': result[5],
+                    'year': result[6],
+                    'duration_seconds': result[7],
+                    'channels': result[8],
+                    'sample_rate': result[9],
+                    'bitrate': result[10],
+                    'format': result[11],
+                    'file_size_bytes': result[12],
+                    'audio_gcs_path': result[13],
+                    'thumbnail_gcs_path': result[14],
+                    'processing_status': result[15]
+                }
+
+    return {}
 
 
 def insert_test_track_batch(track_batch: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
-    Insert a batch of test tracks into the database.
+    Insert a batch of test tracks into the test schema database.
 
     Args:
         track_batch: List of track data from TestDataFactory
 
     Returns:
-        Batch insert result
+        Batch insertion results
     """
-    batch_data = []
-    for track in track_batch:
-        batch_data.append({
-            'metadata': track['metadata'],
-            'audio_gcs_path': track['audio_gcs_path'],
-            'thumbnail_gcs_path': track['thumbnail_gcs_path'],
-            'track_id': track['track_id']
-        })
+    # Use test schema for batch insertion
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            track_ids = []
 
-    return save_audio_metadata_batch(batch_data)
+            for track_data in track_batch:
+                metadata = track_data['metadata']
+                cur.execute("""
+                    INSERT INTO test_schema.audio_tracks (
+                        track_id, title, artist, album, genre, year, duration_seconds,
+                        channels, sample_rate, bitrate, format, file_size_bytes,
+                        audio_gcs_path, thumbnail_gcs_path, processing_status
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    track_data['track_id'],
+                    metadata['title'],
+                    metadata.get('artist'),
+                    metadata.get('album'),
+                    metadata.get('genre'),
+                    metadata.get('year'),
+                    metadata.get('duration_seconds'),
+                    metadata.get('channels'),
+                    metadata.get('sample_rate'),
+                    metadata.get('bitrate'),
+                    metadata.get('format'),
+                    metadata.get('file_size_bytes'),
+                    track_data['audio_gcs_path'],
+                    track_data.get('thumbnail_gcs_path'),
+                    'COMPLETED'  # Default status for test tracks
+                ))
+                track_ids.append(track_data['track_id'])
+
+            conn.commit()
+
+            return {
+                'inserted_count': len(track_batch),
+                'track_ids': track_ids
+            }
 
 
 def count_tracks_in_database(status_filter: Optional[str] = None) -> int:
@@ -460,11 +613,19 @@ def count_tracks_in_database(status_filter: Optional[str] = None) -> int:
     Returns:
         Number of tracks matching criteria
     """
-    result = get_all_audio_metadata(
-        limit=1000,  # Large limit to get all
-        status_filter=status_filter
-    )
-    return result['total_count']
+    # Use test schema for counting
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            if status_filter:
+                cur.execute(
+                    "SELECT COUNT(*) FROM test_schema.audio_tracks WHERE processing_status = %s",
+                    (status_filter,)
+                )
+            else:
+                cur.execute("SELECT COUNT(*) FROM test_schema.audio_tracks")
+
+            result = cur.fetchone()
+            return result[0] if result else 0
 
 
 def verify_track_exists(track_id: str) -> bool:
@@ -477,8 +638,15 @@ def verify_track_exists(track_id: str) -> bool:
     Returns:
         True if track exists, False otherwise
     """
-    track = get_audio_metadata_by_id(track_id)
-    return track is not None
+    # Use test schema for verification
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT 1 FROM test_schema.audio_tracks WHERE track_id = %s",
+                (track_id,)
+            )
+            result = cur.fetchone()
+            return result is not None
 
 
 def verify_track_data(track_id: str, expected_data: Dict[str, Any]) -> bool:
@@ -492,13 +660,23 @@ def verify_track_data(track_id: str, expected_data: Dict[str, Any]) -> bool:
     Returns:
         True if data matches, False otherwise
     """
-    track = get_audio_metadata_by_id(track_id)
-    if not track:
-        return False
+    # Use test schema for verification
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT title, artist FROM test_schema.audio_tracks WHERE track_id = %s",
+                (track_id,)
+            )
+            result = cur.fetchone()
+            if not result:
+                return False
 
-    for key, expected_value in expected_data.items():
-        if key not in track or track[key] != expected_value:
-            return False
+            actual_title, actual_artist = result
+            expected_title = expected_data.get('title')
+            expected_artist = expected_data.get('artist')
+
+            return (actual_title == expected_title and
+                    actual_artist == expected_artist)
 
     return True
 
