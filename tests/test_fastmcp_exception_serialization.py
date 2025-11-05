@@ -6,7 +6,10 @@ FastMCP Exception Serialization Context Issues.
 """
 import pytest
 import json
+import asyncio
 from unittest.mock import patch, MagicMock
+from datetime import datetime
+from pathlib import Path
 from fastmcp import FastMCP
 
 # Import all custom exceptions to ensure they're available
@@ -208,3 +211,117 @@ class TestFastMCPExceptionSerialization:
 
             except NameError as e:
                 pytest.fail(f"Globals namespace verification failed for {name}: {e}")
+
+    def test_safe_exception_serializer_integration(self):
+        """Test integration with SafeExceptionSerializer from Task 13 fix."""
+        from src.exception_serializer import SafeExceptionSerializer
+
+        serializer = SafeExceptionSerializer()
+
+        # Test complex exception serialization (Task 13 scenario)
+        complex_details = {
+            "datetime": datetime.now(),
+            "path": Path("/tmp/test.mp3"),
+            "mock": MagicMock(),
+            "nested": {
+                "another_mock": MagicMock(),
+                "list_with_complex": [datetime.now(), Path("/tmp")]
+            }
+        }
+
+        exception = AudioProcessingError("Processing failed", complex_details)
+        result = serializer.serialize_exception(exception)
+
+        # Should not raise JSON serialization errors
+        json_str = json.dumps(result)
+        parsed = json.loads(json_str)
+
+        # Complex objects should be converted to safe string representations
+        assert "<datetime object>" in parsed["details"]["datetime"]
+        assert "<PosixPath object>" in parsed["details"]["path"]
+        assert "<MagicMock object>" in parsed["details"]["mock"]
+
+    def test_exception_hierarchy_preservation_task13(self):
+        """Test that exception class hierarchy is preserved during serialization (Task 13)."""
+        from src.exception_serializer import SafeExceptionSerializer
+
+        serializer = SafeExceptionSerializer()
+        exception = DatabaseOperationError("Connection failed")
+
+        result = serializer.serialize_exception(exception)
+
+        assert result["exception_type"] == "DatabaseOperationError"
+        assert result["exception_module"] == "src.exceptions"
+
+        # Should be JSON serializable without NameError
+        json_str = json.dumps(result)
+        parsed = json.loads(json_str)
+        assert parsed["exception_type"] == "DatabaseOperationError"
+
+    def test_no_nameerror_exceptions_task13(self):
+        """Regression test: Ensure no NameError during serialization (Task 13 core issue)."""
+        from src.exception_serializer import SafeExceptionSerializer
+
+        serializer = SafeExceptionSerializer()
+
+        exception = StorageError("Upload failed", {"file": "test.mp3"})
+
+        # This should not raise NameError (the original Task 13 issue)
+        result = serializer.serialize_exception(exception)
+
+        assert result is not None
+        assert result["success"] is False
+        assert "STORAGE_ERROR" in result["error"]
+
+    def test_async_context_serialization_task13(self):
+        """Test serialization works in async contexts (where Task 13 issue occurred)."""
+        import asyncio
+        from src.exception_serializer import SafeExceptionSerializer
+
+        serializer = SafeExceptionSerializer()
+
+        async def test_async_serialization():
+            exception = ValidationError("Async validation failed")
+            result = serializer.serialize_exception(exception)
+            return result
+
+        # Should not raise NameError or other context-related errors
+        result = asyncio.run(test_async_serialization())
+
+        assert result["success"] is False
+        assert result["exception_type"] == "ValidationError"
+
+    def test_fastmcp_error_response_creation_task13(self):
+        """Test FastMCP error response creation with safe serialization (Task 13)."""
+        from src.error_utils import create_error_response
+
+        # Create exception with complex details that would cause Task 13 issues
+        complex_details = {
+            "request_id": "req-12345",
+            "timestamp": datetime.now(),
+            "file_path": Path("/uploads/audio.mp3"),
+            "connection": MagicMock(),
+            "metadata": {
+                "size": 1024,
+                "format": "mp3",
+                "duration": 180.5
+            }
+        }
+
+        exception = AudioProcessingError("Complex processing error", complex_details)
+
+        # This should work without NameError (Task 13 fix)
+        result = create_error_response(exception, "process_audio_complete")
+
+        # Should be JSON serializable
+        json_str = json.dumps(result)
+        parsed = json.loads(json_str)
+
+        assert parsed["success"] is False
+        assert "error" in parsed
+        assert parsed["error"]["exception_type"] == "AudioProcessingError"
+
+        # Complex objects should be safely serialized
+        assert "<datetime object>" in parsed["details"]["timestamp"]
+        assert "<PosixPath object>" in parsed["details"]["file_path"]
+        assert "<MagicMock object>" in parsed["details"]["connection"]

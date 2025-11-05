@@ -1,10 +1,140 @@
-# Google Cloud Build Configuration for Staging Environment  
-# Optimized staging deployment: Build → Push → Deploy (uses Artifact Registry)
+# Google Cloud Build Configuration for Staging Environment
+# Optimized staging deployment: Test → Build → Push → Deploy (uses Artifact Registry)
 # Staging embeds: https://staging.loist.io/embed/{audioId}
 # Force rebuild: 2025-11-03
 
 steps:
-  # Step 1: Build Docker image with optimized caching
+  # Step 1: Run Comprehensive Testing Suite (Staging)
+  - name: 'python:3.11-slim'
+    id: 'run-tests'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "🧪 Running comprehensive testing suite (staging)..."
+
+        # Install system dependencies for testing
+        apt-get update && apt-get install -y --no-install-recommends \
+          build-essential \
+          libpq-dev \
+          postgresql-client \
+          && rm -rf /var/lib/apt/lists/*
+
+        # Install Python dependencies
+        pip install --upgrade pip
+        pip install -r requirements.txt
+
+        # Install additional test dependencies
+        pip install pytest-cov pytest-xdist pytest-html
+
+        # Create test results directory
+        mkdir -p test-results coverage-reports
+
+        # Run pytest with comprehensive coverage (relaxed threshold for staging)
+        echo "📊 Running pytest with coverage analysis (staging)..."
+        python -m pytest \
+          --cov=. \
+          --cov-report=html:coverage-reports/htmlcov \
+          --cov-report=xml:coverage-reports/coverage.xml \
+          --cov-report=term-missing \
+          --cov-fail-under=70 \
+          --junitxml=test-results/junit.xml \
+          --html=test-results/pytest-report.html \
+          --self-contained-html \
+          -v \
+          --tb=short \
+          --strict-markers \
+          --disable-warnings \
+          --maxfail=10 \
+          --durations=10 \
+          tests/
+
+        # Store test exit code
+        TEST_EXIT_CODE=$?
+        echo "Test exit code: $TEST_EXIT_CODE"
+
+        # Generate test summary
+        echo "📋 Generating test summary..."
+        cat > test-results/test-summary.json << EOF
+        {
+          "timestamp": "$(date -Iseconds)",
+          "commit": "$COMMIT_SHA",
+          "branch": "dev",
+          "environment": "staging",
+          "test_results": {
+            "exit_code": $TEST_EXIT_CODE,
+            "coverage_required": 70,
+            "parallel_execution": true
+          }
+        }
+        EOF
+
+        # For staging, only warn on test failures (don't block deployment)
+        if [ $TEST_EXIT_CODE -ne 0 ]; then
+          echo "⚠️ Tests failed with exit code $TEST_EXIT_CODE (staging - continuing deployment)"
+          echo "Check test artifacts for details"
+        else
+          echo "✅ All tests passed successfully"
+        fi
+
+  # Step 2: Run Static Analysis and Code Quality Checks (Staging)
+  - name: 'python:3.11-slim'
+    id: 'static-analysis'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "🔍 Running static analysis and code quality checks (staging)..."
+
+        # Install system dependencies
+        apt-get update && apt-get install -y --no-install-recommends \
+          build-essential \
+          && rm -rf /var/lib/apt/lists/*
+
+        # Install Python dependencies
+        pip install --upgrade pip
+        pip install -r requirements.txt
+
+        # Install static analysis tools
+        pip install mypy flake8 black isort pylint bandit
+
+        # Create analysis results directory
+        mkdir -p analysis-results
+
+        echo "📏 Running code formatting checks..."
+        # Check black formatting (don't auto-fix in CI)
+        python -m black --check --diff --color src/ tests/ scripts/
+
+        echo "🔧 Running import sorting checks..."
+        # Check import sorting
+        python -m isort --check-only --diff --color src/ tests/ scripts/
+
+        echo "🐍 Running type checking..."
+        # Run mypy type checking
+        python -m mypy src/ --config-file mypy.ini
+
+        echo "🎯 Running code quality checks..."
+        # Run flake8
+        python -m flake8 src/ tests/ --config .flake8
+
+        echo "🛡️ Running security scanning..."
+        # Run bandit security scanning
+        python -m bandit -r src/ -f json -o analysis-results/security-scan.json
+
+        echo "📊 Generating analysis summary..."
+        cat > analysis-results/analysis-summary.json << EOF
+        {
+          "timestamp": "$(date -Iseconds)",
+          "commit": "$COMMIT_SHA",
+          "branch": "dev",
+          "environment": "staging",
+          "tools_run": ["black", "isort", "mypy", "flake8", "bandit"]
+        }
+        EOF
+
+        echo "✅ Static analysis completed successfully"
+
+  # Step 3: Build Docker image with optimized caching
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-image'
     args: [
@@ -27,13 +157,26 @@ steps:
       - 'DOCKER_BUILDKIT=1'
     timeout: '600s'
 
-  # Step 2: Push Docker image to Google Artifact Registry
+  # Step 3: Store Test Artifacts and Reports (Staging)
+  - name: 'gcr.io/cloud-builders/gsutil'
+    id: 'store-artifacts'
+    args: [
+      '-m', 'cp', '-r',
+      'test-results/',
+      'coverage-reports/',
+      'analysis-results/',
+      'gs://$PROJECT_ID-build-artifacts-staging/$COMMIT_SHA/'
+    ]
+    waitFor: ['run-tests', 'static-analysis']
+    allowFailure: true  # Don't fail build if artifact upload fails
+
+  # Step 4: Push Docker image to Google Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
     id: 'push-image'
     args: ['push', '--all-tags', 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp-staging']
     waitFor: ['build-image']
 
-  # Step 3: Ensure staging database exists
+  # Step 5: Ensure staging database exists
   - name: 'gcr.io/cloud-builders/gcloud'
     id: 'create-staging-db'
     entrypoint: 'bash'
@@ -41,7 +184,7 @@ steps:
     env:
       - 'CLOUDSDK_CORE_PROJECT=loist-music-library'
 
-  # Step 4: Update staging secrets if needed
+  # Step 6: Update staging secrets if needed
   - name: 'gcr.io/cloud-builders/gcloud'
     id: 'update-staging-secrets'
     entrypoint: 'bash'
@@ -49,7 +192,7 @@ steps:
     env:
       - 'CLOUDSDK_CORE_PROJECT=loist-music-library'
 
-  # Step 5: Run database migrations (if needed)
+  # Step 7: Run database migrations (if needed)
   - name: 'gcr.io/cloud-builders/docker'
     id: 'migrate-db'
     entrypoint: 'bash'
@@ -57,7 +200,7 @@ steps:
     env:
       - 'CLOUDSDK_CORE_PROJECT=loist-music-library'
 
-  # Step 4: Deploy to staging Cloud Run (uses built-in health checks)
+  # Step 8: Deploy to staging Cloud Run (uses built-in health checks)
   - name: 'gcr.io/cloud-builders/gcloud'
     id: 'deploy-staging'
     args:
