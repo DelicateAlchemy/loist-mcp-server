@@ -445,16 +445,28 @@ async def embed_page(request):
     logger.info(f"Audio path from database: {audio_path}")
 
     # Fix for staging environment: correct bucket name if database contains old paths
-    from src.config import config
+    try:
+        from src.config import config
+        logger.info(f"[EMBED_FIX] Config imported successfully")
+    except Exception as config_error:
+        logger.error(f"[EMBED_FIX] Failed to import config: {config_error}")
+        # Continue without config-based fixes
+        config = None
+
+    logger.info(f"[EMBED_FIX] Checking audio path: {audio_path}")
     if audio_path and 'loist-music-library-staging-audio' in audio_path:
         corrected_path = audio_path.replace('loist-music-library-staging-audio', 'loist-music-library-bucket-staging')
         logger.warning(f"[EMBED_FIX] Correcting audio path from {audio_path} to {corrected_path}")
         audio_path = corrected_path
+    else:
+        logger.info(f"[EMBED_FIX] Audio path does not need correction: {audio_path}")
 
     if thumbnail_path and 'loist-music-library-staging-audio' in thumbnail_path:
         corrected_path = thumbnail_path.replace('loist-music-library-staging-audio', 'loist-music-library-bucket-staging')
         logger.warning(f"[EMBED_FIX] Correcting thumbnail path from {thumbnail_path} to {corrected_path}")
         thumbnail_path = corrected_path
+    else:
+        logger.info(f"[EMBED_FIX] Thumbnail path does not need correction: {thumbnail_path}")
 
     if not audio_path:
         logger.error(f"No audio path for {audioId}")
