@@ -548,11 +548,10 @@ The project includes a comprehensive automated deployment pipeline using Google 
 Use the Cloud Build pipeline defined in `cloudbuild.yaml`:
 
 ```bash
-# Trigger automated deployment via Cloud Build
-gcloud builds submit --config cloudbuild.yaml --substitutions=_GCS_BUCKET_NAME=your-bucket,_DB_CONNECTION_NAME=your-db-connection .
-
-# Or push to main branch to trigger GitHub Actions (if configured)
-git push origin main
+# Trigger automated deployment via Cloud Build triggers
+# Push to main/dev branch to automatically trigger deployment
+git push origin main  # Production deployment
+git push origin dev   # Staging deployment
 ```
 
 #### Manual Deployment (Alternative)
