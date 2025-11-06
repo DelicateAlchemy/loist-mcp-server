@@ -453,10 +453,20 @@ async def embed_page(request):
     # Generate signed URLs using cache
     cache = get_cache()
 
+    # Debug logging for bucket configuration
+    from src.config import config
+    logger.info(f"[EMBED_DEBUG] GCS bucket name from config: {config.gcs_bucket_name}")
+    logger.info(f"[EMBED_DEBUG] GCS_BUCKET_NAME env var: {os.getenv('GCS_BUCKET_NAME')}")
+    logger.info(f"[EMBED_DEBUG] Audio GCS path: {audio_path}")
+
     try:
         stream_url = cache.get(audio_path, url_expiration_minutes=15)
+        logger.info(f"[EMBED_DEBUG] Successfully generated signed URL")
     except Exception as e:
-        logger.error(f"Failed to generate signed URL for audio: {e}")
+        logger.error(f"[EMBED_DEBUG] Failed to generate signed URL for audio: {e}")
+        logger.error(f"[EMBED_DEBUG] Exception type: {type(e).__name__}")
+        import traceback
+        logger.error(f"[EMBED_DEBUG] Full traceback: {traceback.format_exc()}")
         return HTMLResponse(
             content="<h1>Error</h1><p>Failed to generate audio stream.</p>", status_code=500
         )
