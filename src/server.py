@@ -442,7 +442,19 @@ async def embed_page(request):
     # Get GCS paths
     audio_path = metadata.get("audio_gcs_path")
     thumbnail_path = metadata.get("thumbnail_gcs_path")
-    logger.info(f"Audio path: {audio_path}")
+    logger.info(f"Audio path from database: {audio_path}")
+
+    # Fix for staging environment: correct bucket name if database contains old paths
+    from src.config import config
+    if audio_path and 'loist-music-library-staging-audio' in audio_path:
+        corrected_path = audio_path.replace('loist-music-library-staging-audio', 'loist-music-library-bucket-staging')
+        logger.warning(f"[EMBED_FIX] Correcting audio path from {audio_path} to {corrected_path}")
+        audio_path = corrected_path
+
+    if thumbnail_path and 'loist-music-library-staging-audio' in thumbnail_path:
+        corrected_path = thumbnail_path.replace('loist-music-library-staging-audio', 'loist-music-library-bucket-staging')
+        logger.warning(f"[EMBED_FIX] Correcting thumbnail path from {thumbnail_path} to {corrected_path}")
+        thumbnail_path = corrected_path
 
     if not audio_path:
         logger.error(f"No audio path for {audioId}")
