@@ -492,7 +492,7 @@ async def embed_page(request):
         import traceback
         logger.error(f"[EMBED_DEBUG] Full traceback: {traceback.format_exc()}")
         return HTMLResponse(
-            content="<h1>Error</h1><p>Failed to generate audio stream.</p>", status_code=500
+            content="<h1>Error</h1><p>Failed to generate audio stream. [EMBED_FIX_ACTIVE]</p>", status_code=500
         )
 
     # Generate thumbnail URL if available
