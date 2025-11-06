@@ -66,6 +66,7 @@ class ServerConfig(BaseSettings):
     gcs_signed_url_expiration: int = 900  # 15 minutes in seconds
     gcs_service_account_email: str | None = None
     google_application_credentials: str | None = None  # Path to service account key
+    gcs_signer_mode: str = "auto"  # auto, iam, keyfile - signing method for GCS URLs
     
     # Database Configuration
     db_host: str | None = None

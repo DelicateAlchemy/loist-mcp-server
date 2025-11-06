@@ -14,7 +14,10 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List
 from google.cloud import storage
 from google.cloud.exceptions import NotFound, GoogleCloudError
+from google.auth.transport.requests import Request
+from google.auth import default, iam
 import os
+import requests
 
 # Try to import config, but make it optional for backward compatibility
 try:
@@ -24,6 +27,49 @@ except ImportError:
     HAS_APP_CONFIG = False
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_service_account_email() -> Optional[str]:
+    """
+    Resolve the service account email for GCS signed URL generation.
+
+    Priority order:
+    1. GCP_SERVICE_ACCOUNT_EMAIL env var
+    2. Metadata server (for Cloud Run/Compute Engine)
+    3. From credentials object (if available)
+
+    Returns:
+        Service account email or None if not found
+    """
+    # Check environment variable first
+    email = os.getenv("GCP_SERVICE_ACCOUNT_EMAIL")
+    if email:
+        logger.debug(f"Using service account email from env: {email}")
+        return email
+
+    # Try metadata server (Cloud Run/Compute Engine)
+    try:
+        metadata_url = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email"
+        response = requests.get(metadata_url, headers={"Metadata-Flavor": "Google"}, timeout=1)
+        if response.status_code == 200:
+            email = response.text.strip()
+            logger.debug(f"Using service account email from metadata: {email}")
+            return email
+    except Exception as e:
+        logger.debug(f"Could not get email from metadata server: {e}")
+
+    # Try to get from credentials
+    try:
+        credentials, _ = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+        if hasattr(credentials, 'service_account_email'):
+            email = credentials.service_account_email
+            logger.debug(f"Using service account email from credentials: {email}")
+            return email
+    except Exception as e:
+        logger.debug(f"Could not get email from credentials: {e}")
+
+    logger.warning("Could not resolve service account email for IAM SignBlob")
+    return None
 
 
 class GCSClient:
@@ -92,56 +138,172 @@ class GCSClient:
     ) -> str:
         """
         Generate a signed URL for temporary access to a blob.
-        
+
+        Uses IAM SignBlob API when running on GCP (Cloud Run/Compute Engine),
+        falls back to keyfile signing for local development.
+
         Args:
             blob_name: Name/path of the blob in GCS
             expiration_minutes: URL expiration time in minutes (default: 15)
             method: HTTP method (GET, PUT, POST, DELETE)
             content_type: Content-Type header for PUT/POST requests
             response_disposition: Content-Disposition header (e.g., "attachment; filename=audio.mp3")
-        
+
         Returns:
             Signed URL string
-        
+
         Raises:
             NotFound: If blob doesn't exist (for GET requests)
             GoogleCloudError: If URL generation fails
         """
         try:
             blob = self.bucket.blob(blob_name)
-            
+
             # For GET requests, verify blob exists
             if method == "GET" and not blob.exists():
                 raise NotFound(f"Blob not found: {blob_name}")
-            
-            # Build URL parameters
-            url_params: Dict[str, Any] = {
-                "version": "v4",
-                "expiration": datetime.timedelta(minutes=expiration_minutes),
-                "method": method,
-            }
-            
-            if content_type:
-                url_params["content_type"] = content_type
-            
-            if response_disposition:
-                url_params["response_disposition"] = response_disposition
-            
-            url = blob.generate_signed_url(**url_params)
-            
+
+            # Check if we should use IAM SignBlob (running on GCP)
+            use_iam_signblob = self._should_use_iam_signblob()
+
+            if use_iam_signblob:
+                logger.debug(f"Using IAM SignBlob for signed URL generation: {blob_name}")
+                url = self._generate_signed_url_iam(blob, expiration_minutes, method, content_type, response_disposition)
+            else:
+                logger.debug(f"Using keyfile signing for signed URL generation: {blob_name}")
+                url = self._generate_signed_url_keyfile(blob, expiration_minutes, method, content_type, response_disposition)
+
             logger.info(
                 f"Generated signed URL for blob: {blob_name}, "
-                f"expires in {expiration_minutes} minutes"
+                f"expires in {expiration_minutes} minutes, "
+                f"method: {'IAM SignBlob' if use_iam_signblob else 'keyfile'}"
             )
-            
+
             return url
-            
+
         except NotFound:
             logger.error(f"Blob not found: {blob_name}")
             raise
         except GoogleCloudError as e:
             logger.error(f"Failed to generate signed URL for {blob_name}: {e}")
             raise
+
+    def _should_use_iam_signblob(self) -> bool:
+        """Determine if we should use IAM SignBlob based on config, environment and credentials."""
+
+        # Check explicit config setting first
+        if HAS_APP_CONFIG:
+            mode = app_config.gcs_signer_mode.lower()
+            if mode == "iam":
+                logger.debug("GCS signer mode explicitly set to IAM")
+                return True
+            elif mode == "keyfile":
+                logger.debug("GCS signer mode explicitly set to keyfile")
+                return False
+            # mode == "auto", continue with auto-detection
+
+        # Auto-detection logic
+        # Check if GOOGLE_APPLICATION_CREDENTIALS points to a keyfile
+        credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+        if credentials_path and os.path.exists(credentials_path):
+            try:
+                import json
+                with open(credentials_path, 'r') as f:
+                    creds_data = json.load(f)
+                # If it's a service account keyfile with private_key, use keyfile signing
+                if "private_key" in creds_data and "client_email" in creds_data:
+                    logger.debug("Detected service account keyfile, using keyfile signing")
+                    return False
+            except Exception:
+                pass
+
+        # Check if we're running on GCP (Cloud Run/Compute Engine)
+        # Look for GCP-specific environment variables or metadata
+        gcp_indicators = [
+            os.getenv("K_SERVICE"),  # Cloud Run
+            os.getenv("GAE_SERVICE"),  # App Engine
+            os.getenv("GCE_METADATA_HOST"),  # Compute Engine
+            "/computeMetadata" in os.getenv("GCE_METADATA_HOST", ""),
+        ]
+
+        if any(gcp_indicators):
+            logger.debug("Detected GCP environment, will use IAM SignBlob")
+            return True
+
+        # Default to keyfile if credentials path exists
+        if credentials_path:
+            logger.debug("Credentials path exists but not GCP detected, using keyfile")
+            return False
+
+        # Last resort: try IAM SignBlob if no explicit keyfile
+        logger.debug("No explicit credentials, attempting IAM SignBlob")
+        return True
+
+    def _generate_signed_url_iam(
+        self,
+        blob: storage.Blob,
+        expiration_minutes: int,
+        method: str,
+        content_type: Optional[str],
+        response_disposition: Optional[str],
+    ) -> str:
+        """Generate signed URL using IAM SignBlob API."""
+        service_account_email = _resolve_service_account_email()
+        if not service_account_email:
+            raise GoogleCloudError("Could not resolve service account email for IAM SignBlob")
+
+        try:
+            # Get ADC credentials
+            credentials, _ = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+            request = Request()
+
+            # Create IAM signer
+            signer = iam.Signer(request, credentials, service_account_email)
+
+            # Build URL parameters
+            url_params: Dict[str, Any] = {
+                "version": "v4",
+                "expiration": datetime.timedelta(minutes=expiration_minutes),
+                "method": method,
+                "service_account_email": service_account_email,
+                "signer": signer.sign,
+            }
+
+            if content_type:
+                url_params["content_type"] = content_type
+
+            if response_disposition:
+                url_params["response_disposition"] = response_disposition
+
+            return blob.generate_signed_url(**url_params)
+
+        except Exception as e:
+            logger.error(f"IAM SignBlob failed: {e}")
+            raise GoogleCloudError(f"IAM SignBlob signing failed: {e}")
+
+    def _generate_signed_url_keyfile(
+        self,
+        blob: storage.Blob,
+        expiration_minutes: int,
+        method: str,
+        content_type: Optional[str],
+        response_disposition: Optional[str],
+    ) -> str:
+        """Generate signed URL using traditional keyfile signing."""
+        # Build URL parameters
+        url_params: Dict[str, Any] = {
+            "version": "v4",
+            "expiration": datetime.timedelta(minutes=expiration_minutes),
+            "method": method,
+        }
+
+        if content_type:
+            url_params["content_type"] = content_type
+
+        if response_disposition:
+            url_params["response_disposition"] = response_disposition
+
+        return blob.generate_signed_url(**url_params)
     
     def upload_file(
         self,
