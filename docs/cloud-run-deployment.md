@@ -77,6 +77,36 @@ gcloud iam service-accounts keys create deployer-key.json \
   --iam-account=music-library-deployer@loist-music-library.iam.gserviceaccount.com
 ```
 
+### 1.5. Runtime Service Account (IAM SignBlob)
+
+For Cloud Run runtime, create a dedicated service account for GCS signed URL generation using IAM SignBlob:
+
+```bash
+# Create runtime service account
+gcloud iam service-accounts create mcp-music-library-sa \
+  --display-name="Music Library MCP Runtime Service Account" \
+  --project=loist-music-library
+
+# Grant GCS permissions
+gcloud projects add-iam-policy-binding loist-music-library \
+  --member="serviceAccount:mcp-music-library-sa@loist-music-library.iam.gserviceaccount.com" \
+  --role="roles/storage.objectViewer"
+
+# Grant IAM SignBlob permission (required for signed URL generation)
+gcloud iam service-accounts add-iam-policy-binding mcp-music-library-sa@loist-music-library.iam.gserviceaccount.com \
+  --member="serviceAccount:mcp-music-library-sa@loist-music-library.iam.gserviceaccount.com" \
+  --role="roles/iam.serviceAccountTokenCreator"
+
+# Note: No keyfile needed - Cloud Run uses Application Default Credentials (ADC)
+# with IAM SignBlob for secure signed URL generation without storing private keys
+```
+
+**Why IAM SignBlob?**
+- ✅ No private key files to store/rotate/manage
+- ✅ Automatic key rotation by Google
+- ✅ Works with Cloud Run's built-in IAM authentication
+- ✅ More secure than keyfile-based signing
+
 ### 2. Artifact Registry Repository
 
 Create the container registry:
@@ -248,6 +278,8 @@ steps:
       - '--min-instances=0'
       - '--timeout=600'
       - '--concurrency=80'
+      - '--service-account=mcp-music-library-sa@$PROJECT_ID.iam.gserviceaccount.com'
+      # Note: No --update-secrets for GOOGLE_APPLICATION_CREDENTIALS - uses IAM SignBlob
       # Comprehensive environment variables...
 ```
 

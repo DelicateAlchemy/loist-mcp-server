@@ -496,13 +496,17 @@ export SERVER_PORT=8081
 
 #### 4. GCS Connection Issues
 **Problem**: "No credentials found" or GCS errors
+
+**Local Development (Docker Compose)**:
 ```bash
 # Check service account key
 ls -la service-account-key.json
 
-# Set credentials path
+# Set credentials path for keyfile-based signing
 export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account-key.json
 ```
+
+**Note**: Cloud Run uses Application Default Credentials (ADC) with IAM SignBlob for signed URL generation. No `GOOGLE_APPLICATION_CREDENTIALS` environment variable is needed in production - the service account is set via `--service-account` flag.
 
 #### 5. Database Connection Issues
 **Problem**: "Connection refused" or database errors

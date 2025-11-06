@@ -46,8 +46,8 @@ The embed link `https://loist.io/embed/{audio_id}` **does have a functional serv
    - ✅ HTML template exists at `templates/embed.html` with full player UI
    - ✅ Fixed database field mapping (audio_gcs_path, thumbnail_gcs_path)
    - ✅ Template rendering with Jinja2
-   - ✅ Signed URL generation via cache
-   - ✅ Error handling for missing audio/thumbnails
+- ✅ Signed URL generation via IAM SignBlob (cache-backed)
+- ✅ Error handling for missing audio/thumbnails
 
 2. **oEmbed Endpoint**: ✅ **IMPLEMENTED** (Updated 2025-10-28)
    - ✅ `/oembed` endpoint implemented in `src/server.py` (line 470)
@@ -268,11 +268,33 @@ Current design (from `mcp.md` line 741):
 
 ## Testing Requirements
 
-1. **Unit Tests**: Template rendering, URL generation
-2. **Integration Tests**: End-to-end embed page access
-3. **Platform Tests**: Notion embed, Slack preview, Discord link
-4. **CORS Tests**: Verify iframe embedding works
-5. **Mobile Tests**: Responsive design verification
+1. **Unit Tests**: Template rendering, URL generation, IAM SignBlob logic
+2. **Integration Tests**: End-to-end embed page access with signed URLs
+3. **IAM SignBlob Tests**: Verify Cloud Run signed URL generation (no keyfile dependency)
+4. **Platform Tests**: Notion embed, Slack preview, Discord link
+5. **CORS Tests**: Verify iframe embedding works
+6. **Mobile Tests**: Responsive design verification
+
+### IAM SignBlob Testing
+
+**Cloud Run Validation**:
+```bash
+# 1. Deploy to staging and check logs for IAM SignBlob usage
+gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=loist-mcp-server-staging" --limit=50
+
+# 2. Test embed URL returns 200 with HTML
+curl -s "https://staging.loist.io/embed/{valid-audio-id}" | head -20
+
+# 3. Verify signed URLs in response work (audio loads)
+# Check browser network tab for signed GCS URLs
+```
+
+**Local Development Fallback**:
+```bash
+# Ensure GOOGLE_APPLICATION_CREDENTIALS works for Docker dev
+export GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json
+docker-compose up
+```
 
 ## References
 

@@ -97,8 +97,10 @@ DB_CONNECTION_NAME=your-project:us-central1:loist-music-library-db
 DB_PASSWORD=your-staging-db-password
 GCS_PROJECT_ID=loist-music-library
 
-# GCS Configuration
+# GCS Configuration (IAM SignBlob - no keyfile secrets needed)
 GCS_BUCKET_NAME_STAGING=loist-music-library-bucket-staging
+# Note: Cloud Run service account (mcp-music-library-sa) handles GCS access via IAM
+# No GOOGLE_APPLICATION_CREDENTIALS secret mounting required
 
 # Application Settings
 ENVIRONMENT=staging

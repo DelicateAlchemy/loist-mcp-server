@@ -82,7 +82,7 @@ Policies for handling duplicate registrations in MCP.
 
 ## Google Cloud Storage
 
-Non-sensitive GCS configuration (credentials handled via secrets).
+GCS configuration. Cloud Run uses Application Default Credentials (ADC) with IAM SignBlob for signed URLs. Local development uses keyfile credentials.
 
 | Variable | Description | Default | Example |
 |----------|-------------|---------|---------|
@@ -91,7 +91,7 @@ Non-sensitive GCS configuration (credentials handled via secrets).
 | `GCS_REGION` | GCS region for bucket operations | "us-central1" | "us-west1" |
 | `GCS_SIGNED_URL_EXPIRATION` | Expiration time for signed URLs in seconds | 900 | 3600 |
 | `GCS_SERVICE_ACCOUNT_EMAIL` | Service account email for GCS operations | None | "storage-sa@project.iam.gserviceaccount.com" |
-| `GOOGLE_APPLICATION_CREDENTIALS` | Path to GCS service account key file | None | "/app/service-account.json" |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Path to GCS service account key file (local dev only) | None | "/app/service-account.json" |
 
 ## Database Configuration
 
@@ -189,6 +189,7 @@ ENABLE_HEALTHCHECK=true
 GCS_PROJECT_ID=$PROJECT_ID
 SERVER_NAME=Music Library MCP
 SERVER_VERSION=0.1.0
+# GCS uses ADC + IAM SignBlob (no GOOGLE_APPLICATION_CREDENTIALS needed)
 # ... additional variables ...
 ```
 
@@ -221,10 +222,10 @@ DB_NAME=music_library
 DB_USER=music_user
 DB_PASSWORD=secure_password
 
-# Google Cloud Storage
+# Google Cloud Storage (Cloud Run uses ADC, no keyfile needed)
 GCS_BUCKET_NAME=my-music-bucket
 GCS_PROJECT_ID=my-project-123
-GOOGLE_APPLICATION_CREDENTIALS=/app/service-account.json
+# GOOGLE_APPLICATION_CREDENTIALS=/path/to/local/keyfile.json  # Local dev only
 
 # CORS
 ENABLE_CORS=true
@@ -240,15 +241,15 @@ These variables contain sensitive information and should **never** be committed 
 - `BEARER_TOKEN` - Authentication token
 - `DB_PASSWORD` - Database password
 - `DB_USER` - Database username (sometimes considered sensitive)
-- `GOOGLE_APPLICATION_CREDENTIALS` - Path to service account key
-- `GCS_SERVICE_ACCOUNT_EMAIL` - Service account email
+- `GOOGLE_APPLICATION_CREDENTIALS` - Path to service account key (local dev only)
+- `GCS_SERVICE_ACCOUNT_EMAIL` - Service account email (optional override)
 
 ### Secret Management
 
 For production deployments:
 
-1. **Google Cloud Run**: Use `--update-secrets` flag with Secret Manager
-2. **Docker Compose**: Use `.env` file (add to `.gitignore`)
+1. **Google Cloud Run**: Use `--update-secrets` flag with Secret Manager. GCS uses ADC + IAM SignBlob (no keyfile secrets needed).
+2. **Docker Compose**: Use `.env` file with `GOOGLE_APPLICATION_CREDENTIALS` for local GCS access (add to `.gitignore`)
 3. **Kubernetes**: Use ConfigMaps for non-sensitive, Secrets for sensitive data
 
 ### Cloud Run Secrets Example
@@ -258,6 +259,7 @@ For production deployments:
 - '--update-secrets=BEARER_TOKEN=my-bearer-token-secret:latest'
 - '--update-secrets=DB_PASSWORD=my-db-password-secret:latest'
 - '--update-secrets=GCS_BUCKET_NAME=my-bucket-name-secret:latest'
+# No GOOGLE_APPLICATION_CREDENTIALS secret needed - uses IAM SignBlob
 ```
 
 ## Validation
