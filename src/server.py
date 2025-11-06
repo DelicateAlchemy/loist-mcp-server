@@ -419,6 +419,7 @@ async def embed_page(request):
 
     # Extract audioId from path parameters
     audioId = request.path_params["audioId"]
+    logger.info(f"[EMBED_TEST] Embed endpoint called for audioId: {audioId}")
     logger.info(f"Embed page requested for audio ID: {audioId}")
 
     try:
