@@ -78,7 +78,7 @@ def format_metadata_response(db_metadata: Dict[str, Any]) -> AudioMetadata:
     
     # Format technical metadata
     format_metadata = FormatMetadata(
-        Duration=db_metadata.get("duration", 0.0),
+        Duration=db_metadata.get("duration_seconds", 0.0),
         Channels=db_metadata.get("channels", 2),
         SampleRate=db_metadata.get("sample_rate", 44100),
         Bitrate=db_metadata.get("bitrate", 0),
@@ -346,7 +346,7 @@ async def search_library(input_data: Dict[str, Any]) -> Dict[str, Any]:
                     "album": result.get("album", ""),
                     "genre": result.get("genre"),
                     "year": result.get("year"),
-                    "duration": result.get("duration", 0.0),
+                    "duration_seconds": result.get("duration_seconds", 0.0),
                     "channels": result.get("channels", 2),
                     "sample_rate": result.get("sample_rate", 44100),
                     "bitrate": result.get("bitrate", 0),
