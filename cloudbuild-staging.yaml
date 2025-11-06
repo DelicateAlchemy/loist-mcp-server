@@ -360,7 +360,6 @@ steps:
       - '--update-secrets=DB_PASSWORD=${_DB_PASSWORD_STAGING}:latest'
       - '--update-secrets=GCS_BUCKET_NAME=${_GCS_BUCKET_NAME_STAGING}:latest'
       - '--update-secrets=BEARER_TOKEN=${_BEARER_TOKEN_STAGING}:latest'
-      - '--update-secrets=GOOGLE_APPLICATION_CREDENTIALS=mcp-service-account-key:latest'
       - '--quiet'
     waitFor: ['create-staging-db', 'migrate-db']
 
