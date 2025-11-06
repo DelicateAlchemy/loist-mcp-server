@@ -185,7 +185,7 @@ async def get_audio_metadata(input_data: Dict[str, Any]) -> Dict[str, Any]:
         formatted_metadata = format_metadata_response(db_metadata)
         resources = format_resources(
             audio_id,
-            has_thumbnail=bool(db_metadata.get("thumbnail_path"))
+            has_thumbnail=bool(db_metadata.get("thumbnail_gcs_path"))
         )
         
         # Build response using Pydantic for validation
@@ -351,7 +351,7 @@ async def search_library(input_data: Dict[str, Any]) -> Dict[str, Any]:
                     "sample_rate": result.get("sample_rate", 44100),
                     "bitrate": result.get("bitrate", 0),
                     "format": result.get("format", ""),
-                    "thumbnail_path": result.get("thumbnail_path")
+                    "thumbnail_gcs_path": result.get("thumbnail_gcs_path")
                 }
                 
                 # Format metadata
