@@ -356,10 +356,10 @@ steps:
       - '--set-env-vars=EMBED_BASE_URL=https://staging.loist.io'
       - '--set-env-vars=DB_NAME=loist_mvp_staging,DB_USER=music_library_user,DB_PORT=5432'
       - '--service-account=mcp-music-library-sa@$PROJECT_ID.iam.gserviceaccount.com'
-      - '--update-secrets=DB_CONNECTION_NAME=${_DB_CONNECTION_NAME_STAGING}:latest'
-      - '--update-secrets=DB_PASSWORD=${_DB_PASSWORD_STAGING}:latest'
-      - '--update-secrets=GCS_BUCKET_NAME=${_GCS_BUCKET_NAME_STAGING}:latest'
-      - '--update-secrets=BEARER_TOKEN=${_BEARER_TOKEN_STAGING}:latest'
+      - '--update-secrets=DB_CONNECTION_NAME=db-connection-name-staging:latest'
+      - '--update-secrets=DB_PASSWORD=db-password-staging:latest'
+      - '--update-secrets=GCS_BUCKET_NAME=gcs-bucket-name-staging:latest'
+      - '--update-secrets=BEARER_TOKEN=mcp-bearer-token-staging:latest'
       - '--quiet'
     waitFor: ['create-staging-db', 'migrate-db']
 
@@ -375,10 +375,6 @@ options:
 
 substitutions:
   _COMMIT_SHA: 'local-test'
-  _DB_CONNECTION_NAME_STAGING: 'db-connection-name-staging'
-  _DB_PASSWORD_STAGING: 'db-password-staging'
-  _GCS_BUCKET_NAME_STAGING: 'gcs-bucket-name-staging'
-  _BEARER_TOKEN_STAGING: 'mcp-bearer-token-staging'
 
 # Build timeout (reduced from 15 to 10 minutes)
 timeout: '600s'  # 10 minutes
