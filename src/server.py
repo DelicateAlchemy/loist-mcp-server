@@ -3,6 +3,7 @@ Music Library MCP Server
 FastMCP-based server for audio ingestion and embedding
 """
 
+import os
 import sys
 from pathlib import Path
 
