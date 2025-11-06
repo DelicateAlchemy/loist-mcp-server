@@ -331,15 +331,19 @@ def create_gcs_client(
 ) -> GCSClient:
     """
     Create a GCS client instance.
-    
+
     Args:
         bucket_name: GCS bucket name
         project_id: GCP project ID
         credentials_path: Path to service account key file
-    
+
     Returns:
         GCSClient instance
     """
+    # If no credentials path provided, check for GOOGLE_APPLICATION_CREDENTIALS
+    if credentials_path is None:
+        credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+
     return GCSClient(
         bucket_name=bucket_name,
         project_id=project_id,

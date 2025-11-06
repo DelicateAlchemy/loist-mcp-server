@@ -153,9 +153,14 @@ class ServerConfig(BaseSettings):
         Generate PostgreSQL connection URL.
         Returns None if database is not configured.
         """
+        # Check for explicit DATABASE_URL first (for Cloud Run with secrets)
+        explicit_url = os.getenv("DATABASE_URL")
+        if explicit_url:
+            return explicit_url
+
         if not self.is_database_configured:
             return None
-        
+
         if self.db_connection_name and self.db_connection_name.strip():
             # Cloud SQL Proxy connection
             # Format: postgresql://user:password@/dbname?host=/cloudsql/connection_name
