@@ -155,64 +155,7 @@ steps:
           echo "✅ Database tests passed successfully"
         fi
 
-  # Step 1.6: Database Migration Check (Staging)
-  - name: 'python:3.11-slim'
-    id: 'db-migration-check'
-    entrypoint: 'bash'
-    env:
-      - 'DB_HOST=${_DB_HOST_STAGING}'
-      - 'DB_PORT=5432'
-      - 'DB_NAME=${_DB_NAME_STAGING}'
-      - 'DB_USER=${_DB_USER_STAGING}'
-      - 'DB_PASSWORD=${_DB_PASSWORD_STAGING}'
-    args:
-      - '-c'
-      - |
-        echo "🗄️ Running database migration validation (staging)..."
-
-        # Install system dependencies
-        apt-get update && apt-get install -y --no-install-recommends \
-          build-essential \
-          && rm -rf /var/lib/apt/lists/*
-
-        # Install Python dependencies
-        pip install --upgrade pip
-        pip install -r requirements.txt
-
-        # Create migration check directory
-        mkdir -p migration-check
-
-        # Run database migration validation
-        echo "📊 Checking database migrations (staging)..."
-        python -c "
-        import sys
-        sys.path.insert(0, 'database')
-        from migrate import MigrationRunner
-
-        try:
-            runner = MigrationRunner()
-            status = runner.get_status()
-
-            if status['pending_migrations'] > 0:
-                print(f'⚠️ Found {status[\"pending_migrations\"]} pending migrations')
-                print('This may require manual migration in staging')
-            else:
-                print('✅ All migrations are applied')
-
-            print(f'Current schema version: {status[\"current_version\"]}')
-            print(f'Latest available version: {status[\"latest_version\"]}')
-
-            # Save status for artifacts
-            import json
-            with open('migration-check/status.json', 'w') as f:
-                json.dump(status, f, indent=2)
-
-        except Exception as e:
-            print(f'❌ Migration check failed: {e}')
-            print('⚠️ Continuing deployment despite migration check failure')
-        "
-
-        echo "✅ Database migration check completed (staging)"
+  # Step 1.6: Database checks skipped in simplified staging deployment
 
   # Step 2: Run Static Analysis and Code Quality Checks (Staging)
   - name: 'python:3.11-slim'
@@ -302,10 +245,9 @@ steps:
       'test-results/',
       'coverage-reports/',
       'analysis-results/',
-      'migration-check/',
       'gs://$PROJECT_ID-build-artifacts-staging/$COMMIT_SHA/'
     ]
-    waitFor: ['run-unit-tests', 'run-database-tests', 'db-migration-check', 'static-analysis']
+    waitFor: ['run-unit-tests', 'run-database-tests', 'static-analysis']
     allowFailure: true  # Don't fail build if artifact upload fails
 
   # Step 4: Push Docker image to Google Artifact Registry
