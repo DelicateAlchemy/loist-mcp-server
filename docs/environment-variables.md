@@ -82,7 +82,7 @@ Policies for handling duplicate registrations in MCP.
 
 ## Google Cloud Storage
 
-GCS configuration. Cloud Run uses Application Default Credentials (ADC) with IAM SignBlob for signed URLs. Local development uses keyfile credentials.
+GCS configuration. Cloud Run uses Application Default Credentials (ADC) with IAM SignBlob for signed URLs. Local development uses keyfile credentials. Control signing method with `GCS_SIGNER_MODE`.
 
 | Variable | Description | Default | Example |
 |----------|-------------|---------|---------|
@@ -91,6 +91,7 @@ GCS configuration. Cloud Run uses Application Default Credentials (ADC) with IAM
 | `GCS_REGION` | GCS region for bucket operations | "us-central1" | "us-west1" |
 | `GCS_SIGNED_URL_EXPIRATION` | Expiration time for signed URLs in seconds | 900 | 3600 |
 | `GCS_SERVICE_ACCOUNT_EMAIL` | Service account email for GCS operations | None | "storage-sa@project.iam.gserviceaccount.com" |
+| `GCS_SIGNER_MODE` | GCS signed URL signing method (auto, iam, keyfile) | "auto" | "iam" |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Path to GCS service account key file (local dev only) | None | "/app/service-account.json" |
 
 ## Database Configuration

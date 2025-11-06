@@ -398,6 +398,51 @@ gcloud builds submit \
   .
 ```
 
+## Rollback Procedures
+
+### IAM SignBlob Rollback
+
+If IAM SignBlob signed URL generation fails in production, you can temporarily revert to keyfile-based signing:
+
+#### Option 1: Environment Variable Override
+```bash
+# Deploy with keyfile mode
+gcloud run deploy music-library-mcp \
+  --image=us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp:latest \
+  --region=us-central1 \
+  --set-env-vars=GCS_SIGNER_MODE=keyfile \
+  --update-secrets=GOOGLE_APPLICATION_CREDENTIALS=your-service-account-key:latest \
+  --service-account=mcp-music-library-sa@$PROJECT_ID.iam.gserviceaccount.com
+```
+
+#### Option 2: Code Rollback
+If environment variable override fails, revert the GCS client code:
+
+```bash
+# Revert src/storage/gcs_client.py to previous version
+git revert HEAD~3  # Revert the IAM SignBlob implementation
+
+# Redeploy with keyfile support
+gcloud run deploy music-library-mcp \
+  --image=us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp:latest \
+  --region=us-central1 \
+  --update-secrets=GOOGLE_APPLICATION_CREDENTIALS=your-service-account-key:latest \
+  --service-account=mcp-music-library-sa@$PROJECT_ID.iam.gserviceaccount.com
+```
+
+#### Option 3: Emergency Keyfile Mount
+For immediate emergency rollback (not recommended for production):
+
+```bash
+# Mount service account key as secret
+gcloud run deploy music-library-mcp \
+  --image=us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp:latest \
+  --region=us-central1 \
+  --update-secrets=GOOGLE_APPLICATION_CREDENTIALS=your-service-account-key:latest \
+  --set-env-vars=GOOGLE_APPLICATION_CREDENTIALS=/secrets/GOOGLE_APPLICATION_CREDENTIALS/latest \
+  --service-account=mcp-music-library-sa@$PROJECT_ID.iam.gserviceaccount.com
+```
+
 ### GitHub Actions Integration (Optional)
 
 For GitHub-triggered deployments:
