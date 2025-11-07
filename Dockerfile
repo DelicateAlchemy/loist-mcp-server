@@ -17,23 +17,19 @@ FROM python:3.11-alpine AS builder
 
 WORKDIR /build
 
-# Install build dependencies (Alpine uses apk) with cache mount for better performance
-RUN --mount=type=cache,target=/var/cache/apk \
-    apk add --no-cache \
+# Install build dependencies (Alpine uses apk)
+RUN apk add --no-cache \
     build-base \
     linux-headers
 
-# Upgrade pip with cache mount
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --upgrade pip
+# Upgrade pip
+RUN pip install --upgrade pip
 
 # Copy dependency files first (for better caching)
 COPY requirements.txt pyproject.toml ./
 
 # Install dependencies and create wheels for faster runtime install
-# Use cache mount for pip to speed up repeated builds
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip wheel --wheel-dir=/wheels -r requirements.txt
+RUN pip wheel --wheel-dir=/wheels -r requirements.txt
 
 
 # ============================================================================
@@ -43,9 +39,8 @@ FROM python:3.11-alpine AS runtime
 
 WORKDIR /app
 
-# Install minimal runtime dependencies (Alpine uses apk) with cache mount
-RUN --mount=type=cache,target=/var/cache/apk \
-    apk add --no-cache \
+# Install minimal runtime dependencies (Alpine uses apk)
+RUN apk add --no-cache \
     ca-certificates \
     postgresql-client \
     postgresql-dev
@@ -62,9 +57,8 @@ COPY --from=builder /wheels /wheels
 # Copy dependency files
 COPY --chown=fastmcpuser:fastmcpuser requirements.txt pyproject.toml ./
 
-# Install dependencies from wheels (fast, no compilation) with cache mount
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --no-cache-dir --find-links=/wheels -r requirements.txt && \
+# Install dependencies from wheels (fast, no compilation)
+RUN pip install --no-cache-dir --find-links=/wheels -r requirements.txt && \
     rm -rf /wheels && \
     find /usr/local -type f -name "*.pyc" -delete && \
     find /usr/local -type d -name "__pycache__" -exec rm -rf {} + || true
