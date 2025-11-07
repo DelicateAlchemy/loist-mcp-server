@@ -292,8 +292,6 @@ class GCSClient:
         response_disposition: Optional[str],
     ) -> str:
         """Generate signed URL using IAM SignBlob API."""
-        from google.cloud.storage._signing import generate_signed_url_v4
-        
         logger.info(f"[SIGNED_URL_DEBUG] Starting IAM SignBlob signed URL generation")
         logger.info(f"[SIGNED_URL_DEBUG] Blob: {blob.name}, Bucket: {blob.bucket.name}")
         logger.info(f"[SIGNED_URL_DEBUG] Expiration: {expiration_minutes} minutes, Method: {method}")
@@ -332,11 +330,13 @@ class GCSClient:
             logger.info(f"[SIGNED_URL_DEBUG] Expiration datetime: {expiration.isoformat()}")
             
             # Step 6: Generate signed URL
-            logger.info("[SIGNED_URL_DEBUG] Step 6: Calling generate_signed_url_v4")
-            logger.info(f"[SIGNED_URL_DEBUG] generate_signed_url_v4 params: bucket={blob.bucket.name}, blob_name={blob.name}, expiration={expiration.isoformat()}, method={method}")
-            signed_url = generate_signed_url_v4(
-                bucket=blob.bucket,
-                blob_name=blob.name,
+            logger.info("[SIGNED_URL_DEBUG] Step 6: Generating signed URL with IAM SignBlob")
+            logger.info(f"[SIGNED_URL_DEBUG] Using blob.generate_signed_url() with IAM signer")
+            logger.info(f"[SIGNED_URL_DEBUG] Blob: {blob.name}, Bucket: {blob.bucket.name}, Expiration: {expiration.isoformat()}, Method: {method}")
+            
+            # Use blob.generate_signed_url() with IAM signer
+            # This method accepts a signer parameter for IAM SignBlob
+            signed_url = blob.generate_signed_url(
                 expiration=expiration,
                 method=method,
                 service_account_email=service_account_email,
