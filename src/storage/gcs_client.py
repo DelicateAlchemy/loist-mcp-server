@@ -102,16 +102,27 @@ class GCSClient:
         if not self.bucket_name:
             raise ValueError("Bucket name must be provided via parameter, config, or GCS_BUCKET_NAME env var")
         
-        # Set credentials in environment if provided
+        # Set credentials in environment if provided and file exists
         if self.credentials_path and os.path.exists(self.credentials_path):
             os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = self.credentials_path
             logger.info(f"Using credentials from: {self.credentials_path}")
         elif self.credentials_path:
             logger.warning(f"Credentials path provided but file not found: {self.credentials_path}")
-        
+
+        # For Cloud Run with service account, don't override GOOGLE_APPLICATION_CREDENTIALS
+        # Let ADC use the attached service account automatically
+        gcp_indicators = [
+            os.getenv("K_SERVICE"),  # Cloud Run
+            os.getenv("GAE_SERVICE"),  # App Engine
+            os.getenv("GCE_METADATA_HOST"),  # Compute Engine
+        ]
+        if any(gcp_indicators) and not self.credentials_path:
+            logger.info("Running on GCP with service account - using ADC")
+            # Don't set GOOGLE_APPLICATION_CREDENTIALS, let ADC work automatically
+
         self._client: Optional[storage.Client] = None
         self._bucket: Optional[storage.Bucket] = None
-        
+
         logger.info(f"Initialized GCS client for bucket: {self.bucket_name}")
     
     @property
@@ -248,6 +259,8 @@ class GCSClient:
         response_disposition: Optional[str],
     ) -> str:
         """Generate signed URL using IAM SignBlob API."""
+        from google.cloud.storage._signing import generate_signed_url_v4
+        
         service_account_email = _resolve_service_account_email()
         if not service_account_email:
             raise GoogleCloudError("Could not resolve service account email for IAM SignBlob")
@@ -260,22 +273,20 @@ class GCSClient:
             # Create IAM signer
             signer = iam.Signer(request, credentials, service_account_email)
 
-            # Build URL parameters
-            url_params: Dict[str, Any] = {
-                "version": "v4",
-                "expiration": datetime.timedelta(minutes=expiration_minutes),
-                "method": method,
-                "service_account_email": service_account_email,
-                "signer": signer.sign,
-            }
-
-            if content_type:
-                url_params["content_type"] = content_type
-
-            if response_disposition:
-                url_params["response_disposition"] = response_disposition
-
-            return blob.generate_signed_url(**url_params)
+            # Build URL parameters for generate_signed_url_v4
+            expiration = datetime.datetime.utcnow() + datetime.timedelta(minutes=expiration_minutes)
+            
+            # Use generate_signed_url_v4 with correct parameters
+            return generate_signed_url_v4(
+                bucket=blob.bucket,
+                blob_name=blob.name,
+                expiration=expiration,
+                method=method,
+                service_account_email=service_account_email,
+                signer=signer.sign,
+                content_type=content_type,
+                response_disposition=response_disposition,
+            )
 
         except Exception as e:
             logger.error(f"IAM SignBlob failed: {e}")

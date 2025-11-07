@@ -296,6 +296,9 @@ steps:
       - '--update-secrets=DB_PASSWORD=db-password-staging:latest'
       - '--update-secrets=GCS_BUCKET_NAME=gcs-bucket-name-staging:latest'
       - '--update-secrets=BEARER_TOKEN=mcp-bearer-token-staging:latest'
+      # Remove GOOGLE_APPLICATION_CREDENTIALS to use ADC (Application Default Credentials)
+      # The service account is attached via --service-account flag, so ADC will work automatically
+      - '--remove-env-vars=GOOGLE_APPLICATION_CREDENTIALS'
       - '--quiet'
     waitFor: ['create-staging-db']
 
