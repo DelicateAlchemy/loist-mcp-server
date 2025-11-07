@@ -287,18 +287,17 @@ steps:
       # Explicit command override to ensure correct startup (fallback if Dockerfile CMD is misinterpreted)
       - '--command=/usr/local/bin/python'
       - '--args=/app/src/server.py'
-      - '--set-env-vars=SERVER_TRANSPORT=http,LOG_LEVEL=DEBUG,AUTH_ENABLED=false,ENABLE_CORS=true,CORS_ORIGINS=*,ENABLE_HEALTHCHECK=true'
-      - '--set-env-vars=GCS_PROJECT_ID=$PROJECT_ID,SERVER_NAME=Music Library MCP - Staging'
-      - '--set-env-vars=EMBED_BASE_URL=https://staging.loist.io'
-      - '--set-env-vars=DB_NAME=loist_mvp_staging,DB_USER=music_library_user,DB_PORT=5432'
+      # Set all environment variables in a single --set-env-vars flag (replaces all existing env vars)
+      # Note: GOOGLE_APPLICATION_CREDENTIALS is intentionally omitted to use ADC
+      - '--set-env-vars=SERVER_TRANSPORT=http,LOG_LEVEL=DEBUG,AUTH_ENABLED=false,ENABLE_CORS=true,CORS_ORIGINS=*,ENABLE_HEALTHCHECK=true,GCS_PROJECT_ID=$PROJECT_ID,SERVER_NAME=Music Library MCP - Staging,EMBED_BASE_URL=https://staging.loist.io,DB_NAME=loist_mvp_staging,DB_USER=music_library_user,DB_PORT=5432'
       - '--service-account=mcp-music-library-sa@$PROJECT_ID.iam.gserviceaccount.com'
+      # Update secrets (these are separate from environment variables)
       - '--update-secrets=DB_CONNECTION_NAME=db-connection-name-staging:latest'
       - '--update-secrets=DB_PASSWORD=db-password-staging:latest'
       - '--update-secrets=GCS_BUCKET_NAME=gcs-bucket-name-staging:latest'
       - '--update-secrets=BEARER_TOKEN=mcp-bearer-token-staging:latest'
-      # Remove GOOGLE_APPLICATION_CREDENTIALS to use ADC (Application Default Credentials)
-      # The service account is attached via --service-account flag, so ADC will work automatically
-      - '--remove-env-vars=GOOGLE_APPLICATION_CREDENTIALS'
+      # Remove GOOGLE_APPLICATION_CREDENTIALS secret if it exists (separate from env vars)
+      - '--remove-secrets=GOOGLE_APPLICATION_CREDENTIALS'
       - '--quiet'
     waitFor: ['create-staging-db']
 
