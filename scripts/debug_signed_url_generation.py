@@ -124,12 +124,14 @@ def main():
         use_iam = gcs_client._should_use_iam_signblob()
         logger.info(f"   Will use IAM SignBlob: {use_iam}")
         
-        # Step 9: Generate signed URL
-        logger.info("Step 8: Generating signed URL")
-        logger.info(f"   Method: {'IAM SignBlob' if use_iam else 'Keyfile'}")
+        # Step 9: Test both signing methods if possible
+        logger.info("Step 8: Testing signed URL generation")
+        logger.info(f"   Primary method: {'IAM SignBlob' if use_iam else 'Keyfile'}")
         logger.info(f"   Expiration: 15 minutes")
         
+        # Test the primary method
         try:
+            logger.info(f"🔄 Testing {('IAM SignBlob' if use_iam else 'Keyfile')} signing...")
             signed_url = gcs_client.generate_signed_url(
                 blob_name=blob_name,
                 expiration_minutes=15,
@@ -139,23 +141,54 @@ def main():
             logger.info(f"   URL (first 100 chars): {signed_url[:100]}...")
             logger.info(f"   Full URL length: {len(signed_url)} characters")
             
-            # Step 10: Test URL (optional)
-            logger.info("Step 9: Testing signed URL")
+            # Validate URL format
+            if signed_url.startswith("https://storage.googleapis.com/") or signed_url.startswith("https://storage.cloud.google.com/"):
+                logger.info("✅ URL format looks correct")
+            else:
+                logger.warning("⚠️  URL format may be incorrect")
+            
+            # Check for V4 signature components
+            if "X-Goog-Algorithm" in signed_url and "X-Goog-Credential" in signed_url:
+                logger.info("✅ V4 signature components detected")
+            else:
+                logger.warning("⚠️  V4 signature components not found")
+                
+            primary_url = signed_url
+            
+            # Step 10: Test URL accessibility
+            logger.info("Step 9: Testing signed URL accessibility")
             import requests
             try:
-                response = requests.head(signed_url, timeout=5)
+                response = requests.head(signed_url, timeout=10)
                 logger.info(f"   HTTP Status: {response.status_code}")
                 if response.status_code == 200:
                     logger.info("✅ Signed URL is accessible!")
                     logger.info(f"   Content-Type: {response.headers.get('Content-Type', 'N/A')}")
                     logger.info(f"   Content-Length: {response.headers.get('Content-Length', 'N/A')} bytes")
+                elif response.status_code == 403:
+                    logger.error("❌ 403 Forbidden - signed URL may be invalid or expired")
+                elif response.status_code == 404:
+                    logger.error("❌ 404 Not Found - blob may not exist")
                 else:
                     logger.warning(f"⚠️  Signed URL returned status {response.status_code}")
             except Exception as e:
                 logger.warning(f"⚠️  Could not test signed URL: {type(e).__name__}: {e}")
             
+            # Step 11: Test with cache (simulate embed endpoint)
+            logger.info("Step 10: Testing with cache (simulating embed endpoint)")
+            try:
+                from src.resources.cache import get_cache
+                cache = get_cache()
+                cached_url = cache.get(audio_path, url_expiration_minutes=15)
+                logger.info("✅ Cache-based signed URL generation successful!")
+                logger.info(f"   Cached URL matches direct URL: {cached_url == signed_url}")
+            except Exception as e:
+                logger.warning(f"⚠️  Cache-based generation failed: {type(e).__name__}: {e}")
+            
             print("\n" + "=" * 80)
             print("✅ SUCCESS: Signed URL generation completed successfully!")
+            print("=" * 80)
+            print(f"Generated URL: {signed_url}")
             print("=" * 80)
             
         except Exception as e:
@@ -170,11 +203,16 @@ def main():
             print("❌ FAILURE: Signed URL generation failed")
             print("=" * 80)
             print("\nTroubleshooting steps:")
-            print("1. Check IAM permissions (service account needs roles/iam.securityAdmin on itself)")
+            print("1. Check IAM permissions (service account needs roles/iam.serviceAccountTokenCreator on itself)")
             print("2. Verify service account email resolution")
-            print("3. Check GCS bucket permissions")
+            print("3. Check GCS bucket permissions (service account needs roles/storage.objectAdmin)")
             print("4. Verify blob exists in GCS bucket")
             print("5. Check Cloud Run logs for detailed error messages")
+            print("6. Verify latest code is deployed (check for 'signer' parameter errors)")
+            print("7. Test locally with Docker to isolate deployment issues")
+            print("\nDeployment verification commands:")
+            print("  gcloud run services describe music-library-mcp-staging --region=us-central1")
+            print("  gcloud run services logs read music-library-mcp-staging --region=us-central1 --limit=20")
             sys.exit(1)
     
     except Exception as e:

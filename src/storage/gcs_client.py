@@ -15,7 +15,7 @@ from typing import Optional, Dict, Any, List
 from google.cloud import storage
 from google.cloud.exceptions import NotFound, GoogleCloudError
 from google.auth.transport.requests import Request
-from google.auth import default, iam
+from google.auth import default, impersonated_credentials
 import os
 import requests
 
@@ -301,46 +301,82 @@ class GCSClient:
         service_account_email = _resolve_service_account_email()
         if not service_account_email:
             logger.error("[SIGNED_URL_DEBUG] Failed to resolve service account email")
+            logger.error("[SIGNED_URL_DEBUG] This may indicate a deployment issue where the service account is not properly attached")
             raise GoogleCloudError("Could not resolve service account email for IAM SignBlob")
         logger.info(f"[SIGNED_URL_DEBUG] Service account email resolved: {service_account_email}")
 
         try:
             # Step 2: Get ADC credentials
             logger.info("[SIGNED_URL_DEBUG] Step 2: Getting Application Default Credentials")
-            credentials, project_id = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+            source_credentials, project_id = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
             logger.info(f"[SIGNED_URL_DEBUG] Project ID: {project_id}")
-            logger.info(f"[SIGNED_URL_DEBUG] Credentials type: {type(credentials).__name__}")
-            logger.info(f"[SIGNED_URL_DEBUG] Credentials has service_account_email attr: {hasattr(credentials, 'service_account_email')}")
-            if hasattr(credentials, 'service_account_email'):
-                logger.info(f"[SIGNED_URL_DEBUG] Credentials service_account_email: {getattr(credentials, 'service_account_email', 'N/A')}")
+            logger.info(f"[SIGNED_URL_DEBUG] Source credentials type: {type(source_credentials).__name__}")
             
-            # Step 3: Create request object
-            logger.info("[SIGNED_URL_DEBUG] Step 3: Creating Request object")
-            request = Request()
+            # Validate source credentials
+            if not source_credentials:
+                logger.error("[SIGNED_URL_DEBUG] Source credentials are None - ADC may not be properly configured")
+                raise GoogleCloudError("Application Default Credentials not available")
+            
+            # Step 3: Create impersonated credentials for IAM SignBlob
+            logger.info("[SIGNED_URL_DEBUG] Step 3: Creating impersonated credentials")
+            logger.info(f"[SIGNED_URL_DEBUG] Target principal: {service_account_email}")
+            logger.info(f"[SIGNED_URL_DEBUG] Target scopes: https://www.googleapis.com/auth/devstorage.read_only")
+            
+            # Use broader scopes for better compatibility with IAM SignBlob
+            target_scopes = [
+                "https://www.googleapis.com/auth/devstorage.read_only",
+                "https://www.googleapis.com/auth/cloud-platform"
+            ]
+            
+            signing_credentials = impersonated_credentials.Credentials(
+                source_credentials=source_credentials,
+                target_principal=service_account_email,
+                target_scopes=target_scopes,
+                lifetime=3600,  # Token lifetime in seconds (must be > 0)
+            )
+            logger.info("[SIGNED_URL_DEBUG] Impersonated credentials created successfully")
+            
+            # Validate impersonated credentials
+            logger.info(f"[SIGNED_URL_DEBUG] Impersonated credentials type: {type(signing_credentials).__name__}")
+            logger.info(f"[SIGNED_URL_DEBUG] Impersonated credentials service account: {signing_credentials.service_account_email}")
+            
+            # Test credential refresh to ensure they work
+            try:
+                signing_credentials.refresh(Request())
+                logger.info("[SIGNED_URL_DEBUG] Credentials refresh successful")
+            except Exception as refresh_error:
+                logger.warning(f"[SIGNED_URL_DEBUG] Credential refresh failed (may still work): {refresh_error}")
+                # Don't fail here as some credentials work without explicit refresh
 
-            # Step 4: Create IAM signer
-            logger.info("[SIGNED_URL_DEBUG] Step 4: Creating IAM Signer")
-            logger.info(f"[SIGNED_URL_DEBUG] IAM Signer params: service_account={service_account_email}, project={project_id}")
-            signer = iam.Signer(request, credentials, service_account_email)
-            logger.info("[SIGNED_URL_DEBUG] IAM Signer created successfully")
-
-            # Step 5: Build expiration datetime
-            logger.info("[SIGNED_URL_DEBUG] Step 5: Building expiration datetime")
+            # Step 4: Build expiration datetime
+            logger.info("[SIGNED_URL_DEBUG] Step 4: Building expiration datetime")
             expiration = datetime.datetime.utcnow() + datetime.timedelta(minutes=expiration_minutes)
             logger.info(f"[SIGNED_URL_DEBUG] Expiration datetime: {expiration.isoformat()}")
             
-            # Step 6: Generate signed URL
-            logger.info("[SIGNED_URL_DEBUG] Step 6: Generating signed URL with IAM SignBlob")
-            logger.info(f"[SIGNED_URL_DEBUG] Using blob.generate_signed_url() with IAM signer")
-            logger.info(f"[SIGNED_URL_DEBUG] Blob: {blob.name}, Bucket: {blob.bucket.name}, Expiration: {expiration.isoformat()}, Method: {method}")
+            # Step 5: Generate signed URL using impersonated credentials
+            logger.info("[SIGNED_URL_DEBUG] Step 5: Generating signed URL with impersonated credentials")
+            logger.info(f"[SIGNED_URL_DEBUG] Using google-cloud-storage version 2.18.2 API")
+            logger.info(f"[SIGNED_URL_DEBUG] Blob: {blob.name}, Bucket: {blob.bucket.name}")
+            logger.info(f"[SIGNED_URL_DEBUG] Method: {method}, Version: v4")
+            logger.info(f"[SIGNED_URL_DEBUG] Expiration timedelta: {datetime.timedelta(minutes=expiration_minutes)}")
             
-            # Use blob.generate_signed_url() with IAM signer
-            # This method accepts a signer parameter for IAM SignBlob
-            signed_url = blob.generate_signed_url(
-                expiration=expiration,
+            # Alternative approach: Create a new storage client with impersonated credentials
+            # This ensures the client is properly configured for signing
+            logger.info("[SIGNED_URL_DEBUG] Creating storage client with impersonated credentials")
+            signing_client = storage.Client(
+                project=project_id,
+                credentials=signing_credentials
+            )
+            signing_bucket = signing_client.bucket(blob.bucket.name)
+            signing_blob = signing_bucket.blob(blob.name)
+            
+            # Use blob.generate_signed_url() with impersonated credentials
+            # This internally uses IAM SignBlob API
+            signed_url = signing_blob.generate_signed_url(
+                version="v4",
+                expiration=datetime.timedelta(minutes=expiration_minutes),
                 method=method,
-                service_account_email=service_account_email,
-                signer=signer.sign,
+                credentials=signing_credentials,
                 content_type=content_type,
                 response_disposition=response_disposition,
             )
@@ -348,9 +384,33 @@ class GCSClient:
             logger.debug(f"[SIGNED_URL_DEBUG] Signed URL (first 100 chars): {signed_url[:100]}...")
             return signed_url
 
+        except TypeError as e:
+            # This specific error suggests old code is still deployed
+            error_msg = str(e)
+            logger.error(f"[SIGNED_URL_DEBUG] TypeError in signed URL generation: {error_msg}")
+            if "signer" in error_msg:
+                logger.error("[SIGNED_URL_DEBUG] ERROR: 'signer' parameter error suggests old code is still deployed!")
+                logger.error("[SIGNED_URL_DEBUG] Current code uses 'credentials' parameter, not 'signer'")
+                logger.error("[SIGNED_URL_DEBUG] Please verify that the latest code has been deployed to Cloud Run")
+                raise GoogleCloudError(f"Deployment mismatch detected - old code still running. TypeError: {error_msg}")
+            else:
+                logger.error(f"[SIGNED_URL_DEBUG] Unexpected TypeError: {error_msg}")
+                raise GoogleCloudError(f"TypeError in signed URL generation: {error_msg}")
         except Exception as e:
             logger.error(f"[SIGNED_URL_DEBUG] IAM SignBlob failed: {type(e).__name__}: {e}")
             logger.error(f"[SIGNED_URL_DEBUG] Exception details: {str(e)}")
+            
+            # Add specific error handling for common issues
+            error_msg = str(e)
+            if "403" in error_msg and "Forbidden" in error_msg:
+                logger.error("[SIGNED_URL_DEBUG] 403 Forbidden - check IAM permissions:")
+                logger.error(f"[SIGNED_URL_DEBUG] - Service account {service_account_email} needs roles/iam.serviceAccountTokenCreator")
+                logger.error(f"[SIGNED_URL_DEBUG] - Service account needs roles/storage.objectAdmin or similar")
+            elif "401" in error_msg and "Unauthorized" in error_msg:
+                logger.error("[SIGNED_URL_DEBUG] 401 Unauthorized - check credential configuration")
+            elif "impersonat" in error_msg.lower():
+                logger.error("[SIGNED_URL_DEBUG] Impersonation error - check service account permissions")
+            
             import traceback
             logger.error(f"[SIGNED_URL_DEBUG] Full traceback: {traceback.format_exc()}")
             raise GoogleCloudError(f"IAM SignBlob signing failed: {e}")
