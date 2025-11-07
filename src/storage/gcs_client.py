@@ -41,34 +41,48 @@ def _resolve_service_account_email() -> Optional[str]:
     Returns:
         Service account email or None if not found
     """
+    logger.info("[SIGNED_URL_DEBUG] Resolving service account email")
+    
     # Check environment variable first
     email = os.getenv("GCP_SERVICE_ACCOUNT_EMAIL")
     if email:
-        logger.debug(f"Using service account email from env: {email}")
+        logger.info(f"[SIGNED_URL_DEBUG] Using service account email from env: {email}")
         return email
+    else:
+        logger.info("[SIGNED_URL_DEBUG] GCP_SERVICE_ACCOUNT_EMAIL env var not set")
 
     # Try metadata server (Cloud Run/Compute Engine)
+    logger.info("[SIGNED_URL_DEBUG] Attempting to get service account email from metadata server")
     try:
         metadata_url = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email"
+        logger.info(f"[SIGNED_URL_DEBUG] Metadata URL: {metadata_url}")
         response = requests.get(metadata_url, headers={"Metadata-Flavor": "Google"}, timeout=1)
+        logger.info(f"[SIGNED_URL_DEBUG] Metadata server response status: {response.status_code}")
         if response.status_code == 200:
             email = response.text.strip()
-            logger.debug(f"Using service account email from metadata: {email}")
+            logger.info(f"[SIGNED_URL_DEBUG] Using service account email from metadata: {email}")
             return email
+        else:
+            logger.warning(f"[SIGNED_URL_DEBUG] Metadata server returned status {response.status_code}: {response.text}")
     except Exception as e:
-        logger.debug(f"Could not get email from metadata server: {e}")
+        logger.warning(f"[SIGNED_URL_DEBUG] Could not get email from metadata server: {type(e).__name__}: {e}")
 
     # Try to get from credentials
+    logger.info("[SIGNED_URL_DEBUG] Attempting to get service account email from credentials")
     try:
-        credentials, _ = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+        credentials, project_id = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+        logger.info(f"[SIGNED_URL_DEBUG] Credentials type: {type(credentials).__name__}")
+        logger.info(f"[SIGNED_URL_DEBUG] Credentials has service_account_email attr: {hasattr(credentials, 'service_account_email')}")
         if hasattr(credentials, 'service_account_email'):
             email = credentials.service_account_email
-            logger.debug(f"Using service account email from credentials: {email}")
+            logger.info(f"[SIGNED_URL_DEBUG] Using service account email from credentials: {email}")
             return email
+        else:
+            logger.warning("[SIGNED_URL_DEBUG] Credentials object does not have service_account_email attribute")
     except Exception as e:
-        logger.debug(f"Could not get email from credentials: {e}")
+        logger.warning(f"[SIGNED_URL_DEBUG] Could not get email from credentials: {type(e).__name__}: {e}")
 
-    logger.warning("Could not resolve service account email for IAM SignBlob")
+    logger.error("[SIGNED_URL_DEBUG] Could not resolve service account email for IAM SignBlob")
     return None
 
 
@@ -167,37 +181,56 @@ class GCSClient:
             NotFound: If blob doesn't exist (for GET requests)
             GoogleCloudError: If URL generation fails
         """
+        logger.info(f"[SIGNED_URL_DEBUG] generate_signed_url called: blob_name={blob_name}, bucket={self.bucket_name}, expiration={expiration_minutes}min, method={method}")
         try:
+            # Step 1: Get blob reference
+            logger.info(f"[SIGNED_URL_DEBUG] Step 1: Getting blob reference for {blob_name}")
             blob = self.bucket.blob(blob_name)
+            logger.info(f"[SIGNED_URL_DEBUG] Blob reference created: {blob.name}")
 
-            # For GET requests, verify blob exists
-            if method == "GET" and not blob.exists():
-                raise NotFound(f"Blob not found: {blob_name}")
+            # Step 2: Verify blob exists (for GET requests)
+            if method == "GET":
+                logger.info(f"[SIGNED_URL_DEBUG] Step 2: Checking blob existence for GET request")
+                blob_exists = blob.exists()
+                logger.info(f"[SIGNED_URL_DEBUG] Blob exists: {blob_exists}")
+                if not blob_exists:
+                    logger.error(f"[SIGNED_URL_DEBUG] Blob not found: {blob_name}")
+                    raise NotFound(f"Blob not found: {blob_name}")
 
-            # Check if we should use IAM SignBlob (running on GCP)
+            # Step 3: Determine signing method
+            logger.info("[SIGNED_URL_DEBUG] Step 3: Determining signing method")
             use_iam_signblob = self._should_use_iam_signblob()
+            logger.info(f"[SIGNED_URL_DEBUG] Using IAM SignBlob: {use_iam_signblob}")
 
+            # Step 4: Generate signed URL
             if use_iam_signblob:
-                logger.debug(f"Using IAM SignBlob for signed URL generation: {blob_name}")
+                logger.info(f"[SIGNED_URL_DEBUG] Step 4: Using IAM SignBlob for signed URL generation: {blob_name}")
                 url = self._generate_signed_url_iam(blob, expiration_minutes, method, content_type, response_disposition)
             else:
-                logger.debug(f"Using keyfile signing for signed URL generation: {blob_name}")
+                logger.info(f"[SIGNED_URL_DEBUG] Step 4: Using keyfile signing for signed URL generation: {blob_name}")
                 url = self._generate_signed_url_keyfile(blob, expiration_minutes, method, content_type, response_disposition)
 
             logger.info(
-                f"Generated signed URL for blob: {blob_name}, "
+                f"[SIGNED_URL_DEBUG] Generated signed URL for blob: {blob_name}, "
                 f"expires in {expiration_minutes} minutes, "
                 f"method: {'IAM SignBlob' if use_iam_signblob else 'keyfile'}"
             )
 
             return url
 
-        except NotFound:
-            logger.error(f"Blob not found: {blob_name}")
+        except NotFound as e:
+            logger.error(f"[SIGNED_URL_DEBUG] Blob not found: {blob_name} - {e}")
             raise
         except GoogleCloudError as e:
-            logger.error(f"Failed to generate signed URL for {blob_name}: {e}")
+            logger.error(f"[SIGNED_URL_DEBUG] Failed to generate signed URL for {blob_name}: {type(e).__name__}: {e}")
+            import traceback
+            logger.error(f"[SIGNED_URL_DEBUG] Full traceback: {traceback.format_exc()}")
             raise
+        except Exception as e:
+            logger.error(f"[SIGNED_URL_DEBUG] Unexpected error generating signed URL for {blob_name}: {type(e).__name__}: {e}")
+            import traceback
+            logger.error(f"[SIGNED_URL_DEBUG] Full traceback: {traceback.format_exc()}")
+            raise GoogleCloudError(f"Unexpected error generating signed URL: {e}")
 
     def _should_use_iam_signblob(self) -> bool:
         """Determine if we should use IAM SignBlob based on config, environment and credentials."""
@@ -261,23 +294,47 @@ class GCSClient:
         """Generate signed URL using IAM SignBlob API."""
         from google.cloud.storage._signing import generate_signed_url_v4
         
+        logger.info(f"[SIGNED_URL_DEBUG] Starting IAM SignBlob signed URL generation")
+        logger.info(f"[SIGNED_URL_DEBUG] Blob: {blob.name}, Bucket: {blob.bucket.name}")
+        logger.info(f"[SIGNED_URL_DEBUG] Expiration: {expiration_minutes} minutes, Method: {method}")
+        
+        # Step 1: Resolve service account email
+        logger.info("[SIGNED_URL_DEBUG] Step 1: Resolving service account email")
         service_account_email = _resolve_service_account_email()
         if not service_account_email:
+            logger.error("[SIGNED_URL_DEBUG] Failed to resolve service account email")
             raise GoogleCloudError("Could not resolve service account email for IAM SignBlob")
+        logger.info(f"[SIGNED_URL_DEBUG] Service account email resolved: {service_account_email}")
 
         try:
-            # Get ADC credentials
-            credentials, _ = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+            # Step 2: Get ADC credentials
+            logger.info("[SIGNED_URL_DEBUG] Step 2: Getting Application Default Credentials")
+            credentials, project_id = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+            logger.info(f"[SIGNED_URL_DEBUG] Project ID: {project_id}")
+            logger.info(f"[SIGNED_URL_DEBUG] Credentials type: {type(credentials).__name__}")
+            logger.info(f"[SIGNED_URL_DEBUG] Credentials has service_account_email attr: {hasattr(credentials, 'service_account_email')}")
+            if hasattr(credentials, 'service_account_email'):
+                logger.info(f"[SIGNED_URL_DEBUG] Credentials service_account_email: {getattr(credentials, 'service_account_email', 'N/A')}")
+            
+            # Step 3: Create request object
+            logger.info("[SIGNED_URL_DEBUG] Step 3: Creating Request object")
             request = Request()
 
-            # Create IAM signer
+            # Step 4: Create IAM signer
+            logger.info("[SIGNED_URL_DEBUG] Step 4: Creating IAM Signer")
+            logger.info(f"[SIGNED_URL_DEBUG] IAM Signer params: service_account={service_account_email}, project={project_id}")
             signer = iam.Signer(request, credentials, service_account_email)
+            logger.info("[SIGNED_URL_DEBUG] IAM Signer created successfully")
 
-            # Build URL parameters for generate_signed_url_v4
+            # Step 5: Build expiration datetime
+            logger.info("[SIGNED_URL_DEBUG] Step 5: Building expiration datetime")
             expiration = datetime.datetime.utcnow() + datetime.timedelta(minutes=expiration_minutes)
+            logger.info(f"[SIGNED_URL_DEBUG] Expiration datetime: {expiration.isoformat()}")
             
-            # Use generate_signed_url_v4 with correct parameters
-            return generate_signed_url_v4(
+            # Step 6: Generate signed URL
+            logger.info("[SIGNED_URL_DEBUG] Step 6: Calling generate_signed_url_v4")
+            logger.info(f"[SIGNED_URL_DEBUG] generate_signed_url_v4 params: bucket={blob.bucket.name}, blob_name={blob.name}, expiration={expiration.isoformat()}, method={method}")
+            signed_url = generate_signed_url_v4(
                 bucket=blob.bucket,
                 blob_name=blob.name,
                 expiration=expiration,
@@ -287,9 +344,15 @@ class GCSClient:
                 content_type=content_type,
                 response_disposition=response_disposition,
             )
+            logger.info("[SIGNED_URL_DEBUG] Signed URL generated successfully")
+            logger.debug(f"[SIGNED_URL_DEBUG] Signed URL (first 100 chars): {signed_url[:100]}...")
+            return signed_url
 
         except Exception as e:
-            logger.error(f"IAM SignBlob failed: {e}")
+            logger.error(f"[SIGNED_URL_DEBUG] IAM SignBlob failed: {type(e).__name__}: {e}")
+            logger.error(f"[SIGNED_URL_DEBUG] Exception details: {str(e)}")
+            import traceback
+            logger.error(f"[SIGNED_URL_DEBUG] Full traceback: {traceback.format_exc()}")
             raise GoogleCloudError(f"IAM SignBlob signing failed: {e}")
 
     def _generate_signed_url_keyfile(

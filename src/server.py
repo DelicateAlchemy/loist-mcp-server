@@ -68,7 +68,8 @@ logger.info("✅ Server setup validation passed")
 # Initialize FastMCP server cleanly
 mcp = create_fastmcp_server()
 
-# Configure Jinja2 templates (already done in setup_jinja_templates)
+# Configure Jinja2 templates
+templates = setup_jinja_templates()
 
 
 @asynccontextmanager
