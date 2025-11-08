@@ -598,8 +598,8 @@ async def oembed_endpoint(request):
         request: Starlette Request object with query parameters:
             - url (required): The embed URL to generate oEmbed data for
             - format (optional): Response format, 'json' or 'xml' (default: 'json')
-            - maxwidth (optional): Maximum width for embed (default: 500)
-            - maxheight (optional): Maximum height for embed (default: 200)
+            - maxwidth (optional): Maximum width for embed (default: 600)
+            - maxheight (optional): Maximum height for embed (default: 240)
 
     Returns:
         JSONResponse: oEmbed JSON response according to spec
@@ -620,8 +620,10 @@ async def oembed_endpoint(request):
         # Extract query parameters
         url_param = request.query_params.get("url")
         format_param = request.query_params.get("format", "json")
-        maxwidth = int(request.query_params.get("maxwidth", 500))
-        maxheight = int(request.query_params.get("maxheight", 200))
+        # Default dimensions optimized for horizontal audio player layout
+        # Aspect ratio ~2.5:1 (width:height) for better fit
+        maxwidth = int(request.query_params.get("maxwidth", 600))
+        maxheight = int(request.query_params.get("maxheight", 240))
 
         # Validate URL parameter
         if not url_param:
@@ -686,6 +688,17 @@ async def oembed_endpoint(request):
             description += f" - {album}"
 
         # Build oEmbed response according to spec
+        # Include proper allow attributes for Notion iframe embedding
+        # allow="autoplay; encrypted-media; fullscreen" enables media playback in sandboxed iframes
+        iframe_html = (
+            f'<iframe src="{embed_url}?compact=true" '
+            f'width="{maxwidth}" height="{maxheight}" '
+            f'frameborder="0" '
+            f'allow="autoplay; encrypted-media; fullscreen" '
+            f'style="border-radius: 12px; border: none;" '
+            f'scrolling="no"></iframe>'
+        )
+        
         oembed_response = {
             "version": "1.0",
             "type": "rich",
@@ -693,7 +706,7 @@ async def oembed_endpoint(request):
             "provider_url": config.embed_base_url,
             "title": title,
             "author_name": artist,
-            "html": f'<iframe src="{embed_url}?compact=true" width="{maxwidth}" height="{maxheight}" frameborder="0" allow="autoplay" style="border-radius: 12px;"></iframe>',
+            "html": iframe_html,
             "width": maxwidth,
             "height": maxheight,
             "cache_age": 3600,  # Cache for 1 hour

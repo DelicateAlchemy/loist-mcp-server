@@ -290,6 +290,12 @@
         }
 
         .player-container.compact .controls-container {
+            /* Keep controls visible in compact mode for Notion embeds */
+            /* Only hide volume controls to save space */
+            margin-top: 8px;
+        }
+        
+        .player-container.compact .volume-container {
             display: none;
         }
 
@@ -321,18 +327,6 @@
 
         .player-container.compact .format-badge {
             display: none;
-        }
-
-        /* Expand button hint */
-        .player-container.compact::after {
-            content: "▶ Click to expand player";
-            position: absolute;
-            bottom: 8px;
-            right: 12px;
-            font-size: 10px;
-            color: var(--text-tertiary);
-            opacity: 0.7;
-            font-weight: 500;
         }
 
         /* Responsive adjustments */
