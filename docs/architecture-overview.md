@@ -28,6 +28,8 @@ graph TB
     J --> K[Database Layer]
     K --> L[PostgreSQL]
     K --> M[Google Cloud Storage]
+    M --> Q[IAM SignBlob API]
+    Q --> R[Service Account Impersonation]
 
     A --> N[Exception Framework]
     J --> N
@@ -58,10 +60,75 @@ graph TB
 - **Migration System**: Schema versioning and deployment
 
 #### 4. Infrastructure Layer
-- **Google Cloud Storage**: Audio file and thumbnail storage
+- **Google Cloud Storage**: Audio file and thumbnail storage with signed URL generation
+- **IAM SignBlob API**: Secure URL signing via service account impersonation
 - **PostgreSQL**: Metadata and search indexing
 - **Health Monitoring**: Comprehensive system health checks
 - **Logging**: Structured logging with context
+
+## Google Cloud Storage Integration
+
+### Signed URL Architecture
+
+The system implements secure audio streaming using Google Cloud Storage signed URLs with IAM SignBlob API:
+
+```mermaid
+graph LR
+    A[Embed Request] --> B[Cache Check]
+    B --> C{Cache Hit?}
+    C -->|Yes| D[Return Cached URL]
+    C -->|No| E[Generate Signed URL]
+    
+    E --> F[Resolve Service Account]
+    F --> G[Get ADC Credentials]
+    G --> H[Create Impersonated Credentials]
+    H --> I[Call blob.generate_signed_url()]
+    I --> J[IAM SignBlob API]
+    J --> K[Return V4 Signed URL]
+    K --> L[Cache URL]
+    L --> M[Return to Client]
+```
+
+### Key Components
+
+#### Service Account Impersonation
+- **Source Credentials**: Application Default Credentials from Cloud Run
+- **Target Principal**: `mcp-music-library-sa@loist-music-library.iam.gserviceaccount.com`
+- **Scopes**: `devstorage.read_only` + `cloud-platform`
+- **Lifetime**: 3600 seconds (1 hour)
+
+#### IAM SignBlob Implementation
+```python
+# Create impersonated credentials
+signing_credentials = impersonated_credentials.Credentials(
+    source_credentials=source_credentials,
+    target_principal=service_account_email,
+    target_scopes=[
+        "https://www.googleapis.com/auth/devstorage.read_only",
+        "https://www.googleapis.com/auth/cloud-platform"
+    ],
+    lifetime=3600
+)
+
+# Generate signed URL using credentials parameter
+signed_url = blob.generate_signed_url(
+    version="v4",
+    expiration=datetime.timedelta(minutes=15),
+    method="GET",
+    credentials=signing_credentials
+)
+```
+
+#### Required IAM Permissions
+- `roles/iam.serviceAccountTokenCreator` on target service account
+- `roles/storage.objectAdmin` at project level
+- Cloud Run service account can impersonate itself
+
+### Security Benefits
+- **No Private Keys**: Uses IAM SignBlob instead of stored keys
+- **Short-Lived URLs**: 15-minute expiration for security
+- **Audit Trail**: All signing operations logged via Cloud Audit Logs
+- **Least Privilege**: Minimal required permissions only
 
 ## Repository Pattern Implementation
 

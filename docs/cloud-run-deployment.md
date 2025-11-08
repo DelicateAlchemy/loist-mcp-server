@@ -8,7 +8,7 @@ The deployment uses Google Cloud Build with an optimized `cloudbuild.yaml` pipel
 
 - **Streamlined 3-step process**: Build → Push → Deploy (reduced from 9 steps for better performance)
 - **Multi-stage Docker builds** with Alpine builder → Alpine runtime for optimal security and reliability
-- **BuildKit cache mounts** for pip and apk caching (faster subsequent builds)
+- **Cloud Build optimized** for Google Cloud Build compatibility (no BuildKit dependencies)
 - **Comprehensive environment variable configuration** (50+ variables across all functional areas)
 - **Secret management** for sensitive data via Google Secret Manager
 - **Artifact Registry integration** for modern container registry management

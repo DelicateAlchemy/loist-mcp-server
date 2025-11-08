@@ -44,20 +44,56 @@ This project supports local development, staging, and production deployments wit
 
 ## Architecture
 
-### Core Components
+### Google Cloud Infrastructure Overview
+
+The system is built on Google Cloud Platform with a modern serverless architecture:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Google Cloud Platform                    │
+├─────────────────────────────────────────────────────────────┤
+│  ┌─────────────┐    ┌──────────────┐    ┌─────────────────┐ │
+│  │ Cloud Build │───▶│  Artifact    │───▶│   Cloud Run     │ │
+│  │   CI/CD     │    │  Registry    │    │ (Serverless)    │ │
+│  └─────────────┘    └──────────────┘    └─────────────────┘ │
+│                                                ▲             │
+│  ┌─────────────┐    ┌──────────────┐         │             │
+│  │   Cloud     │    │    Secret    │         │             │
+│  │    SQL      │◀───┤   Manager    │◀────────┘             │
+│  │(PostgreSQL) │    │              │                       │
+│  └─────────────┘    └──────────────┘                       │
+│                                                             │
+│  ┌─────────────┐    ┌──────────────┐                       │
+│  │   Cloud     │    │     IAM      │                       │
+│  │  Storage    │◀───┤  SignBlob    │◀──────────────────────┘
+│  │   (GCS)     │    │    API       │                        
+│  └─────────────┘    └──────────────┘                        
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Key Infrastructure Components:**
+- **Cloud Run**: Serverless container platform with auto-scaling
+- **Cloud SQL**: Managed PostgreSQL with connection pooling
+- **Cloud Storage**: Object storage with signed URL generation via IAM SignBlob
+- **Cloud Build**: Automated CI/CD with vulnerability scanning
+- **Secret Manager**: Secure credential and configuration management
+- **Artifact Registry**: Container image storage and management
+- **IAM**: Service account impersonation for secure GCS access
+
+### Application Architecture
 
 The server implements a layered architecture with clear separation of concerns:
 
 ```
 ┌─────────────────┐
-│   FastMCP       │  ← Protocol Layer
+│   FastMCP       │  ← Protocol Layer (MCP v1.16.0)
 │   Protocol      │
 ├─────────────────┤
-│ Business Logic  │  ← Service Layer
+│ Business Logic  │  ← Service Layer (Repository Pattern)
 │ Repository      │
 ├─────────────────┤
 │ Data Access     │  ← Persistence Layer
-│ PostgreSQL      │
+│ PostgreSQL      │    (Cloud SQL + GCS)
 │ Google Cloud    │
 │ Storage         │
 └─────────────────┘

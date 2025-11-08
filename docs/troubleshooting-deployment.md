@@ -1,6 +1,6 @@
 # Deployment Troubleshooting Guide
 
-Common issues and solutions for Cloud Run deployment problems.
+Common issues and solutions for Cloud Run deployment problems, including signed URL generation failures and deployment mismatches.
 
 ## Quick Diagnostics
 
@@ -28,6 +28,81 @@ gcloud builds list \
   --limit=5 \
   --format="table(id,status,createTime,source.repoSource.branchName)"
 ```
+
+## Signed URL Generation Issues
+
+### Deployment Mismatch Detection
+
+**Symptom**: `TypeError: Blob.generate_signed_url() got an unexpected keyword argument 'signer'`
+
+**Root Cause**: Old code still deployed despite local updates
+
+**Diagnosis**:
+```bash
+# Check deployed image tag
+gcloud run services describe music-library-mcp-staging \
+  --region=us-central1 \
+  --format="value(spec.template.spec.containers[0].image)"
+
+# Check recent logs for error signature
+gcloud run services logs read music-library-mcp-staging \
+  --region=us-central1 \
+  --limit=20 | grep -E "(signer|TypeError)"
+```
+
+**Resolution**:
+1. Verify latest code is committed and pushed
+2. Trigger new deployment:
+   ```bash
+   gcloud run deploy music-library-mcp-staging \
+     --source . \
+     --region us-central1
+   ```
+3. Verify fix:
+   ```bash
+   curl -s -o /dev/null -w "%{http_code}" "https://staging.loist.io/embed/{audioId}"
+   # Should return 200, not 500
+   ```
+
+### IAM SignBlob Permission Issues
+
+**Symptom**: `403 Forbidden` errors in signed URL generation
+
+**Diagnosis**:
+```bash
+# Check service account IAM bindings
+gcloud iam service-accounts get-iam-policy \
+  mcp-music-library-sa@loist-music-library.iam.gserviceaccount.com
+```
+
+**Required Permissions**:
+- `roles/iam.serviceAccountTokenCreator` on itself
+- `roles/storage.objectAdmin` at project level
+
+**Resolution**:
+```bash
+# Grant required permissions
+gcloud projects add-iam-policy-binding loist-music-library \
+  --member="serviceAccount:mcp-music-library-sa@loist-music-library.iam.gserviceaccount.com" \
+  --role="roles/storage.objectAdmin"
+
+gcloud iam service-accounts add-iam-policy-binding \
+  mcp-music-library-sa@loist-music-library.iam.gserviceaccount.com \
+  --member="serviceAccount:mcp-music-library-sa@loist-music-library.iam.gserviceaccount.com" \
+  --role="roles/iam.serviceAccountTokenCreator"
+```
+
+### Debug Signed URL Generation
+
+**Use the debug script**:
+```bash
+python3 scripts/debug_signed_url_generation.py {audioId}
+```
+
+**Expected Success Indicators**:
+- `[SIGNED_URL_DEBUG] Signed URL generated successfully`
+- `✅ V4 signature components detected`
+- HTTP 200 response from embed endpoint
 
 ## Common Issues
 
