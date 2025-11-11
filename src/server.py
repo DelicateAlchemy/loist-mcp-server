@@ -68,6 +68,10 @@ logger.info("✅ Server setup validation passed")
 # Initialize FastMCP server cleanly
 mcp = create_fastmcp_server()
 
+# Register task handlers for async processing
+from src.tasks.handler import register_task_handlers
+register_task_handlers(mcp)
+
 # Configure Jinja2 templates
 templates = setup_jinja_templates()
 
