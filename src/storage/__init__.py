@@ -14,6 +14,11 @@ from .gcs_client import (
     list_audio_files,
     get_file_metadata,
 )
+from .waveform_storage import (
+    upload_waveform_svg,
+    get_waveform_signed_url,
+    get_waveform_gcs_path,
+)
 
 __all__ = [
     "GCSClient",
@@ -23,5 +28,8 @@ __all__ = [
     "delete_file",
     "list_audio_files",
     "get_file_metadata",
+    "upload_waveform_svg",
+    "get_waveform_signed_url",
+    "get_waveform_gcs_path",
 ]
 
