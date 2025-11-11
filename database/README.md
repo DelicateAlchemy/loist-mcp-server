@@ -28,6 +28,7 @@ The main table stores all audio metadata and technical specifications:
 -- Key fields
 id UUID PRIMARY KEY                    -- Unique identifier
 status VARCHAR(20)                     -- Processing state
+user_id INTEGER                        -- User ID for multi-user SaaS (nullable initially)
 artist VARCHAR(500)                    -- Artist name
 title VARCHAR(500) NOT NULL            -- Track title (required)
 album VARCHAR(500)                     -- Album name
@@ -51,12 +52,36 @@ search_vector TSVECTOR                 -- Full-text search vector
 3. **Precise Duration**: NUMERIC(10,3) for millisecond accuracy
 4. **Weighted Search**: Title/artist highest priority, album medium, genre lower
 5. **Partial Indexes**: Exclude completed tracks for status filtering
+6. **Multi-User SaaS Ready**: user_id column for data isolation between users
+
+### Multi-User SaaS Architecture
+
+The database is designed to support multi-user SaaS functionality with proper data isolation:
+
+**User Data Isolation:**
+- `user_id INTEGER` column enables per-user audio collections
+- Initially nullable to allow gradual migration of existing data
+- Will become NOT NULL when users table is implemented
+- Supports millions of tracks across thousands of users
+
+**Query Optimization:**
+- Partial indexes on `user_id` for efficient user-specific queries
+- Composite index on `(user_id, status)` for dashboard queries
+- Foreign key relationship planned for referential integrity
+
+**Future Enhancements:**
+- Users table with authentication and profile data
+- Foreign key constraint from `audio_tracks.user_id` to `users.id`
+- Row-level security policies for additional data protection
+- User-specific search and filtering capabilities
 
 ## Indexes
 
 ### Performance Indexes
 - `idx_audio_tracks_search_vector`: GIN index for full-text search
 - `idx_audio_tracks_status`: Partial index for status filtering
+- `idx_audio_tracks_user_id`: Partial index for user-specific queries
+- `idx_audio_tracks_user_status`: Composite index for user + status queries
 - `idx_audio_tracks_created_at`: Timestamp-based queries
 - `idx_audio_tracks_artist_album`: Composite index for common queries
 

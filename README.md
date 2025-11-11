@@ -1164,6 +1164,52 @@ Returns the current status of the server.
 }
 ```
 
+## HTTP REST API
+
+The MCP server exposes HTTP REST API endpoints for direct frontend integration when running in HTTP transport mode.
+
+### Quick Start
+
+```bash
+# Start server in HTTP mode
+docker-compose up
+
+# Server available at http://localhost:8080
+# MCP endpoint: http://localhost:8080/mcp
+# REST API: http://localhost:8080/api/*
+```
+
+### Available Endpoints
+
+- `GET /api/tracks/{audioId}` - Get track metadata
+- `GET /api/search?q=<query>` - Search tracks with filters
+- `GET /api/tracks/{audioId}/stream` - Get signed streaming URL
+- `GET /api/tracks/{audioId}/thumbnail` - Get signed thumbnail URL
+
+### Example Usage
+
+```javascript
+// Search for tracks
+const response = await fetch('/api/search?q=beatles&limit=10');
+const result = await response.json();
+
+// Get track metadata
+const track = await fetch('/api/tracks/550e8400-e29b-41d4-a716-446655440000');
+const trackData = await track.json();
+```
+
+📚 **Complete API Documentation**: See [`docs/query-tools-api.md`](docs/query-tools-api.md#http-rest-api-endpoints)
+
+## Multi-User SaaS Support
+
+The database schema includes a `user_id` column in the `audio_tracks` table to support multi-user SaaS functionality. Each user can have their own collection of audio tracks with proper data isolation.
+
+**Database Schema:**
+- `user_id INTEGER` column added to `audio_tracks` table
+- Nullable initially (will become required when users table is implemented)
+- Optimized indexes for user-specific queries
+- Foreign key relationship planned for future users table
+
 ## Contributing
 
 1. Create a feature branch from `main`
