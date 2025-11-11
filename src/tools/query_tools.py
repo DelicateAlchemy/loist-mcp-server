@@ -23,6 +23,9 @@ from .query_schemas import (
     SearchResult,
     QueryException,
     QueryErrorCode,
+    DeleteAudioInput,
+    DeleteAudioOutput,
+    DeleteException,
 )
 from .schemas import (
     ProductMetadata,
@@ -36,6 +39,7 @@ from database import (
     get_audio_metadata_by_id,
     search_audio_tracks_advanced,
 )
+from database.utils import AudioTrackDB
 from src.exceptions import (
     DatabaseOperationError,
     ResourceNotFoundError,
@@ -405,6 +409,106 @@ async def search_library(input_data: Dict[str, Any]) -> Dict[str, Any]:
         return error_response.model_dump()
 
 
+async def delete_audio(input_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Delete a previously processed audio track.
+
+    This is a destructive operation that permanently removes an audio track
+    from the database. GCS files are left in place for lifecycle management.
+
+    Args:
+        input_data: Dictionary containing audioId and optional userId for future auth
+
+    Returns:
+        Dictionary with success status and deletion confirmation, or error response
+
+    Raises:
+        DeleteException: For not found or database errors
+
+    Example:
+        >>> result = await delete_audio({"audioId": "550e8400-..."})
+        >>> print(result["deleted"])
+        True
+    """
+    logger.info("Deleting audio track")
+
+    try:
+        # Validate input
+        try:
+            validated_input = DeleteAudioInput(**input_data)
+        except Exception as e:
+            logger.error(f"Input validation failed: {e}")
+            raise DeleteException(
+                error_code=QueryErrorCode.INVALID_QUERY,
+                message=f"Invalid input: {str(e)}",
+                details={"validation_errors": str(e)}
+            )
+
+        audio_id = validated_input.audioId
+        logger.debug(f"Deleting audio track: {audio_id}")
+
+        # TODO: Add user authorization check when auth is implemented
+        # if validated_input.userId:
+        #     # Verify user owns the track or has delete permissions
+        #     pass
+
+        # Delete from database
+        try:
+            from uuid import UUID
+            track_id = UUID(audio_id)
+            deleted = AudioTrackDB.delete_track(track_id)
+        except DatabaseOperationError as e:
+            logger.error(f"Database error deleting track: {e}")
+            raise DeleteException(
+                error_code=QueryErrorCode.DATABASE_ERROR,
+                message=f"Failed to delete track: {str(e)}",
+                details={"audioId": audio_id}
+            )
+        except Exception as e:
+            logger.error(f"Unexpected error during deletion: {e}")
+            raise DeleteException(
+                error_code=QueryErrorCode.DELETE_FAILED,
+                message=f"Unexpected error deleting track: {str(e)}",
+                details={"audioId": audio_id, "exception_type": type(e).__name__}
+            )
+
+        # Log deletion result
+        if deleted:
+            logger.info(f"Successfully deleted track: {audio_id}")
+        else:
+            logger.warning(f"Track not found for deletion: {audio_id}")
+            raise DeleteException(
+                error_code=QueryErrorCode.RESOURCE_NOT_FOUND,
+                message=f"Audio track with ID '{audio_id}' was not found",
+                details={"audioId": audio_id}
+            )
+
+        # Build success response using Pydantic for validation
+        response = DeleteAudioOutput(
+            success=True,
+            audioId=audio_id,
+            deleted=deleted
+        )
+
+        return response.model_dump()
+
+    except DeleteException as e:
+        # Known delete error
+        logger.error(f"Delete error: {e.message}")
+        error_response = e.to_error_response()
+        return error_response.model_dump()
+
+    except Exception as e:
+        # Unexpected error
+        logger.exception(f"Unexpected error deleting track: {e}")
+        error_response = DeleteException(
+            error_code=QueryErrorCode.DELETE_FAILED,
+            message=f"Unexpected error: {str(e)}",
+            details={"exception_type": type(e).__name__}
+        ).to_error_response()
+        return error_response.model_dump()
+
+
 # ============================================================================
 # Synchronous Wrappers (if needed)
 # ============================================================================
@@ -422,9 +526,19 @@ def get_audio_metadata_sync(input_data: Dict[str, Any]) -> Dict[str, Any]:
 def search_library_sync(input_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Synchronous wrapper for search_library.
-    
+
     FastMCP supports async tools, but this is available if needed.
     """
     import asyncio
     return asyncio.run(search_library(input_data))
+
+
+def delete_audio_sync(input_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Synchronous wrapper for delete_audio.
+
+    FastMCP supports async tools, but this is available if needed.
+    """
+    import asyncio
+    return asyncio.run(delete_audio(input_data))
 
