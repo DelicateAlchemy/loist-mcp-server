@@ -14,12 +14,14 @@ import pytest
 from unittest.mock import Mock, patch, AsyncMock
 import uuid
 
-from src.tools.query_tools import get_audio_metadata, search_library
+from src.tools.query_tools import get_audio_metadata, search_library, delete_audio
 from src.tools.query_schemas import (
     GetAudioMetadataInput,
     GetAudioMetadataOutput,
     SearchLibraryInput,
     SearchLibraryOutput,
+    DeleteAudioInput,
+    DeleteAudioOutput,
     QueryErrorCode,
 )
 
@@ -497,6 +499,100 @@ async def test_get_then_search_workflow(mock_search, mock_get_by_id, mock_db_met
     
     assert metadata_result["success"] is True
     assert metadata_result["audioId"] == audio_id
+
+
+# ============================================================================
+# delete_audio Tests
+# ============================================================================
+
+@pytest.mark.asyncio
+async def test_delete_audio_valid_uuid():
+    """Test that valid UUID passes validation"""
+    input_data = {"audioId": "550e8400-e29b-41d4-a716-446655440000"}
+    validated = DeleteAudioInput(**input_data)
+    assert validated.audioId == "550e8400-e29b-41d4-a716-446655440000"
+
+
+@pytest.mark.asyncio
+async def test_delete_audio_invalid_uuid():
+    """Test that invalid UUID is rejected"""
+    with pytest.raises(Exception):  # Pydantic ValidationError
+        DeleteAudioInput(**{"audioId": "not-a-uuid"})
+
+
+@pytest.mark.asyncio
+@patch('src.tools.query_tools.AudioTrackDB.delete_track')
+async def test_delete_audio_success(mock_delete):
+    """Test successful track deletion"""
+    mock_delete.return_value = True  # Track was deleted
+
+    result = await delete_audio({
+        "audioId": "550e8400-e29b-41d4-a716-446655440000"
+    })
+
+    assert result["success"] is True
+    assert result["audioId"] == "550e8400-e29b-41d4-a716-446655440000"
+    assert result["deleted"] is True
+    mock_delete.assert_called_once()
+
+
+@pytest.mark.asyncio
+@patch('src.tools.query_tools.AudioTrackDB.delete_track')
+async def test_delete_audio_not_found(mock_delete):
+    """Test deletion of non-existent track"""
+    mock_delete.return_value = False  # Track not found
+
+    result = await delete_audio({
+        "audioId": "550e8400-e29b-41d4-a716-446655440000"
+    })
+
+    assert result["success"] is False
+    assert result["error"] == QueryErrorCode.RESOURCE_NOT_FOUND.value
+    assert "not found" in result["message"].lower()
+    mock_delete.assert_called_once()
+
+
+@pytest.mark.asyncio
+@patch('src.tools.query_tools.AudioTrackDB.delete_track')
+async def test_delete_audio_database_error(mock_delete):
+    """Test database error handling during deletion"""
+    from src.exceptions import DatabaseOperationError
+    mock_delete.side_effect = DatabaseOperationError("Connection failed")
+
+    result = await delete_audio({
+        "audioId": "550e8400-e29b-41d4-a716-446655440000"
+    })
+
+    assert result["success"] is False
+    assert result["error"] == QueryErrorCode.DATABASE_ERROR.value
+    mock_delete.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_delete_audio_invalid_input():
+    """Test that invalid input is properly rejected"""
+    result = await delete_audio({
+        "audioId": "invalid-uuid-format"
+    })
+
+    assert result["success"] is False
+    assert result["error"] == QueryErrorCode.INVALID_QUERY.value
+    assert "validation" in result["message"].lower()
+
+
+@pytest.mark.asyncio
+async def test_delete_audio_response_schema():
+    """Test that delete response matches Pydantic schema"""
+    # Test success response
+    success_response = DeleteAudioOutput(
+        success=True,
+        audioId="550e8400-e29b-41d4-a716-446655440000",
+        deleted=True
+    )
+
+    assert success_response.success is True
+    assert success_response.audioId == "550e8400-e29b-41d4-a716-446655440000"
+    assert success_response.deleted is True
 
 
 if __name__ == "__main__":
