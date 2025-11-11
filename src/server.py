@@ -71,6 +71,11 @@ mcp = create_fastmcp_server()
 # Configure Jinja2 templates
 templates = setup_jinja_templates()
 
+# Register HTTP API routes that wrap MCP tools and resources
+from src.http_api import register_http_api_routes
+register_http_api_routes(mcp)
+logger.info("✅ HTTP API routes registered")
+
 
 @asynccontextmanager
 async def lifespan(app):
@@ -598,8 +603,8 @@ async def oembed_endpoint(request):
         request: Starlette Request object with query parameters:
             - url (required): The embed URL to generate oEmbed data for
             - format (optional): Response format, 'json' or 'xml' (default: 'json')
-            - maxwidth (optional): Maximum width for embed (default: 600)
-            - maxheight (optional): Maximum height for embed (default: 240)
+            - maxwidth (optional): Maximum width for embed (default: 400)
+            - maxheight (optional): Maximum height for embed (default: 160)
 
     Returns:
         JSONResponse: oEmbed JSON response according to spec
@@ -620,10 +625,10 @@ async def oembed_endpoint(request):
         # Extract query parameters
         url_param = request.query_params.get("url")
         format_param = request.query_params.get("format", "json")
-        # Default dimensions optimized for horizontal audio player layout
-        # Aspect ratio ~2.5:1 (width:height) for better fit
-        maxwidth = int(request.query_params.get("maxwidth", 600))
-        maxheight = int(request.query_params.get("maxheight", 240))
+        # Default dimensions optimized for compact mode player layout
+        # Reduced padding/margins mean tighter fit - content is ~350px wide x ~140px tall
+        maxwidth = int(request.query_params.get("maxwidth", 400))
+        maxheight = int(request.query_params.get("maxheight", 160))
 
         # Validate URL parameter
         if not url_param:
@@ -689,13 +694,18 @@ async def oembed_endpoint(request):
 
         # Build oEmbed response according to spec
         # Include proper allow attributes for Notion iframe embedding
-        # allow="autoplay; encrypted-media; fullscreen" enables media playback in sandboxed iframes
+        # Notion requires additional permissions for sandboxed iframes:
+        # - autoplay: Allows autoplay (though browsers may still require user interaction)
+        # - encrypted-media: Required for DRM-protected content
+        # - fullscreen: Allows fullscreen mode
+        # Note: allow-scripts and allow-same-origin are sandbox attributes, not allow attributes
+        # Notion applies its own sandbox, so we only need the allow permissions
         iframe_html = (
             f'<iframe src="{embed_url}?compact=true" '
             f'width="{maxwidth}" height="{maxheight}" '
             f'frameborder="0" '
             f'allow="autoplay; encrypted-media; fullscreen" '
-            f'style="border-radius: 12px; border: none;" '
+            f'style="border: none; display: block;" '
             f'scrolling="no"></iframe>'
         )
         
