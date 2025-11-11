@@ -64,6 +64,7 @@ from database import (
     mark_as_failed,
     get_connection,
 )
+from src.tasks.queue import enqueue_waveform_generation
 from src.exceptions import (
     MusicLibraryError,
     StorageError,
@@ -455,10 +456,38 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
         
         processing_time = time.time() - start_time
         logger.info(f"Audio processing completed in {processing_time:.2f}s")
-        
+
+        # ====================================================================
+        # Trigger Waveform Generation (Async)
+        # ====================================================================
+        # Fire-and-forget: trigger waveform generation after successful processing
+        # This is the single entry point for waveform generation in the system
+        try:
+            logger.info("Triggering asynchronous waveform generation")
+            # Calculate SHA-256 hash of the source audio file for cache invalidation
+            import hashlib
+            source_hash = hashlib.sha256()
+            with open(pipeline.temp_audio_path, "rb") as f:
+                for chunk in iter(lambda: f.read(4096), b""):
+                    source_hash.update(chunk)
+            source_hash_str = source_hash.hexdigest()
+
+            # Enqueue waveform generation task
+            task_id = enqueue_waveform_generation(
+                audio_id=pipeline.audio_id,
+                audio_gcs_path=pipeline.gcs_audio_path,
+                source_hash=source_hash_str
+            )
+            logger.info(f"Enqueued waveform generation task: {task_id}")
+
+        except Exception as e:
+            # Don't fail the main processing if waveform generation fails to enqueue
+            logger.warning(f"Failed to enqueue waveform generation task: {e}")
+            logger.warning("Audio processing completed successfully, but waveform generation may not occur")
+
         # Cleanup temporary files (successful path)
         pipeline.cleanup()
-        
+
         return response.model_dump()
         
     except ProcessAudioException as e:
