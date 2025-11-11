@@ -1418,15 +1418,15 @@ def create_processing_record(track_id: str, status: str = 'PROCESSING') -> Dict[
 def mark_as_processing(track_id: str) -> Dict[str, Any]:
     """
     Convenience function to mark a track as PROCESSING.
-    
+
     Typically called when beginning to process a track.
-    
+
     Args:
         track_id: UUID of the track
-    
+
     Returns:
         Updated track information
-    
+
     Example:
         >>> mark_as_processing('123e4567...')
     """
@@ -1436,6 +1436,178 @@ def mark_as_processing(track_id: str) -> Dict[str, Any]:
         error_message=None,
         increment_retry=False
     )
+
+
+# ============================================================================
+# Waveform Metadata Operations
+# ============================================================================
+
+def update_waveform_metadata(
+    audio_id: str,
+    waveform_gcs_path: str,
+    source_hash: str
+) -> None:
+    """
+    Update waveform metadata for an audio track.
+
+    Sets the waveform GCS path, generation timestamp, and source audio hash
+    for cache invalidation. Uses atomic update with proper transaction handling.
+
+    Args:
+        audio_id: UUID of the audio track
+        waveform_gcs_path: Full GCS path to the waveform SVG file
+        source_hash: SHA-256 hash of the source audio file
+
+    Raises:
+        ValidationError: If audio_id is invalid or waveform_gcs_path format is wrong
+        DatabaseOperationError: If database operation fails
+
+    Example:
+        >>> update_waveform_metadata(
+        ...     '123e4567-e89b-12d3-a456-426614174000',
+        ...     'gs://bucket/waveforms/123e4567/abc123.svg',
+        ...     'a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3'
+        ... )
+    """
+    if not audio_id:
+        raise ValidationError("audio_id is required")
+
+    if not waveform_gcs_path or not waveform_gcs_path.startswith('gs://'):
+        raise ValidationError("waveform_gcs_path must be a valid gs:// URL")
+
+    if not source_hash or len(source_hash) != 64:
+        raise ValidationError("source_hash must be a valid 64-character SHA-256 hash")
+
+    query = """
+    UPDATE audio_tracks
+    SET waveform_gcs_path = %s,
+        waveform_generated_at = NOW(),
+        source_audio_hash = %s,
+        updated_at = NOW()
+    WHERE id = %s::uuid
+    """
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(query, (waveform_gcs_path, source_hash, audio_id))
+
+                if cur.rowcount == 0:
+                    logger.warning(f"No audio track found with ID: {audio_id}")
+                    raise ResourceNotFoundError(f"Audio track not found: {audio_id}")
+
+                # Commit transaction
+                conn.commit()
+
+                logger.info(f"Updated waveform metadata for audio track: {audio_id}")
+
+    except DatabaseError as e:
+        logger.error(f"Database error updating waveform metadata for {audio_id}: {e}")
+        raise DatabaseOperationError(f"Failed to update waveform metadata: {str(e)}")
+
+    except Exception as e:
+        logger.error(f"Unexpected error updating waveform metadata for {audio_id}: {e}")
+        raise DatabaseOperationError(f"Failed to update waveform metadata: {str(e)}")
+
+
+def get_waveform_metadata(audio_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Retrieve waveform metadata for an audio track.
+
+    Returns waveform GCS path, generation timestamp, and source hash if available.
+
+    Args:
+        audio_id: UUID of the audio track
+
+    Returns:
+        Dict with waveform metadata, or None if no waveform exists:
+        {
+            'waveform_gcs_path': str,
+            'waveform_generated_at': datetime,
+            'source_audio_hash': str
+        }
+
+    Raises:
+        ValidationError: If audio_id is invalid
+        DatabaseOperationError: If database operation fails
+
+    Example:
+        >>> metadata = get_waveform_metadata('123e4567-e89b-12d3-a456-426614174000')
+        >>> if metadata:
+        ...     print(f"Waveform available at: {metadata['waveform_gcs_path']}")
+    """
+    if not audio_id:
+        raise ValidationError("audio_id is required")
+
+    query = """
+    SELECT waveform_gcs_path, waveform_generated_at, source_audio_hash
+    FROM audio_tracks
+    WHERE id = %s::uuid AND waveform_gcs_path IS NOT NULL
+    """
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(query, (audio_id,))
+                result = cur.fetchone()
+
+                if result:
+                    # Convert datetime to string for JSON serialization
+                    metadata = dict(result)
+                    if metadata.get('waveform_generated_at'):
+                        metadata['waveform_generated_at'] = metadata['waveform_generated_at'].isoformat()
+                    return metadata
+
+                return None
+
+    except DatabaseError as e:
+        logger.error(f"Database error retrieving waveform metadata for {audio_id}: {e}")
+        raise DatabaseOperationError(f"Failed to retrieve waveform metadata: {str(e)}")
+
+    except Exception as e:
+        logger.error(f"Unexpected error retrieving waveform metadata for {audio_id}: {e}")
+        raise DatabaseOperationError(f"Failed to retrieve waveform metadata: {str(e)}")
+
+
+def check_waveform_cache(audio_id: str, source_hash: str) -> Optional[str]:
+    """
+    Check if a waveform exists and matches the source audio hash.
+
+    Used for cache validation - returns the GCS path if a waveform exists
+    and was generated from the same source audio (matching hash).
+
+    Args:
+        audio_id: UUID of the audio track
+        source_hash: SHA-256 hash of the current source audio file
+
+    Returns:
+        GCS path string if cache hit, None if cache miss or no waveform exists
+
+    Raises:
+        ValidationError: If audio_id or source_hash are invalid
+        DatabaseOperationError: If database operation fails
+
+    Example:
+        >>> path = check_waveform_cache('123e4567...', 'a665a459...')
+        >>> if path:
+        ...     print(f"Cache hit: {path}")
+        ... else:
+        ...     print("Cache miss - generate new waveform")
+    """
+    if not audio_id:
+        raise ValidationError("audio_id is required")
+
+    if not source_hash or len(source_hash) != 64:
+        raise ValidationError("source_hash must be a valid 64-character SHA-256 hash")
+
+    metadata = get_waveform_metadata(audio_id)
+
+    if metadata and metadata.get('source_audio_hash') == source_hash:
+        logger.debug(f"Waveform cache hit for audio_id: {audio_id}")
+        return metadata['waveform_gcs_path']
+
+    logger.debug(f"Waveform cache miss for audio_id: {audio_id}")
+    return None
 
 
 # ============================================================================
