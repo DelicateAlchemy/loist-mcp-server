@@ -390,6 +390,7 @@ class QueryErrorCode(str, Enum):
     INVALID_FILTER = "INVALID_FILTER"
     PAGINATION_ERROR = "PAGINATION_ERROR"
     DATABASE_ERROR = "DATABASE_ERROR"
+    DELETE_FAILED = "DELETE_FAILED"
 
 
 class QueryError(BaseModel):
@@ -437,6 +438,128 @@ class QueryError(BaseModel):
 
 
 # ============================================================================
+# Delete Track Schemas
+# ============================================================================
+
+class DeleteAudioInput(BaseModel):
+    """
+    Input schema for delete_audio tool.
+
+    Deletes a previously processed audio track by its UUID.
+
+    Example:
+        {
+            "audioId": "550e8400-e29b-41d4-a716-446655440000"
+            # "userId": "uuid-for-auth"  # TODO: Add when auth is implemented
+        }
+    """
+    audioId: str = Field(
+        ...,
+        description="UUID of the audio track to delete",
+        pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+        min_length=36,
+        max_length=36
+    )
+    # TODO: Add user_id for authorization when auth is implemented
+    # userId: Optional[str] = Field(
+    #     default=None,
+    #     description="User ID for authorization (future feature)",
+    #     pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    # )
+
+    @field_validator('audioId')
+    @classmethod
+    def validate_uuid_format(cls, v):
+        """Ensure audioId is a valid UUID format"""
+        uuid_pattern = re.compile(
+            r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+            re.IGNORECASE
+        )
+        if not uuid_pattern.match(v):
+            raise ValueError("audioId must be a valid UUID format")
+        return v.lower()  # Normalize to lowercase
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "audioId": "550e8400-e29b-41d4-a716-446655440000"
+                    # "userId": "user-uuid-here"  # TODO: Add when auth implemented
+                }
+            ]
+        }
+    }
+
+
+class DeleteAudioOutput(BaseModel):
+    """
+    Success output for delete_audio tool.
+
+    Confirms successful deletion of an audio track.
+    """
+    success: Literal[True] = Field(description="Operation success indicator")
+    audioId: str = Field(description="UUID of the deleted audio track")
+    deleted: bool = Field(description="Whether the track was actually deleted")
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "success": True,
+                    "audioId": "550e8400-e29b-41d4-a716-446655440000",
+                    "deleted": True
+                }
+            ]
+        }
+    }
+
+
+class DeleteAudioError(BaseModel):
+    """
+    Error output for delete_audio tool.
+
+    Example:
+        {
+            "success": false,
+            "error": "RESOURCE_NOT_FOUND",
+            "message": "Audio track not found",
+            "details": {"audioId": "invalid-uuid"}
+        }
+    """
+    success: Literal[False] = Field(description="Operation failure indicator")
+    error: QueryErrorCode = Field(description="Error code")
+    message: str = Field(description="Human-readable error message")
+    details: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Additional error context"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "success": False,
+                    "error": "RESOURCE_NOT_FOUND",
+                    "message": "Audio track with the specified ID was not found",
+                    "details": {
+                        "audioId": "550e8400-e29b-41d4-a716-446655440000"
+                    }
+                },
+                {
+                    "success": False,
+                    "error": "DELETE_FAILED",
+                    "message": "Failed to delete audio track",
+                    "details": {
+                        "audioId": "550e8400-e29b-41d4-a716-446655440000",
+                        "reason": "Database transaction failed"
+                    }
+                }
+            ]
+        }
+    }
+
+
+# ============================================================================
 # Exception Classes
 # ============================================================================
 
@@ -451,6 +574,24 @@ class QueryException(Exception):
     def to_error_response(self) -> QueryError:
         """Convert exception to error response"""
         return QueryError(
+            success=False,
+            error=self.error_code,
+            message=self.message,
+            details=self.details if self.details else None
+        )
+
+
+class DeleteException(Exception):
+    """Exception for delete audio tool errors"""
+    def __init__(self, error_code: QueryErrorCode, message: str, details: Optional[Dict] = None):
+        self.error_code = error_code
+        self.message = message
+        self.details = details or {}
+        super().__init__(message)
+
+    def to_error_response(self) -> DeleteAudioError:
+        """Convert exception to delete error response"""
+        return DeleteAudioError(
             success=False,
             error=self.error_code,
             message=self.message,
