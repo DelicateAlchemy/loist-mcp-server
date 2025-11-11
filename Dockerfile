@@ -43,7 +43,8 @@ WORKDIR /app
 RUN apk add --no-cache \
     ca-certificates \
     postgresql-client \
-    postgresql-dev
+    postgresql-dev \
+    ffmpeg
 
 # Create non-root user and directories
 RUN addgroup -g 1000 -S fastmcpuser \
