@@ -43,7 +43,7 @@ python3 -c "
 import sys
 sys.path.insert(0, 'src')
 
-from database.operations import update_waveform_metadata, get_waveform_metadata, check_waveform_cache
+from database.operations import update_waveform_metadata, get_waveform_metadata, check_waveform_cache, save_audio_metadata
 import uuid
 
 try:
@@ -51,11 +51,31 @@ try:
     audio_id = str(uuid.uuid4())
     gcs_path = f'gs://test-bucket/waveforms/{audio_id}/abc123.svg'
     source_hash = 'a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3'
-    
+
     print(f'Test audio_id: {audio_id}')
     print(f'Test GCS path: {gcs_path}')
     print(f'Test source hash: {source_hash}')
-    
+
+    # First, create a test audio track
+    print('Creating test audio track...')
+    test_metadata = {
+        'title': 'Test Waveform Track',
+        'artist': 'Test Artist',
+        'album': 'Test Album',
+        'format': 'MP3',
+        'duration_seconds': 180.0,
+        'sample_rate': 44100,
+        'bitrate': 320000,
+        'channels': 2,
+        'file_size_bytes': 7200000
+    }
+    save_audio_metadata(
+        metadata=test_metadata,
+        audio_gcs_path=f'gs://test-bucket/audio/{audio_id}.mp3',
+        track_id=audio_id
+    )
+    print('✅ Test audio track created')
+
     # Test update_waveform_metadata
     print('Testing update_waveform_metadata...')
     update_waveform_metadata(audio_id, gcs_path, source_hash)

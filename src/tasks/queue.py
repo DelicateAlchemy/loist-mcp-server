@@ -15,7 +15,7 @@ Features:
 import logging
 import json
 from typing import Dict, Any, Optional
-from google.cloud import tasks_v2
+from google.cloud import tasks
 from google.protobuf import timestamp_pb2
 from google.api_core import exceptions as google_exceptions
 
@@ -27,7 +27,7 @@ class TaskQueueError(Exception):
     pass
 
 
-def _get_cloud_tasks_client() -> tasks_v2.CloudTasksClient:
+def _get_cloud_tasks_client() -> tasks.CloudTasksClient:
     """
     Get or create Cloud Tasks client.
 
@@ -35,7 +35,7 @@ def _get_cloud_tasks_client() -> tasks_v2.CloudTasksClient:
         Configured Cloud Tasks client
     """
     try:
-        return tasks_v2.CloudTasksClient()
+        return tasks.CloudTasksClient()
     except Exception as e:
         logger.error(f"Failed to create Cloud Tasks client: {e}")
         raise TaskQueueError(f"Cloud Tasks client creation failed: {e}") from e
@@ -144,9 +144,9 @@ def enqueue_waveform_generation(
     )
 
     # Create task
-    task = tasks_v2.Task(
-        http_request=tasks_v2.HttpRequest(
-            http_method=tasks_v2.HttpMethod.POST,
+    task = tasks.Task(
+        http_request=tasks.HttpRequest(
+            http_method=tasks.HttpMethod.POST,
             url=target_url,
             headers={"Content-Type": "application/json"},
             body=payload.encode(),
