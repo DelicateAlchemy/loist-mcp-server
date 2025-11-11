@@ -302,6 +302,44 @@ async def search_library(
 
 
 # ============================================================================
+# Task 8: Delete Audio Tool
+# ============================================================================
+
+
+@mcp.tool()
+async def delete_audio(audioId: str) -> dict:
+    """
+    Delete a previously processed audio track.
+
+    This tool permanently removes an audio track from the database.
+    GCS files are left in place for lifecycle management.
+
+    Args:
+        audioId: UUID of the audio track to delete
+
+    Returns:
+        dict: Success response with deletion confirmation,
+              or error response if track not found or deletion fails
+
+    Example:
+        >>> result = await delete_audio(audioId="550e8400-e29b-41d4-a716-446655440000")
+        >>> print(result["deleted"])
+        True
+    """
+    from src.error_utils import handle_tool_error
+    from src.tools.query_tools import delete_audio as delete_func
+
+    try:
+        # Call the async function
+        return await delete_func({"audioId": audioId})
+    except Exception as e:
+        # Log and return error response
+        error_response = handle_tool_error(e, "delete_audio")
+        logger.error(f"Delete audio failed for ID '{audioId}': {error_response}")
+        return error_response
+
+
+# ============================================================================
 # Task 9: MCP Resources
 # ============================================================================
 
@@ -756,6 +794,64 @@ async def oembed_discovery(request):
 
     logger.info("oEmbed discovery endpoint accessed")
     return JSONResponse(discovery_response)
+
+
+# ============================================================================
+# HTTP API Routes
+# ============================================================================
+
+
+@mcp.custom_route("/api/tracks/{audioId}", methods=["DELETE"])
+async def delete_track(request):
+    """
+    Delete a track via HTTP API.
+
+    This endpoint provides HTTP access to the delete_audio MCP tool.
+
+    Args:
+        request: Starlette Request object with path parameters
+
+    Returns:
+        JSONResponse: Success (204) or error response
+    """
+    from starlette.responses import JSONResponse
+    from src.tools.query_tools import delete_audio as delete_func
+
+    # Extract audioId from path parameters
+    audioId = request.path_params["audioId"]
+    logger.info(f"DELETE /api/tracks/{audioId} - Delete track request")
+
+    try:
+        # Call the delete function
+        result = await delete_func({"audioId": audioId})
+
+        # Check if it was successful
+        if result.get("success"):
+            logger.info(f"Successfully deleted track: {audioId}")
+            # Return 204 No Content for successful deletion
+            return JSONResponse({}, status_code=204)
+        else:
+            # Return error with appropriate status code
+            error_code = result.get("error", "UNKNOWN_ERROR")
+            if error_code == "RESOURCE_NOT_FOUND":
+                status_code = 404
+            elif error_code == "INVALID_QUERY":
+                status_code = 400
+            else:
+                status_code = 500
+
+            logger.warning(f"Delete failed for track {audioId}: {result.get('message', 'Unknown error')}")
+            return JSONResponse(result, status_code=status_code)
+
+    except Exception as e:
+        logger.exception(f"Unexpected error deleting track {audioId}: {e}")
+        error_response = {
+            "success": False,
+            "error": "INTERNAL_ERROR",
+            "message": "Internal server error during deletion",
+            "details": {"exception_type": type(e).__name__}
+        }
+        return JSONResponse(error_response, status_code=500)
 
 
 def create_mcp_tools():
