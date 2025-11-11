@@ -2,12 +2,13 @@
 
 ## Overview
 
-The Loist Music Library MCP Server provides two query tools for retrieving and searching processed audio:
+The Loist Music Library MCP Server provides three query tools for managing audio tracks:
 
 1. **get_audio_metadata** - Retrieve metadata for a specific audio track by ID
 2. **search_library** - Search across all audio tracks with advanced filtering
+3. **delete_audio** - Delete a previously processed audio track by ID
 
-Both tools are read-only operations that query the PostgreSQL database.
+The first two tools are read-only operations that query the PostgreSQL database. The delete tool permanently removes tracks from the database.
 
 ---
 
@@ -465,11 +466,176 @@ result = await search_library({
 
 ---
 
+## Tool 3: delete_audio
+
+### Purpose
+
+Delete a previously processed audio track by its unique ID. This is a destructive operation that permanently removes the track from the database. GCS files are left in place for lifecycle management.
+
+### Input Schema
+
+```typescript
+{
+  audioId: string  // UUID of the audio track to delete (required)
+}
+```
+
+#### Validation Rules
+
+- **audioId**: Must be a valid UUID format (lowercase)
+  - Pattern: `^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`
+  - Length: Exactly 36 characters
+  - Example: `"550e8400-e29b-41d4-a716-446655440000"`
+
+### Output Schema
+
+#### Success Response
+
+```json
+{
+  "success": true,
+  "audioId": "550e8400-e29b-41d4-a716-446655440000",
+  "deleted": true
+}
+```
+
+#### Error Response
+
+```json
+{
+  "success": false,
+  "error": "RESOURCE_NOT_FOUND",
+  "message": "Audio track with ID '550e8400-e29b-41d4-a716-446655440000' was not found",
+  "details": {
+    "audioId": "550e8400-e29b-41d4-a716-446655440000"
+  }
+}
+```
+
+### Error Codes
+
+| Error Code | Description | When It Occurs |
+|-----------|-------------|----------------|
+| `RESOURCE_NOT_FOUND` | Audio track not found | Invalid or non-existent audioId |
+| `INVALID_QUERY` | Invalid input | Malformed UUID or missing audioId |
+| `DELETE_FAILED` | Deletion failed | Database transaction error |
+| `DATABASE_ERROR` | Database query failed | Connection or query execution error |
+
+### Usage Examples
+
+#### Python (Async)
+
+```python
+from src.tools import delete_audio
+
+# Delete a track by ID
+result = await delete_audio({
+    "audioId": "550e8400-e29b-41d4-a716-446655440000"
+})
+
+if result["success"]:
+    print(f"Track {result['audioId']} deleted successfully")
+else:
+    print(f"Delete failed: {result['error']} - {result['message']}")
+```
+
+#### MCP Protocol (JSON-RPC)
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "tools/call",
+  "params": {
+    "name": "delete_audio",
+    "arguments": {
+      "audioId": "550e8400-e29b-41d4-a716-446655440000"
+    }
+  },
+  "id": 1
+}
+```
+
+### HTTP API Endpoint
+
+```bash
+# DELETE request
+curl -X DELETE http://localhost:8080/api/tracks/550e8400-e29b-41d4-a716-446655440000
+
+# Success response (204 No Content)
+# Error response (404 Not Found, 400 Bad Request, 500 Server Error)
+```
+
+### Performance
+
+- **Average response time**: <100ms
+- **Database operation**: Single DELETE by primary key (O(1) lookup)
+- **Transaction**: Uses database transaction for consistency
+- **GCS cleanup**: Files are NOT deleted (lifecycle policies handle cleanup)
+
+### Important Notes
+
+#### Data Loss Warning
+
+This operation **permanently removes** the track from the database. The operation cannot be undone.
+
+#### GCS File Handling
+
+- **Database record**: Deleted permanently
+- **GCS files**: Left in place for lifecycle management
+- **Future enhancement**: GCS cleanup can be added later if needed
+
+#### Future Authentication
+
+User authorization is planned for future implementation:
+- `userId` field is reserved in the schema for ownership validation
+- Currently disabled (AUTH_ENABLED=false) for development
+- Will be required in production for proper access control
+
+### Usage Scenarios
+
+#### Clean up test data
+
+```python
+async def cleanup_test_track(track_id: str):
+    """Remove test track after validation"""
+    result = await delete_audio({"audioId": track_id})
+
+    if result["success"]:
+        print(f"Test track {track_id} cleaned up")
+        return True
+    else:
+        print(f"Failed to clean up test track: {result['message']}")
+        return False
+```
+
+#### Batch deletion (future)
+
+```python
+async def delete_multiple_tracks(track_ids: list[str]):
+    """Delete multiple tracks (requires error handling)"""
+    results = []
+
+    for track_id in track_ids:
+        result = await delete_audio({"audioId": track_id})
+        results.append({
+            "track_id": track_id,
+            "success": result["success"],
+            "error": result.get("error") if not result["success"] else None
+        })
+
+    successful = sum(1 for r in results if r["success"])
+    print(f"Deleted {successful}/{len(track_ids)} tracks")
+
+    return results
+```
+
+---
+
 ## Security
 
 ### Query Sanitization
 
-Both tools implement automatic query sanitization:
+All three tools implement automatic query sanitization:
 
 - ✅ Remove null bytes and control characters
 - ✅ Strip leading/trailing whitespace
@@ -739,14 +905,16 @@ async def paginated_search(query: str, page: int, page_size: int = 20):
 
 ## Comparison Table
 
-| Feature | get_audio_metadata | search_library |
-|---------|-------------------|----------------|
-| **Purpose** | Get single track | Search multiple tracks |
-| **Input** | UUID only | Query + filters |
-| **Output** | Single metadata | Array of results |
-| **Performance** | Very fast (<50ms) | Fast (<200ms) |
-| **Caching** | Recommended | Recommended for common queries |
-| **Use when** | You have track ID | You need to find tracks |
+| Feature | get_audio_metadata | search_library | delete_audio |
+|---------|-------------------|----------------|--------------|
+| **Purpose** | Get single track | Search multiple tracks | Delete single track |
+| **Input** | UUID only | Query + filters | UUID only |
+| **Output** | Single metadata | Array of results | Deletion confirmation |
+| **Performance** | Very fast (<50ms) | Fast (<200ms) | Fast (<100ms) |
+| **Caching** | Recommended | Recommended for common queries | Not applicable |
+| **Use when** | You have track ID | You need to find tracks | You need to remove a track |
+| **HTTP Method** | GET | GET | DELETE |
+| **Destructive** | No | No | Yes |
 
 ---
 
@@ -790,8 +958,24 @@ async def search_tracks(
     
     if not result["success"]:
         raise HTTPException(status_code=500, detail=result["message"])
-    
+
     return result
+
+@app.delete("/api/tracks/{audio_id}")
+async def delete_track(audio_id: str):
+    """REST endpoint for deleting a track"""
+    result = await delete_audio({"audioId": audio_id})
+
+    if not result["success"]:
+        if result["error"] == "RESOURCE_NOT_FOUND":
+            raise HTTPException(status_code=404, detail=result["message"])
+        elif result["error"] == "INVALID_QUERY":
+            raise HTTPException(status_code=400, detail=result["message"])
+        else:
+            raise HTTPException(status_code=500, detail=result["message"])
+
+    # Return 204 No Content for successful deletion
+    return {"message": f"Track {audio_id} deleted successfully"}
 ```
 
 ---
@@ -801,11 +985,15 @@ async def search_tracks(
 ### Unit Tests
 
 ```bash
-# Run query tool tests
+# Run all query tool tests
 pytest tests/test_query_tools.py -v
 
 # Run specific test
 pytest tests/test_query_tools.py::test_get_audio_metadata_success -v
+pytest tests/test_query_tools.py::test_delete_audio_success -v
+
+# Run delete tests only
+pytest tests/test_query_tools.py -k delete_audio -v
 
 # Run with coverage
 pytest tests/test_query_tools.py --cov=src/tools/query_tools
@@ -844,8 +1032,8 @@ For issues or questions:
 
 ---
 
-**Last Updated:** 2025-10-11  
-**Version:** 1.0  
+**Last Updated:** 2025-11-11
+**Version:** 1.1
 **Status:** Production Ready
 
 
