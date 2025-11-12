@@ -182,12 +182,14 @@ async def test_search_library_valid_input():
     """Test that valid search input passes validation"""
     input_data = {
         "query": "beatles",
-        "limit": 20,
-        "offset": 0
+        "limit": 20
     }
     validated = SearchLibraryInput(**input_data)
     assert validated.query == "beatles"
     assert validated.limit == 20
+    assert validated.filter is None
+    assert validated.fields == "id,title,score,artist,album,genre,year"
+    assert validated.cursor is None
 
 
 @pytest.mark.asyncio
@@ -210,117 +212,122 @@ async def test_search_library_invalid_limit():
 
 
 @pytest.mark.asyncio
-async def test_search_library_deep_pagination_rejected():
-    """Test that deep pagination is prevented"""
+async def test_search_library_invalid_cursor():
+    """Test that invalid cursor is rejected"""
     with pytest.raises(Exception):  # Pydantic ValidationError
         SearchLibraryInput(**{
             "query": "test",
-            "offset": 10001  # Exceeds max offset of 10000
+            "cursor": "invalid-cursor-string"
         })
 
 
 @pytest.mark.asyncio
-@patch('src.tools.query_tools.search_audio_tracks_advanced')
+@patch('src.tools.query_tools.search_audio_tracks_cursor')
 async def test_search_library_success(mock_search, mock_search_results):
     """Test successful search"""
     mock_search.return_value = mock_search_results
-    
+
     result = await search_library({
         "query": "beatles",
-        "limit": 20,
-        "offset": 0
+        "limit": 20
     })
-    
+
     assert result["success"] is True
     assert len(result["results"]) == 2
     assert result["results"][0]["audioId"] == "550e8400-e29b-41d4-a716-446655440000"
     assert result["results"][0]["score"] == 0.95
     assert result["results"][0]["metadata"]["Product"]["Artist"] == "The Beatles"
     assert result["limit"] == 20
-    assert result["offset"] == 0
     assert result["hasMore"] is False
+    assert result["nextCursor"] is None
 
 
 @pytest.mark.asyncio
-@patch('src.tools.query_tools.search_audio_tracks_advanced')
+@patch('src.tools.query_tools.search_audio_tracks_cursor')
 async def test_search_library_with_filters(mock_search, mock_search_results):
-    """Test search with multiple filters"""
+    """Test search with RSQL filters"""
     mock_search.return_value = mock_search_results
-    
+
     result = await search_library({
         "query": "rock",
-        "filters": {
-            "genre": ["Rock", "Classic Rock"],
-            "year": {"min": 1960, "max": 1980},
-            "duration": {"min": 180, "max": 600},
-            "format": ["MP3", "FLAC"]
-        },
+        "filter": "year>=1960,year<=1980;format==MP3",
         "limit": 20
     })
-    
+
     assert result["success"] is True
     assert len(result["results"]) > 0
     mock_search.assert_called_once()
-    
-    # Verify filters were passed
+
+    # Verify filters were parsed and passed
     call_kwargs = mock_search.call_args[1]
-    assert call_kwargs["status"] == "COMPLETED"
-    assert "genres" in call_kwargs or True  # Filters passed correctly
+    assert call_kwargs["status_filter"] == "COMPLETED"
+    assert call_kwargs["year_min"] == 1960
+    assert call_kwargs["year_max"] == 1980
+    assert call_kwargs["format_filter"] == "MP3"
 
 
 @pytest.mark.asyncio
-@patch('src.tools.query_tools.search_audio_tracks_advanced')
+@patch('src.tools.query_tools.search_audio_tracks_cursor')
 async def test_search_library_pagination(mock_search):
-    """Test pagination with hasMore flag"""
+    """Test pagination with hasMore flag and nextCursor"""
     # Return limit+1 results to indicate more exist
     results = [{"id": f"id{i}", "score": 0.9, "artist": f"Artist {i}",
                 "title": f"Song {i}", "album": "", "genre": "Rock",
-                "year": 2020, "duration": 180, "channels": 2,
+                "year": 2020, "duration_seconds": 180, "channels": 2,
                 "sample_rate": 44100, "bitrate": 128000, "format": "MP3",
-                "thumbnail_path": None} for i in range(21)]
-    mock_search.return_value = results
-    
+                "thumbnail_gcs_path": None, "created_at": "2024-01-01T00:00:00Z"} for i in range(21)]
+    mock_search.return_value = {
+        'tracks': results,
+        'query': 'test',
+        'filters': {},
+        'limit': 20
+    }
+
     result = await search_library({
         "query": "test",
-        "limit": 20,
-        "offset": 0
+        "limit": 20
     })
-    
+
     assert result["success"] is True
     assert len(result["results"]) == 20  # Should trim to limit
     assert result["hasMore"] is True  # More results available
-    assert result["total"] >= 21
+    assert result["nextCursor"] is not None  # Should have cursor for next page
 
 
 @pytest.mark.asyncio
-@patch('src.tools.query_tools.search_audio_tracks_advanced')
+@patch('src.tools.query_tools.search_audio_tracks_cursor')
 async def test_search_library_no_results(mock_search):
     """Test search with no results"""
-    mock_search.return_value = []
-    
+    mock_search.return_value = {
+        'tracks': [],
+        'query': 'nonexistent',
+        'filters': {},
+        'limit': 20
+    }
+
     result = await search_library({
         "query": "nonexistent",
         "limit": 20
     })
-    
+
     assert result["success"] is True
     assert len(result["results"]) == 0
-    assert result["total"] == 0
     assert result["hasMore"] is False
+    assert result["nextCursor"] is None
 
 
 @pytest.mark.asyncio
-@patch('src.tools.query_tools.search_audio_tracks_advanced')
+@patch('src.tools.query_tools.search_audio_tracks_cursor')
 async def test_search_library_database_error(mock_search):
     """Test database error handling"""
     from src.exceptions import DatabaseOperationError
     mock_search.side_effect = DatabaseOperationError("Query failed")
-    
+
     result = await search_library({
         "query": "test",
         "limit": 20
     })
-    
+
     assert result["success"] is False
     assert result["error"] == QueryErrorCode.DATABASE_ERROR.value
 
@@ -338,11 +345,11 @@ async def test_search_library_query_sanitization():
 
 
 @pytest.mark.asyncio
-@patch('src.tools.query_tools.search_audio_tracks_advanced')
+@patch('src.tools.query_tools.search_audio_tracks_cursor')
 async def test_search_library_sort_options(mock_search, mock_search_results):
     """Test search with different sort options"""
     mock_search.return_value = mock_search_results
-    
+
     # Test sorting by year descending
     result = await search_library({
         "query": "beatles",
@@ -350,7 +357,7 @@ async def test_search_library_sort_options(mock_search, mock_search_results):
         "sortOrder": "desc",
         "limit": 20
     })
-    
+
     assert result["success"] is True
     mock_search.assert_called_once()
 
@@ -431,45 +438,46 @@ async def test_duration_filter_validation():
 
 
 @pytest.mark.asyncio
-@patch('src.tools.query_tools.search_audio_tracks_advanced')
-async def test_search_with_genre_filter(mock_search, mock_search_results):
-    """Test search with genre filter"""
+@patch('src.tools.query_tools.search_audio_tracks_cursor')
+async def test_search_with_rsql_filters(mock_search, mock_search_results):
+    """Test search with RSQL filter parsing"""
     mock_search.return_value = mock_search_results
-    
+
     result = await search_library({
         "query": "music",
-        "filters": {
-            "genre": ["Rock", "Jazz"]
-        },
+        "filter": "year>=1960,year<=1980;format==MP3",
         "limit": 20
     })
-    
+
     assert result["success"] is True
-    # Verify genre filter was passed to database
+    # Verify RSQL filters were parsed and passed
     call_kwargs = mock_search.call_args[1]
-    assert "genres" in call_kwargs or "status" in call_kwargs
+    assert call_kwargs["year_min"] == 1960
+    assert call_kwargs["year_max"] == 1980
+    assert call_kwargs["format_filter"] == "MP3"
 
 
 @pytest.mark.asyncio
-@patch('src.tools.query_tools.search_audio_tracks_advanced')
-async def test_search_with_multiple_filters(mock_search, mock_search_results):
-    """Test search with combination of filters"""
+@patch('src.tools.query_tools.search_audio_tracks_cursor')
+async def test_search_with_sparse_fields(mock_search, mock_search_results):
+    """Test search with sparse field selection"""
     mock_search.return_value = mock_search_results
-    
+
     result = await search_library({
         "query": "beatles",
-        "filters": {
-            "genre": ["Rock"],
-            "year": {"min": 1960, "max": 1970},
-            "duration": {"min": 200, "max": 500},
-            "format": ["MP3"],
-            "artist": "Beatles"
-        },
+        "fields": "id,title,score",
         "limit": 10
     })
-    
+
     assert result["success"] is True
-    mock_search.assert_called_once()
+    # Verify field selection was applied (results should only have requested fields)
+    if result["results"]:
+        first_result = result["results"][0]
+        # Should have requested fields
+        assert "audioId" in first_result
+        assert "score" in first_result
+        assert "metadata" in first_result
+        # Should not have extra fields that weren't selected (this is hard to test with the current structure)
 
 
 # ============================================================================
@@ -478,7 +486,7 @@ async def test_search_with_multiple_filters(mock_search, mock_search_results):
 
 @pytest.mark.asyncio
 @patch('src.tools.query_tools.get_audio_metadata_by_id')
-@patch('src.tools.query_tools.search_audio_tracks_advanced')
+@patch('src.tools.query_tools.search_audio_tracks_cursor')
 async def test_get_then_search_workflow(mock_search, mock_get_by_id, mock_db_metadata, mock_search_results):
     """Test typical workflow: search then get details"""
     mock_search.return_value = mock_search_results
