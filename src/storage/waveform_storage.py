@@ -126,12 +126,12 @@ def get_waveform_signed_url(
         blob_name = path_part[slash_index + 1:]  # Everything after bucket/
 
         # Create GCS client and generate signed URL
+        # Note: For GET requests, don't specify content_type - it's determined by the blob
         client = create_gcs_client(bucket_name=bucket_name)
         signed_url = client.generate_signed_url(
             blob_name=blob_name,
             expiration_minutes=expiration_minutes,
             method="GET",
-            content_type="image/svg+xml",
         )
 
         logger.debug(f"Generated signed URL for waveform: {audio_id}")

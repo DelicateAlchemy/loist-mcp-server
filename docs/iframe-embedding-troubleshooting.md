@@ -1,249 +1,213 @@
 # Iframe Embedding Troubleshooting Guide
 
-## Overview
+## Common Issues and Solutions
 
-This document explains the iframe embedding issues encountered during local development and provides solutions for testing iframe functionality in the Loist Music Library.
+### Issue 1: Ngrok Security Warning Blocking Iframes
 
-## Root Cause: Browser Security Restrictions
+**Problem:** If you're using ngrok, it may show a security warning page that blocks iframe embedding.
 
-### The Problem
+**Solution:**
+1. Visit the ngrok URL directly in your browser first: `https://857daa7fb123.ngrok-free.app/embed/02ceadb6-ed7c-45d8-976a-a2bfc9222d45`
+2. Accept the security warning if prompted
+3. After accepting, iframes should load properly
 
-When testing iframe embedding locally, developers often encounter issues where iframes fail to load content, showing either:
-- Broken embed icons
-- "You are about to visit" security warnings
-- Blank iframe content
+**Alternative:** Use `localhost` instead of ngrok for local testing:
+```html
+<iframe src="http://localhost:8080/embed/02ceadb6-ed7c-45d8-976a-a2bfc9222d45"></iframe>
+```
 
-### Why This Happens
+### Issue 2: Mixed Content (HTTP vs HTTPS)
 
-**File Protocol Restrictions**: Browsers block iframe loading when the parent page is served via `file://` protocol due to Same-Origin Policy security restrictions. This cannot be bypassed with CORS headers or CSP policies.
+**Problem:** If your page is served over HTTPS but the embed URL is HTTP (or vice versa), browsers will block the iframe.
 
-**Ngrok Domain Trust Issues**: Ngrok URLs are treated as untrusted domains by browsers, triggering additional security warnings.
+**Solution:**
+- Ensure both the parent page and embed URL use the same protocol
+- For local testing, use HTTP for both: `http://localhost:8080`
+- For production, use HTTPS for both: `https://loist.io`
 
-## Technical Investigation Results
+### Issue 3: CORS Issues with Audio Stream
 
-### Headers Verification ✅
+**Problem:** The audio stream from Google Cloud Storage might not have proper CORS headers.
 
-The server correctly sends iframe-friendly headers:
+**Solution:**
+- Signed URLs from GCS should include CORS headers
+- If issues persist, check GCS bucket CORS configuration
+- Verify that the signed URL includes proper `Origin` header handling
+
+### Issue 4: Iframe Not Rendering Content
+
+**Problem:** The iframe loads but shows blank content or error message.
+
+**Diagnosis:**
+1. Check browser console (F12) for errors
+2. Verify the embed URL returns 200 OK status
+3. Check if X-Frame-Options header is set correctly: `X-Frame-Options: ALLOWALL`
+4. Verify Content-Security-Policy: `Content-Security-Policy: frame-ancestors *`
+
+**Solution:**
+- Ensure the embed endpoint is returning proper HTML
+- Check that JavaScript is executing in iframe context
+- Verify audio element is being created properly
+
+## Testing Iframe Embedding
+
+### Test Page Setup
+
+1. **Create test HTML file:**
+```html
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Iframe Embed Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        iframe { width: 100%; height: 250px; border: 2px solid #4A90E2; margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <h1>Audio Player Iframe Test</h1>
+    
+    <!-- Standard Player -->
+    <h2>Standard Player</h2>
+    <iframe src="http://localhost:8080/embed/02ceadb6-ed7c-45d8-976a-a2bfc9222d45"
+            allow="autoplay; encrypted-media"></iframe>
+    
+    <!-- Waveform Player (Query Parameter) -->
+    <h2>Waveform Player (Query Parameter)</h2>
+    <iframe src="http://localhost:8080/embed/02ceadb6-ed7c-45d8-976a-a2bfc9222d45?template=waveform"
+            allow="autoplay; encrypted-media"></iframe>
+    
+    <!-- Waveform Player (Separate Endpoint) -->
+    <h2>Waveform Player (Separate Endpoint)</h2>
+    <iframe src="http://localhost:8080/embed/02ceadb6-ed7c-45d8-976a-a2bfc9222d45/waveform"
+            allow="autoplay; encrypted-media"></iframe>
+</body>
+</html>
+```
+
+2. **Serve via HTTP server:**
+```bash
+# From project root
+python3 -m http.server 8000
+
+# Open in browser
+open http://localhost:8000/test_embed_iframes.html
+```
+
+### Verification Checklist
+
+- [ ] Embed URL returns 200 OK status
+- [ ] HTML content is returned (not error page)
+- [ ] X-Frame-Options header is set to `ALLOWALL`
+- [ ] Content-Security-Policy allows frame-ancestors
+- [ ] Audio element is present in HTML
+- [ ] JavaScript console shows no errors
+- [ ] Audio stream URL is accessible
+- [ ] Iframe loads without security warnings
+
+## Debugging Steps
+
+### Step 1: Check Embed URL Directly
+
+```bash
+# Test standard embed
+curl -I http://localhost:8080/embed/02ceadb6-ed7c-45d8-976a-a2bfc9222d45
+
+# Check headers
+curl -v http://localhost:8080/embed/02ceadb6-ed7c-45d8-976a-a2bfc9222d45 2>&1 | grep -i "x-frame\|cors\|content-security"
+```
+
+**Expected Headers:**
 ```
 X-Frame-Options: ALLOWALL
 Content-Security-Policy: frame-ancestors *
 ```
 
-### CORS Configuration ✅
+### Step 2: Check Browser Console
 
-CORS is properly configured for cross-origin requests with permissive settings for local development.
+1. Open browser developer tools (F12)
+2. Navigate to Console tab
+3. Look for errors related to:
+   - CORS violations
+   - Mixed content warnings
+   - Network errors
+   - JavaScript errors
 
-### Browser Behavior Analysis
+### Step 3: Check Network Tab
 
-**File:// Protocol**: All major browsers (Chrome, Firefox, Safari) block iframe loading from file:// protocol.
+1. Open browser developer tools (F12)
+2. Navigate to Network tab
+3. Reload the page with iframes
+4. Check if embed URLs return 200 OK
+5. Verify response headers are correct
 
-**HTTP Protocol**: Iframes load successfully when served via HTTP/HTTPS protocols.
+### Step 4: Test Direct Link
 
-## Solutions
+1. Open embed URL directly in browser (not in iframe)
+2. Verify player loads and works correctly
+3. If it works directly but not in iframe, check:
+   - CORS headers
+   - X-Frame-Options
+   - Content-Security-Policy
+   - JavaScript execution context
 
-### 1. Use Local Web Server (Recommended)
+## Common Error Messages
 
-Instead of opening HTML files directly, serve them via a local web server:
+### "Refused to display in a frame because it set 'X-Frame-Options' to 'deny'"
+**Solution:** Verify server returns `X-Frame-Options: ALLOWALL` header
 
-```bash
-# Start local web server
-python3 -m http.server 8000
+### "Mixed Content: The page was loaded over HTTPS, but requested an insecure resource"
+**Solution:** Use HTTPS for both parent page and embed URL
 
-# Access test file via HTTP
-# Open: http://localhost:8000/test_iframe_http.html
-```
+### "Access to audio from origin 'X' has been blocked by CORS policy"
+**Solution:** Check GCS bucket CORS configuration and signed URL generation
 
-**Benefits:**
-- ✅ Iframes load successfully
-- ✅ Same-origin policy allows embedding
-- ✅ Realistic testing environment
-- ✅ No browser security restrictions
-
-### 2. Browser Security Flags (Development Only)
-
-For testing purposes only, you can disable web security (NOT recommended for production):
-
-**Chrome:**
-```bash
-/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --disable-web-security --user-data-dir=/tmp/chrome_dev
-```
-
-**Firefox:**
-```bash
-firefox --new-instance --safe-mode
-# Then disable relevant security settings
-```
-
-**⚠️ WARNING**: This approach is insecure and should never be used for production or regular browsing.
-
-### 3. Ngrok Alternative Testing
-
-Test iframe embedding using different approaches:
-
-**Localhost Direct**: `http://localhost:8080/embed/{id}`
-**Ngrok Tunnel**: `https://{ngrok-url}.ngrok-free.app/embed/{id}`
-**Production URL**: When deployed
-
-## Testing Files
-
-### Available Test Files
-
-1. **`test_iframe.html`** - File protocol test (shows the problem)
-2. **`test_iframe_http.html`** - HTTP server test (working solution)
-3. **`test_iframe_browser_behavior.sh`** - Automated testing script
-
-### Test Script Usage
-
-```bash
-# Run comprehensive iframe behavior test
-./test_iframe_browser_behavior.sh
-```
-
-This script verifies:
-- Server responsiveness
-- Correct iframe headers
-- HTTP vs file protocol behavior
-
-## Implementation Verification
-
-### Current Server Configuration
-
-The embed endpoints are properly configured with:
-
-```python
-# Security headers for iframe embedding
-response.headers["X-Frame-Options"] = "ALLOWALL"
-response.headers["Content-Security-Policy"] = "frame-ancestors *"
-```
-
-### CORS Middleware
-
-```python
-CORSMiddleware,
-allow_origins=config.cors_origins_list,
-allow_credentials=config.cors_allow_credentials,
-allow_methods=config.cors_allow_methods_list,
-allow_headers=config.cors_allow_headers_list,
-expose_headers=config.cors_expose_headers_list,
-```
-
-## Browser-Specific Behavior
-
-### Chrome
-- Strictest Same-Origin Policy enforcement
-- File protocol completely blocks iframes
-- Clear console errors for blocked content
-
-### Firefox
-- Similar restrictions to Chrome
-- May show more detailed security warnings
-- Sometimes allows localhost iframes
-
-### Safari
-- Most restrictive iframe policies
-- Additional App Transport Security (ATS) restrictions
-- May block ngrok URLs entirely
-
-## Best Practices for Testing
-
-### 1. Development Workflow
-
-```bash
-# 1. Start Docker environment
-docker-compose up -d
-
-# 2. Start local web server for testing
-python3 -m http.server 8000
-
-# 3. Test iframe embedding
-open http://localhost:8000/test_iframe_http.html
-
-# 4. Verify oEmbed endpoints
-curl "https://your-ngrok-url.ngrok-free.app/oembed?url=https://your-ngrok-url.ngrok-free.app/embed/{audio_id}"
-```
-
-### 2. Integration Testing Checklist
-
-- [ ] Local web server serving test files
-- [ ] Docker containers running (MCP server + database)
-- [ ] Ngrok tunnel active and accessible
-- [ ] Iframes load without security warnings
-- [ ] Compact and full player views functional
-- [ ] oEmbed endpoint returns correct JSON
-- [ ] Open Graph tags render properly
-
-### 3. Cross-Platform Testing
-
-Test iframe embedding across:
-- [ ] Chrome (desktop)
-- [ ] Firefox (desktop)
-- [ ] Safari (desktop)
-- [ ] Mobile browsers (iOS Safari, Chrome Android)
-
-## Troubleshooting
-
-### Common Issues
-
-#### Iframes Still Not Loading
-
-1. **Check Protocol**: Ensure test files are served via `http://`, not `file://`
-2. **Verify Server**: Confirm MCP server is running and responding
-3. **Check URLs**: Ensure ngrok URLs are current and accessible
-4. **Browser Cache**: Clear browser cache and try incognito mode
-
-#### CORS Errors in Console
-
-1. **Check Origins**: Verify CORS_ORIGINS in docker-compose.yml
-2. **Server Restart**: Restart containers after configuration changes
-3. **Headers**: Use browser dev tools to inspect response headers
-
-#### Ngrok Connection Issues
-
-1. **Tunnel Status**: Verify ngrok tunnel is active (`ngrok status`)
-2. **URL Updates**: Update EMBED_BASE_URL when ngrok URL changes
-3. **Firewall**: Ensure ngrok ports are not blocked
-
-### Debug Commands
-
-```bash
-# Check server headers
-curl -I https://your-ngrok-url.ngrok-free.app/embed/{audio_id}
-
-# Test oEmbed endpoint
-curl "https://your-ngrok-url.ngrok-free.app/oembed?url=https://your-ngrok-url.ngrok-free.app/embed/{audio_id}"
-
-# Verify local server
-curl -I http://localhost:8080/embed/{audio_id}
-
-# Check Docker containers
-docker-compose ps
-```
+### "Failed to load resource: net::ERR_BLOCKED_BY_CLIENT"
+**Solution:** Check browser extensions or ad blockers that might block iframes
 
 ## Production Considerations
 
-### Security Headers
+### For Production Deployment
 
-In production, consider more restrictive headers:
+1. **Use HTTPS:** Ensure both parent page and embed URL use HTTPS
+2. **Proper CORS:** Configure GCS bucket with proper CORS headers
+3. **CDN:** Consider using CDN for embed endpoint for better performance
+4. **Caching:** Set appropriate cache headers for embed HTML
+5. **Security:** Review and test security headers regularly
 
-```python
-# More restrictive CSP for production
-response.headers["Content-Security-Policy"] = "frame-ancestors https://trusted-site.com https://another-trusted-site.com"
+### GCS CORS Configuration
+
+Ensure your GCS bucket has proper CORS configuration:
+
+```json
+[
+  {
+    "origin": ["*"],
+    "method": ["GET", "HEAD"],
+    "responseHeader": ["Content-Type", "Content-Range", "Accept-Ranges"],
+    "maxAgeSeconds": 3600
+  }
+]
 ```
 
-### CORS Configuration
+## Quick Test Script
 
-Use specific origins instead of wildcard in production:
+Run this to test iframe embedding:
 
-```yaml
-CORS_ORIGINS: "https://yoursite.com,https://embed-consumer.com"
+```bash
+# Start HTTP server
+python3 -m http.server 8000 &
+
+# Open test page
+open http://localhost:8000/test_embed_iframes.html
+
+# Or use curl to test
+curl -I http://localhost:8080/embed/02ceadb6-ed7c-45d8-976a-a2bfc9222d45
 ```
 
-### Domain Validation
+## Additional Resources
 
-Implement domain whitelisting for iframe embedding requests.
-
-## Conclusion
-
-The iframe embedding issues are primarily caused by browser security policies that cannot be bypassed. The solution is to use proper HTTP serving for testing rather than file protocol. The server configuration is correct, and iframes will work properly in production environments.
-
-**Key Takeaway**: Always test iframe embedding using a local web server, not file:// protocol.
+- [MDN: X-Frame-Options](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Frame-Options)
+- [MDN: Content-Security-Policy](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy)
+- [MDN: CORS](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS)
+- [Google Cloud Storage CORS](https://cloud.google.com/storage/docs/configuring-cors)
