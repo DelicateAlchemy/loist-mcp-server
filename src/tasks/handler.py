@@ -29,6 +29,13 @@ from database.operations import update_waveform_metadata, check_waveform_cache
 from src.storage.gcs_client import create_gcs_client
 from src.exceptions import ValidationError, DatabaseOperationError, StorageError
 
+# Try to import circuit breaker for fault tolerance
+try:
+    from src.exceptions.circuit_breaker import get_circuit_breaker, CircuitBreakerConfig, CircuitBreakerOpenException
+    HAS_CIRCUIT_BREAKER = True
+except ImportError:
+    HAS_CIRCUIT_BREAKER = False
+
 logger = logging.getLogger(__name__)
 
 # Simple in-memory metrics for waveform generation
@@ -400,6 +407,10 @@ async def handle_waveform_task(payload: Dict[str, Any]) -> Dict[str, Any]:
         # Update metrics for failed operation
         _update_waveform_metrics(success=False, processing_time=processing_time, error_type=error_type)
 
+        # Handle circuit breaker open exceptions specially
+        if HAS_CIRCUIT_BREAKER and isinstance(e, CircuitBreakerOpenException):
+            raise WaveformGenerationError(f"Service temporarily unavailable due to circuit breaker: {e}") from e
+
         # Re-raise with appropriate error type
         if isinstance(e, (ValidationError, WaveformGenerationError, StorageError, DatabaseOperationError)):
             raise
@@ -437,6 +448,59 @@ def register_task_handlers(mcp: FastMCP) -> None:
             }
         except Exception as e:
             logger.error(f"Error retrieving waveform metrics: {e}")
+            return {
+                "status": "error",
+                "error": str(e)
+            }
+
+    @mcp.tool()
+    def get_circuit_breaker_status() -> dict:
+        """
+        Get status of all circuit breakers.
+
+        Returns:
+            dict: Status of all registered circuit breakers including state and statistics
+        """
+        try:
+            if not HAS_CIRCUIT_BREAKER:
+                return {
+                    "status": "unavailable",
+                    "message": "Circuit breaker module not available"
+                }
+
+            from src.exceptions.circuit_breaker import get_all_circuit_breakers
+            breakers = get_all_circuit_breakers()
+
+            status = {}
+            for name, breaker in breakers.items():
+                stats = breaker.stats
+                status[name] = {
+                    "state": breaker.state.value,
+                    "config": {
+                        "failure_threshold": breaker.config.failure_threshold,
+                        "recovery_timeout": breaker.config.recovery_timeout,
+                        "success_threshold": breaker.config.success_threshold,
+                        "timeout": breaker.config.timeout
+                    },
+                    "stats": {
+                        "total_requests": stats.total_requests,
+                        "successful_requests": stats.successful_requests,
+                        "failed_requests": stats.failed_requests,
+                        "consecutive_failures": stats.consecutive_failures,
+                        "consecutive_successes": stats.consecutive_successes,
+                        "last_failure_time": stats.last_failure_time,
+                        "last_success_time": stats.last_success_time,
+                        "state_changes": stats.state_changes
+                    }
+                }
+
+            return {
+                "status": "success",
+                "circuit_breakers": status
+            }
+
+        except Exception as e:
+            logger.error(f"Error retrieving circuit breaker status: {e}")
             return {
                 "status": "error",
                 "error": str(e)

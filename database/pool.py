@@ -20,6 +20,13 @@ except ImportError:
     HAS_APP_CONFIG = False
     import os
 
+# Try to import circuit breaker for fault tolerance
+try:
+    from src.exceptions.circuit_breaker import get_circuit_breaker, CircuitBreakerConfig
+    HAS_CIRCUIT_BREAKER = True
+except ImportError:
+    HAS_CIRCUIT_BREAKER = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -151,15 +158,15 @@ class DatabasePool:
     @contextmanager
     def get_connection(self, retry: bool = True, max_retries: int = 3):
         """
-        Get a connection from the pool with automatic cleanup.
-        
+        Get a connection from the pool with automatic cleanup and circuit breaker protection.
+
         Args:
             retry: Whether to retry on connection failures
             max_retries: Maximum number of retry attempts
-        
+
         Yields:
             Database connection
-        
+
         Example:
             with pool.get_connection() as conn:
                 with conn.cursor() as cur:
@@ -167,40 +174,61 @@ class DatabasePool:
         """
         if self._pool is None:
             self.initialize()
-        
+
+        # Get circuit breaker for database operations
+        db_circuit_breaker = None
+        if HAS_CIRCUIT_BREAKER:
+            db_circuit_breaker = get_circuit_breaker(
+                "database",
+                CircuitBreakerConfig(
+                    name="database",
+                    failure_threshold=3,  # Fail after 3 consecutive failures
+                    recovery_timeout=30.0,  # Wait 30s before trying again
+                    success_threshold=2,  # Need 2 successes to close
+                    timeout=10.0  # 10s timeout for operations
+                )
+            )
+
+        def _get_connection_attempt():
+            """Attempt to get a valid connection."""
+            conn = self._pool.getconn()
+
+            # Validate connection
+            if not self._validate_connection(conn):
+                self._pool.putconn(conn, close=True)
+                raise OperationalError("Connection validation failed")
+
+            return conn
+
         conn = None
         attempts = 0
-        
+
         while attempts < max_retries:
             try:
-                conn = self._pool.getconn()
-                
-                # Validate connection
-                if not self._validate_connection(conn):
-                    self._pool.putconn(conn, close=True)
-                    conn = None
-                    attempts += 1
-                    if not retry:
-                        raise OperationalError("Connection validation failed")
-                    continue
-                
+                if db_circuit_breaker:
+                    # Use circuit breaker for connection attempts
+                    conn = db_circuit_breaker.call(_get_connection_attempt)
+                else:
+                    # Fallback without circuit breaker
+                    conn = _get_connection_attempt()
+
                 # Connection is valid
                 break
-                
+
             except Exception as e:
                 attempts += 1
                 logger.warning(f"Connection attempt {attempts} failed: {e}")
-                
+
                 if attempts >= max_retries:
                     self._stats["connections_failed"] += 1
                     raise
-                
+
                 if not retry:
                     raise
-                
+
                 # Brief backoff
                 time.sleep(0.1 * attempts)
-        
+
         try:
             yield conn
         except Exception as e:

@@ -26,6 +26,13 @@ try:
 except ImportError:
     HAS_APP_CONFIG = False
 
+# Try to import circuit breaker for fault tolerance
+try:
+    from src.exceptions.circuit_breaker import get_circuit_breaker, CircuitBreakerConfig
+    HAS_CIRCUIT_BREAKER = True
+except ImportError:
+    HAS_CIRCUIT_BREAKER = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -148,9 +155,27 @@ class GCSClient:
     
     @property
     def bucket(self) -> storage.Bucket:
-        """Get or create bucket reference."""
+        """Get or create bucket reference with circuit breaker protection."""
         if self._bucket is None:
-            self._bucket = self.client.bucket(self.bucket_name)
+            def _get_bucket():
+                """Get bucket with circuit breaker protection."""
+                return self.client.bucket(self.bucket_name)
+
+            if HAS_CIRCUIT_BREAKER:
+                gcs_circuit_breaker = get_circuit_breaker(
+                    "gcs_bucket",
+                    CircuitBreakerConfig(
+                        name="gcs_bucket",
+                        failure_threshold=3,  # Fail after 3 consecutive failures
+                        recovery_timeout=30.0,  # Wait 30s before trying again
+                        success_threshold=2,  # Need 2 successes to close
+                        timeout=15.0  # 15s timeout for bucket operations
+                    )
+                )
+                self._bucket = gcs_circuit_breaker.call(_get_bucket)
+            else:
+                self._bucket = _get_bucket()
+
         return self._bucket
     
     def generate_signed_url(
@@ -467,25 +492,44 @@ class GCSClient:
         if not source_path.exists():
             raise FileNotFoundError(f"Source file not found: {source_path}")
         
-        try:
+        def _upload_operation():
+            """Perform the upload operation with circuit breaker protection."""
             blob = self.bucket.blob(destination_blob_name)
-            
+
             # Set metadata if provided
             if metadata:
                 blob.metadata = metadata
-            
+
             # Upload file
             blob.upload_from_filename(
                 str(source_path),
                 content_type=content_type,
             )
-            
+
+            return blob
+
+        try:
+            if HAS_CIRCUIT_BREAKER:
+                gcs_circuit_breaker = get_circuit_breaker(
+                    "gcs_upload",
+                    CircuitBreakerConfig(
+                        name="gcs_upload",
+                        failure_threshold=3,  # Fail after 3 consecutive failures
+                        recovery_timeout=30.0,  # Wait 30s before trying again
+                        success_threshold=2,  # Need 2 successes to close
+                        timeout=60.0  # 60s timeout for uploads (can be large files)
+                    )
+                )
+                blob = gcs_circuit_breaker.call(_upload_operation)
+            else:
+                blob = _upload_operation()
+
             logger.info(
                 f"Uploaded file: {source_path} -> gs://{self.bucket_name}/{destination_blob_name}"
             )
-            
+
             return blob
-            
+
         except GoogleCloudError as e:
             logger.error(f"Failed to upload file {source_path}: {e}")
             raise
