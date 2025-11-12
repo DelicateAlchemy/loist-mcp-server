@@ -7,7 +7,7 @@ transaction management, and comprehensive error handling.
 
 import logging
 import uuid
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 from datetime import datetime
 import psycopg2.extras
 from psycopg2 import DatabaseError, IntegrityError
