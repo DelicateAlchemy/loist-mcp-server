@@ -460,25 +460,52 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
         # ====================================================================
         # Trigger Waveform Generation (Async)
         # ====================================================================
-        # Fire-and-forget: trigger waveform generation after successful processing
+        # Fire-and-for-get: trigger waveform generation after successful processing
         # This is the single entry point for waveform generation in the system
         try:
             logger.info("Triggering asynchronous waveform generation")
-            # Calculate SHA-256 hash of the source audio file for cache invalidation
-            import hashlib
-            source_hash = hashlib.sha256()
-            with open(pipeline.temp_audio_path, "rb") as f:
-                for chunk in iter(lambda: f.read(4096), b""):
-                    source_hash.update(chunk)
-            source_hash_str = source_hash.hexdigest()
 
-            # Enqueue waveform generation task
-            task_id = enqueue_waveform_generation(
-                audio_id=pipeline.audio_id,
-                audio_gcs_path=pipeline.gcs_audio_path,
-                source_hash=source_hash_str
-            )
-            logger.info(f"Enqueued waveform generation task: {task_id}")
+            # Check database availability in development environments
+            # In production (Cloud Run), always attempt to enqueue
+            import os
+            is_production = bool(os.getenv("K_SERVICE"))  # Cloud Run sets this
+
+            if not is_production:
+                from database import check_database_availability
+                db_status = check_database_availability()
+
+                if not db_status["available"]:
+                    logger.warning("Database not available in development environment")
+                    logger.warning(f"Connection type: {db_status['connection_type']}")
+                    logger.warning(f"Error: {db_status['error']}")
+                    logger.warning("Skipping waveform generation task enqueue - database unavailable")
+                    logger.warning("Audio processing completed successfully, but waveform generation requires database access")
+                else:
+                    logger.debug(f"Database available ({db_status['connection_type']}) - proceeding with waveform task")
+            else:
+                logger.debug("Production environment detected - proceeding with waveform task")
+
+            # Only enqueue if database is available (in dev) or we're in production
+            should_enqueue = is_production or (not is_production and check_database_availability()["available"])
+
+            if should_enqueue:
+                # Calculate SHA-256 hash of the source audio file for cache invalidation
+                import hashlib
+                source_hash = hashlib.sha256()
+                with open(pipeline.temp_audio_path, "rb") as f:
+                    for chunk in iter(lambda: f.read(4096), b""):
+                        source_hash.update(chunk)
+                source_hash_str = source_hash.hexdigest()
+
+                # Enqueue waveform generation task
+                task_id = enqueue_waveform_generation(
+                    audio_id=pipeline.audio_id,
+                    audio_gcs_path=pipeline.gcs_audio_path,
+                    source_hash=source_hash_str
+                )
+                logger.info(f"Enqueued waveform generation task: {task_id}")
+            else:
+                logger.warning("Skipping waveform task enqueue due to database unavailability in development")
 
         except Exception as e:
             # Don't fail the main processing if waveform generation fails to enqueue

@@ -398,9 +398,79 @@ def get_connection(retry: bool = True, max_retries: int = 3):
 def close_pool() -> None:
     """Close the global connection pool."""
     global _pool
-    
+
     if _pool is not None:
         _pool.close()
         _pool = None
         logger.info("Global connection pool closed")
+
+
+def check_database_availability() -> Dict[str, Any]:
+    """
+    Check database availability without throwing exceptions.
+
+    Performs a quick connectivity test to determine if the database is available.
+    Works for both Cloud SQL Proxy and direct connections.
+
+    Returns:
+        Dict with availability status and error details:
+        {
+            "available": bool,
+            "error": str | None,
+            "connection_type": "proxy" | "direct" | "unknown",
+            "response_time_ms": float | None
+        }
+    """
+    import time
+
+    result = {
+        "available": False,
+        "error": None,
+        "connection_type": "unknown",
+        "response_time_ms": None
+    }
+
+    start_time = time.time()
+
+    try:
+        # Get pool (creates if needed)
+        pool = get_connection_pool()
+
+        # Determine connection type
+        config = None
+        if HAS_APP_CONFIG and hasattr(app_config, 'db_connection_name') and app_config.db_connection_name:
+            result["connection_type"] = "proxy"
+        else:
+            result["connection_type"] = "direct"
+
+        # Test connectivity with short timeout
+        with pool.get_connection(retry=False, max_retries=1) as conn:
+            with conn.cursor() as cur:
+                # Simple query to test connectivity
+                cur.execute("SELECT 1 as test")
+                row = cur.fetchone()
+
+                if row and row[0] == 1:
+                    result["available"] = True
+                    result["response_time_ms"] = (time.time() - start_time) * 1000
+                    logger.debug(".1f")
+                else:
+                    result["error"] = "Unexpected query result"
+                    logger.warning("Database availability check failed: unexpected query result")
+
+    except Exception as e:
+        result["error"] = str(e)
+        result["response_time_ms"] = (time.time() - start_time) * 1000
+
+        # Log different error types for debugging
+        if "cloudsql" in str(e).lower():
+            logger.debug("Cloud SQL Proxy not available: %s", e)
+        elif "connection refused" in str(e).lower():
+            logger.debug("Database connection refused: %s", e)
+        elif "timeout" in str(e).lower():
+            logger.debug("Database connection timeout: %s", e)
+        else:
+            logger.debug("Database availability check failed: %s", e)
+
+    return result
 
