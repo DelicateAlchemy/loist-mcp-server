@@ -25,14 +25,43 @@
 - For local testing, use HTTP for both: `http://localhost:8080`
 - For production, use HTTPS for both: `https://loist.io`
 
-### Issue 3: CORS Issues with Audio Stream
+### Issue 3: CORS Issues with Audio Stream or Waveform SVGs
 
-**Problem:** The audio stream from Google Cloud Storage might not have proper CORS headers.
+**Problem:** The audio stream or waveform SVG from Google Cloud Storage might not have proper CORS headers.
 
 **Solution:**
 - Signed URLs from GCS should include CORS headers
 - If issues persist, check GCS bucket CORS configuration
 - Verify that the signed URL includes proper `Origin` header handling
+- For waveform SVGs, ensure CORS is configured on the GCS bucket
+
+**CORS Configuration:**
+The GCS bucket must have CORS configured to allow browser access to waveform SVGs. Use the provided scripts:
+
+```bash
+# Shell script
+./scripts/configure-gcs-cors.sh
+
+# Python script
+python scripts/configure_gcs_cors.py
+```
+
+**Verify CORS Configuration:**
+```bash
+gsutil cors get gs://loist-mvp-audio-files
+```
+
+**Common CORS Errors:**
+- `Access to fetch at 'https://storage.googleapis.com/...' from origin '...' has been blocked by CORS policy`
+- `No 'Access-Control-Allow-Origin' header is present on the requested resource`
+- `Failed to load resource: net::ERR_FAILED`
+
+**Solutions:**
+1. Configure CORS on the GCS bucket (see above)
+2. Clear browser cache or do hard refresh (Ctrl+Shift+R)
+3. Verify signed URL is generated correctly
+4. Check that waveform SVG exists in GCS
+5. Verify CORS headers are present in response
 
 ### Issue 4: Iframe Not Rendering Content
 
@@ -41,13 +70,16 @@
 **Diagnosis:**
 1. Check browser console (F12) for errors
 2. Verify the embed URL returns 200 OK status
-3. Check if X-Frame-Options header is set correctly: `X-Frame-Options: ALLOWALL`
-4. Verify Content-Security-Policy: `Content-Security-Policy: frame-ancestors *`
+3. Verify Content-Security-Policy: `Content-Security-Policy: frame-ancestors *`
+4. Check for CORS errors when loading waveform SVGs
+5. Verify JavaScript is executing in iframe context
 
 **Solution:**
 - Ensure the embed endpoint is returning proper HTML
 - Check that JavaScript is executing in iframe context
 - Verify audio element is being created properly
+- For waveform players, check if waveform SVG is loading correctly
+- Verify CORS is configured on GCS bucket for waveform SVGs
 
 ## Testing Iframe Embedding
 
@@ -98,12 +130,14 @@ open http://localhost:8000/test_embed_iframes.html
 
 - [ ] Embed URL returns 200 OK status
 - [ ] HTML content is returned (not error page)
-- [ ] X-Frame-Options header is set to `ALLOWALL`
-- [ ] Content-Security-Policy allows frame-ancestors
+- [ ] Content-Security-Policy allows frame-ancestors (`frame-ancestors *`)
 - [ ] Audio element is present in HTML
 - [ ] JavaScript console shows no errors
 - [ ] Audio stream URL is accessible
 - [ ] Iframe loads without security warnings
+- [ ] For waveform players: CORS is configured on GCS bucket
+- [ ] For waveform players: Waveform SVG loads without CORS errors
+- [ ] For waveform players: Waveform SVG displays correctly
 
 ## Debugging Steps
 
@@ -119,9 +153,10 @@ curl -v http://localhost:8080/embed/02ceadb6-ed7c-45d8-976a-a2bfc9222d45 2>&1 | 
 
 **Expected Headers:**
 ```
-X-Frame-Options: ALLOWALL
 Content-Security-Policy: frame-ancestors *
 ```
+
+**Note:** We use `Content-Security-Policy: frame-ancestors *` instead of `X-Frame-Options` as it's the modern standard and provides better control over iframe embedding.
 
 ### Step 2: Check Browser Console
 
@@ -145,16 +180,17 @@ Content-Security-Policy: frame-ancestors *
 
 1. Open embed URL directly in browser (not in iframe)
 2. Verify player loads and works correctly
-3. If it works directly but not in iframe, check:
-   - CORS headers
-   - X-Frame-Options
-   - Content-Security-Policy
+3. For waveform players, verify waveform SVG loads correctly
+4. If it works directly but not in iframe, check:
+   - CORS headers (for waveform SVGs)
+   - Content-Security-Policy (frame-ancestors *)
    - JavaScript execution context
+   - Browser console for errors
 
 ## Common Error Messages
 
 ### "Refused to display in a frame because it set 'X-Frame-Options' to 'deny'"
-**Solution:** Verify server returns `X-Frame-Options: ALLOWALL` header
+**Solution:** Verify server returns `Content-Security-Policy: frame-ancestors *` header (we use CSP instead of X-Frame-Options)
 
 ### "Mixed Content: The page was loaded over HTTPS, but requested an insecure resource"
 **Solution:** Use HTTPS for both parent page and embed URL
@@ -162,8 +198,31 @@ Content-Security-Policy: frame-ancestors *
 ### "Access to audio from origin 'X' has been blocked by CORS policy"
 **Solution:** Check GCS bucket CORS configuration and signed URL generation
 
+### "Access to fetch at 'https://storage.googleapis.com/...' from origin '...' has been blocked by CORS policy"
+**Solution:** 
+1. Configure CORS on the GCS bucket (see CORS Configuration section)
+2. Clear browser cache or do hard refresh (Ctrl+Shift+R)
+3. Verify signed URL is generated correctly
+4. Check that waveform SVG exists in GCS
+5. Verify CORS headers are present in response
+
+### "No 'Access-Control-Allow-Origin' header is present on the requested resource"
+**Solution:** 
+1. Configure CORS on the GCS bucket
+2. Verify CORS configuration includes the correct origin
+3. Check that signed URL includes proper headers
+4. Clear browser cache and retry
+
+### "Failed to load resource: net::ERR_FAILED"
+**Solution:** 
+1. Check if resource exists in GCS
+2. Verify signed URL is valid and not expired
+3. Check CORS configuration on GCS bucket
+4. Check browser console for detailed error messages
+5. Verify network connectivity
+
 ### "Failed to load resource: net::ERR_BLOCKED_BY_CLIENT"
-**Solution:** Check browser extensions or ad blockers that might block iframes
+**Solution:** Check browser extensions or ad blockers that might block iframes or CORS requests
 
 ## Production Considerations
 
@@ -177,17 +236,49 @@ Content-Security-Policy: frame-ancestors *
 
 ### GCS CORS Configuration
 
-Ensure your GCS bucket has proper CORS configuration:
+Ensure your GCS bucket has proper CORS configuration for waveform SVGs:
 
 ```json
 [
   {
     "origin": ["*"],
-    "method": ["GET", "HEAD"],
-    "responseHeader": ["Content-Type", "Content-Range", "Accept-Ranges"],
+    "method": ["GET", "HEAD", "OPTIONS"],
+    "responseHeader": [
+      "Content-Type",
+      "Content-Length",
+      "Content-Range",
+      "Accept-Ranges",
+      "Range",
+      "Cache-Control",
+      "Access-Control-Allow-Origin",
+      "Access-Control-Allow-Methods",
+      "Access-Control-Allow-Headers"
+    ],
     "maxAgeSeconds": 3600
   }
 ]
+```
+
+**Configuration Details:**
+- **Origin**: `*` (allows requests from any origin)
+- **Methods**: `GET`, `HEAD`, `OPTIONS` (for CORS preflight)
+- **Response Headers**: Allows all necessary headers for browser access
+- **Max Age**: 3600 seconds (1 hour) for CORS preflight caching
+
+**Configure CORS:**
+```bash
+# Use the provided scripts
+./scripts/configure-gcs-cors.sh
+# or
+python scripts/configure_gcs_cors.py
+
+# Or manually with gsutil
+gsutil cors set cors-config.json gs://loist-mvp-audio-files
+```
+
+**Verify CORS Configuration:**
+```bash
+gsutil cors get gs://loist-mvp-audio-files
 ```
 
 ## Quick Test Script
