@@ -33,8 +33,11 @@ def _validate_cloud_tasks_auth(request_headers: Dict[str, str]) -> bool:
     """
     Validate that request is from Google Cloud Tasks.
 
-    Checks for Cloud Tasks specific headers and service account authentication.
-    In production, this should validate the service account making the request.
+    Performs comprehensive authentication validation including:
+    - Cloud Tasks User-Agent validation
+    - Queue name validation against configured allowed queues
+    - Service account identity validation (configurable strictness)
+    - Request signature validation (future enhancement)
 
     Args:
         request_headers: HTTP request headers
@@ -42,20 +45,64 @@ def _validate_cloud_tasks_auth(request_headers: Dict[str, str]) -> bool:
     Returns:
         True if request is authenticated, False otherwise
     """
-    # For MVP, we accept requests that appear to come from Cloud Tasks
-    # In production, should validate the service account identity
+    # Import config for validation settings
+    try:
+        from src.config import config
+        allowed_queues = config.allowed_task_queues_list
+        strict_auth = config.cloud_tasks_strict_auth
+    except ImportError:
+        # Fallback if config not available
+        allowed_queues = ["audio-processing-queue"]
+        strict_auth = True
 
     # Check for Cloud Tasks user agent
     user_agent = request_headers.get("User-Agent", "")
     if "Google-Cloud-Tasks" not in user_agent:
-        logger.warning(f"Suspicious request - User-Agent: {user_agent}")
+        logger.warning(f"Invalid User-Agent for Cloud Tasks request: {user_agent}")
         return False
 
-    # Additional validation could include:
-    # - Validating the service account identity
-    # - Checking request signatures
-    # - Validating the queue name
+    # Validate queue name header
+    queue_name = request_headers.get("X-CloudTasks-QueueName", "")
+    if not queue_name:
+        logger.warning("Missing X-CloudTasks-QueueName header")
+        return False
 
+    # Validate against configured allowed queues
+    if queue_name not in allowed_queues:
+        logger.warning(f"Unexpected queue name: {queue_name}. Allowed: {allowed_queues}")
+        return False
+
+    # Service account validation based on strictness setting
+    service_account = request_headers.get("X-CloudTasks-ServiceAccount", "")
+    if service_account:
+        # Validate service account format
+        if not service_account.endswith("@developer.gserviceaccount.com"):
+            logger.warning(f"Invalid service account format: {service_account}")
+            return False
+
+        # Additional validation could include:
+        # - Checking against expected service accounts
+        # - Validating project ID in service account email
+        logger.debug(f"Validated service account: {service_account}")
+    else:
+        # Check if we're in production (Cloud Run)
+        import os
+        is_production = bool(os.getenv("K_SERVICE"))
+
+        if is_production and strict_auth:
+            logger.warning("Missing service account identity in production environment with strict auth enabled")
+            return False
+        elif is_production:
+            logger.debug("Allowing request without service account in production (strict auth disabled)")
+        else:
+            logger.debug("Allowing request without service account in development")
+
+    # Future enhancements could include:
+    # - Request signature validation using HMAC
+    # - Timestamp validation to prevent replay attacks
+    # - IP address validation for Cloud Tasks ranges
+
+    logger.debug(f"Cloud Tasks authentication successful for queue: {queue_name}")
     return True
 
 
