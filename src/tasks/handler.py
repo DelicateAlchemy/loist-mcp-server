@@ -144,8 +144,18 @@ async def handle_waveform_task(payload: Dict[str, Any]) -> Dict[str, Any]:
 
             blob_name = path_part[slash_index + 1:]  # Everything after bucket/
 
-            blob = client.bucket.blob(blob_name)
-            blob.download_to_filename(str(temp_audio_path))
+            try:
+                blob = client.bucket.blob(blob_name)
+                blob.download_to_filename(str(temp_audio_path))
+            except Exception as e:
+                if "403" in str(e) or "forbidden" in str(e).lower():
+                    raise StorageError(f"GCS access denied for {audio_gcs_path}. Check service account permissions: {e}") from e
+                elif "404" in str(e) or "not found" in str(e).lower():
+                    raise StorageError(f"Audio file not found in GCS: {audio_gcs_path}. File may have been deleted: {e}") from e
+                elif "network" in str(e).lower() or "timeout" in str(e).lower():
+                    raise StorageError(f"Network error downloading from GCS: {audio_gcs_path}. Check connectivity: {e}") from e
+                else:
+                    raise StorageError(f"Unexpected GCS download error for {audio_gcs_path}: {e}") from e
 
             # Verify downloaded file hash matches expected
             actual_hash = _calculate_file_hash(temp_audio_path)
@@ -157,28 +167,58 @@ async def handle_waveform_task(payload: Dict[str, Any]) -> Dict[str, Any]:
 
             # Generate waveform SVG
             logger.info("Generating waveform SVG")
-            result = generate_waveform_svg(
-                audio_path=temp_audio_path,
-                output_path=temp_svg_path,
-                width=2000,  # DAW-style width
-                height=200   # DAW-style height
-            )
+            try:
+                result = generate_waveform_svg(
+                    audio_path=temp_audio_path,
+                    output_path=temp_svg_path,
+                    width=2000,  # DAW-style width
+                    height=200   # DAW-style height
+                )
+            except WaveformGenerationError as e:
+                if "ffmpeg" in str(e).lower():
+                    raise WaveformGenerationError(f"FFmpeg processing failed for {audio_id}. Ensure FFmpeg is installed and accessible: {e}") from e
+                elif "format" in str(e).lower() or "codec" in str(e).lower():
+                    raise WaveformGenerationError(f"Audio format not supported for {audio_id}. Supported formats: MP3, WAV, FLAC, M4A: {e}") from e
+                elif "corrupt" in str(e).lower() or "invalid" in str(e).lower():
+                    raise WaveformGenerationError(f"Audio file appears corrupted for {audio_id}. File may be truncated or invalid: {e}") from e
+                else:
+                    raise WaveformGenerationError(f"Waveform generation failed for {audio_id}: {e}") from e
 
             # Upload SVG to GCS
             logger.info("Uploading waveform SVG to GCS")
-            gcs_path = upload_waveform_svg(
-                svg_path=temp_svg_path,
-                audio_id=audio_id,
-                content_hash=source_hash
-            )
+            try:
+                gcs_path = upload_waveform_svg(
+                    svg_path=temp_svg_path,
+                    audio_id=audio_id,
+                    content_hash=source_hash
+                )
+            except StorageError as e:
+                if "403" in str(e) or "forbidden" in str(e).lower():
+                    raise StorageError(f"GCS upload access denied for {audio_id}. Check service account permissions for waveform bucket: {e}") from e
+                elif "quota" in str(e).lower() or "exceeded" in str(e).lower():
+                    raise StorageError(f"GCS storage quota exceeded for {audio_id}. Free up space or increase quota: {e}") from e
+                elif "network" in str(e).lower() or "timeout" in str(e).lower():
+                    raise StorageError(f"Network error uploading waveform for {audio_id}. Check connectivity: {e}") from e
+                else:
+                    raise StorageError(f"GCS upload failed for {audio_id}: {e}") from e
 
             # Update database metadata
             logger.info("Updating database with waveform metadata")
-            update_waveform_metadata(
-                audio_id=audio_id,
-                waveform_gcs_path=gcs_path,
-                source_hash=source_hash
-            )
+            try:
+                update_waveform_metadata(
+                    audio_id=audio_id,
+                    waveform_gcs_path=gcs_path,
+                    source_hash=source_hash
+                )
+            except DatabaseOperationError as e:
+                if "connection" in str(e).lower() or "cloudsql" in str(e).lower():
+                    raise DatabaseOperationError(f"Database connection failed for {audio_id}. Check Cloud SQL Proxy or direct connection: {e}") from e
+                elif "duplicate" in str(e).lower() or "unique" in str(e).lower():
+                    raise DatabaseOperationError(f"Waveform metadata already exists for {audio_id}. This may indicate a duplicate task: {e}") from e
+                elif "timeout" in str(e).lower():
+                    raise DatabaseOperationError(f"Database operation timed out for {audio_id}. Database may be overloaded: {e}") from e
+                else:
+                    raise DatabaseOperationError(f"Database update failed for {audio_id}: {e}") from e
 
             logger.info(f"Successfully generated waveform for audio_id: {audio_id}")
 

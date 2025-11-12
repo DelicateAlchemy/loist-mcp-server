@@ -168,12 +168,29 @@ def enqueue_waveform_generation(
         return task_id
 
     except google_exceptions.GoogleAPICallError as e:
-        logger.error(f"Cloud Tasks API error enqueuing waveform task for {audio_id}: {e}")
-        raise TaskQueueError(f"Failed to enqueue waveform task: {e}") from e
+        if "PERMISSION_DENIED" in str(e) or "403" in str(e):
+            logger.error(f"Cloud Tasks permission denied for {audio_id}: {e}")
+            raise TaskQueueError(f"Cloud Tasks access denied. Check service account permissions for 'roles/cloudtasks.enqueuer': {e}") from e
+        elif "NOT_FOUND" in str(e) or "404" in str(e):
+            logger.error(f"Cloud Tasks queue not found for {audio_id}: {e}")
+            raise TaskQueueError(f"Cloud Tasks queue '{queue_name}' not found. Verify queue exists in region '{location}': {e}") from e
+        elif "RESOURCE_EXHAUSTED" in str(e) or "quota" in str(e).lower():
+            logger.error(f"Cloud Tasks quota exceeded for {audio_id}: {e}")
+            raise TaskQueueError(f"Cloud Tasks quota exceeded. Check current usage limits: {e}") from e
+        else:
+            logger.error(f"Cloud Tasks API error enqueuing waveform task for {audio_id}: {e}")
+            raise TaskQueueError(f"Cloud Tasks API error: {e}") from e
 
     except Exception as e:
-        logger.error(f"Unexpected error enqueuing waveform task for {audio_id}: {e}")
-        raise TaskQueueError(f"Failed to enqueue waveform task: {e}") from e
+        if "GOOGLE_CLOUD_PROJECT" in str(e) or "project_id" in str(e).lower():
+            logger.error(f"Missing GCP project configuration for {audio_id}: {e}")
+            raise TaskQueueError(f"GCP project not configured. Set GOOGLE_CLOUD_PROJECT environment variable: {e}") from e
+        elif "credentials" in str(e).lower() or "authentication" in str(e).lower():
+            logger.error(f"GCP authentication failed for {audio_id}: {e}")
+            raise TaskQueueError(f"GCP authentication failed. Check service account credentials: {e}") from e
+        else:
+            logger.error(f"Unexpected error enqueuing waveform task for {audio_id}: {e}")
+            raise TaskQueueError(f"Unexpected error enqueuing waveform task: {e}") from e
 
 
 # ============================================================================
