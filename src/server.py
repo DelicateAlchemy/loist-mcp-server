@@ -122,9 +122,13 @@ def health_check() -> dict:
     """
     from src.error_utils import handle_tool_error
     from src.exceptions import MusicLibraryError, ResourceNotFoundError
+    from database import check_database_availability
 
     try:
         logger.debug("Health check requested")
+
+        # Check database availability
+        db_status = check_database_availability()
 
         # Verify server is operational
         response = {
@@ -134,7 +138,28 @@ def health_check() -> dict:
             "transport": config.server_transport,
             "log_level": config.log_level,
             "authentication": "enabled" if config.auth_enabled else "disabled",
+            "database": {
+                "available": db_status["available"],
+                "connection_type": db_status["connection_type"],
+                "response_time_ms": db_status["response_time_ms"],
+                "error": db_status["error"]
+            }
         }
+
+        # Include connection pool stats if database is available
+        if db_status["available"]:
+            try:
+                from database import get_connection_pool
+                pool = get_connection_pool()
+                pool_stats = pool.get_stats()
+                response["database"]["pool_stats"] = {
+                    "connections_created": pool_stats.get("connections_created", 0),
+                    "queries_executed": pool_stats.get("queries_executed", 0),
+                    "last_health_check": pool_stats.get("last_health_check")
+                }
+            except Exception as e:
+                logger.debug(f"Could not get pool stats: {e}")
+                response["database"]["pool_stats_error"] = str(e)
 
         logger.info("Health check passed")
         return response
@@ -144,6 +169,71 @@ def health_check() -> dict:
         error_response = handle_tool_error(e, "health_check")
         logger.error(f"Health check failed: {error_response}")
         return error_response
+
+
+@mcp.custom_route("/health/database", methods=["GET"])
+def database_health_endpoint():
+    """
+    Dedicated database health check endpoint.
+
+    Returns detailed database connectivity and performance information.
+    Useful for monitoring systems and load balancers.
+    """
+    from datetime import datetime
+
+    try:
+        from database import check_database_availability, get_connection_pool
+
+        # Check database availability
+        db_status = check_database_availability()
+
+        response = {
+            "status": "healthy" if db_status["available"] else "unhealthy",
+            "timestamp": datetime.utcnow().isoformat() + 'Z',
+            "database": {
+                "available": db_status["available"],
+                "connection_type": db_status["connection_type"],
+                "response_time_ms": db_status["response_time_ms"],
+                "error": db_status["error"]
+            }
+        }
+
+        # Add detailed pool information if available
+        if db_status["available"]:
+            try:
+                pool = get_connection_pool()
+                health = pool.health_check()
+                pool_stats = pool.get_stats()
+
+                response["database"].update({
+                    "version": health.get("database_version"),
+                    "pool_size": health.get("max_connections"),
+                    "pool_stats": {
+                        "connections_created": pool_stats.get("connections_created", 0),
+                        "connections_closed": pool_stats.get("connections_closed", 0),
+                        "connections_failed": pool_stats.get("connections_failed", 0),
+                        "queries_executed": pool_stats.get("queries_executed", 0),
+                        "last_health_check": pool_stats.get("last_health_check")
+                    }
+                })
+            except Exception as e:
+                response["database"]["pool_error"] = str(e)
+
+        # Set HTTP status code based on availability
+        status_code = 200 if db_status["available"] else 503
+
+        return response, status_code
+
+    except Exception as e:
+        logger.error(f"Database health endpoint error: {e}")
+        return {
+            "status": "error",
+            "timestamp": datetime.utcnow().isoformat() + 'Z',
+            "database": {
+                "available": False,
+                "error": str(e)
+            }
+        }, 500
 
 
 # ============================================================================
