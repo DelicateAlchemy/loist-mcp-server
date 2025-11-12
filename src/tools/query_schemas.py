@@ -91,85 +91,85 @@ class GetAudioMetadataInput(BaseModel):
 # Input Schemas - search_library
 # ============================================================================
 
-class YearFilter(BaseModel):
-    """Year range filter"""
-    min: Optional[int] = Field(None, ge=1900, le=2100, description="Minimum year")
-    max: Optional[int] = Field(None, ge=1900, le=2100, description="Maximum year")
+# ============================================================================
+# Cursor and Field Validation Helpers
+# ============================================================================
 
-    @model_validator(mode='after')
-    def validate_year_range(self):
-        """Ensure min is less than or equal to max"""
-        if self.min is not None and self.max is not None:
-            if self.min > self.max:
-                raise ValueError("min year must be less than or equal to max year")
-        return self
-
-
-class DurationFilter(BaseModel):
-    """Duration range filter in seconds"""
-    min: Optional[float] = Field(None, ge=0, description="Minimum duration in seconds")
-    max: Optional[float] = Field(None, ge=0, description="Maximum duration in seconds")
-
-    @model_validator(mode='after')
-    def validate_duration_range(self):
-        """Ensure min is less than or equal to max"""
-        if self.min is not None and self.max is not None:
-            if self.min > self.max:
-                raise ValueError("min duration must be less than or equal to max duration")
-        return self
-
-
-class SearchFilters(BaseModel):
+def validate_cursor(cursor: Optional[str]) -> Optional[str]:
     """
-    Advanced filters for search_library tool.
-    
-    All filters are optional and can be combined using AND logic.
+    Validate cursor format.
+
+    Cursors are base64-encoded JSON with score, created_at, id fields.
     """
-    genre: Optional[List[str]] = Field(
-        default=None,
-        description="List of genres to filter by (OR logic)",
-        max_length=10
-    )
-    year: Optional[YearFilter] = Field(
-        default=None,
-        description="Year range filter"
-    )
-    duration: Optional[DurationFilter] = Field(
-        default=None,
-        description="Duration range filter in seconds"
-    )
-    format: Optional[List[AudioFormat]] = Field(
-        default=None,
-        description="List of audio formats to filter by (OR logic)",
-        max_length=10
-    )
-    artist: Optional[str] = Field(
-        default=None,
-        description="Filter by artist name (case-insensitive partial match)",
-        max_length=255
-    )
-    album: Optional[str] = Field(
-        default=None,
-        description="Filter by album name (case-insensitive partial match)",
-        max_length=255
-    )
+    if not cursor:
+        return cursor
+
+    try:
+        import base64
+        import json
+
+        # Decode and parse cursor
+        decoded = base64.b64decode(cursor, validate=True)
+        data = json.loads(decoded)
+
+        # Validate required fields
+        required_fields = ['score', 'created_at', 'id']
+        if not all(field in data for field in required_fields):
+            raise ValueError("Cursor missing required fields")
+
+        # Basic type validation
+        if not isinstance(data['score'], (int, float)):
+            raise ValueError("Invalid score in cursor")
+        if not isinstance(data['created_at'], str):
+            raise ValueError("Invalid created_at in cursor")
+        if not isinstance(data['id'], str):
+            raise ValueError("Invalid id in cursor")
+
+        return cursor
+
+    except Exception as e:
+        raise ValueError(f"Invalid cursor format: {str(e)}")
+
+
+def validate_fields(fields: Optional[str]) -> Optional[str]:
+    """
+    Validate comma-separated field list.
+
+    Allowed fields: id, title, score, artist, album, genre, year, duration, channels, sampleRate, bitrate, format, embedLink
+    """
+    if not fields:
+        return fields
+
+    allowed_fields = {
+        'id', 'title', 'score', 'artist', 'album', 'genre', 'year',
+        'duration', 'channels', 'sampleRate', 'bitrate', 'format', 'embedLink'
+    }
+
+    requested_fields = [f.strip() for f in fields.split(',') if f.strip()]
+
+    if not requested_fields:
+        raise ValueError("Fields list cannot be empty")
+
+    invalid_fields = set(requested_fields) - allowed_fields
+    if invalid_fields:
+        raise ValueError(f"Invalid fields: {', '.join(invalid_fields)}. Allowed: {', '.join(allowed_fields)}")
+
+    return fields
 
 
 class SearchLibraryInput(BaseModel):
     """
     Input schema for search_library tool.
-    
-    Performs full-text search across audio library with optional filters.
-    
+
+    Performs full-text search across audio library with RSQL filters and cursor pagination.
+
     Example:
         {
             "query": "hey jude",
-            "filters": {
-                "genre": ["Rock"],
-                "year": {"min": 1960, "max": 1970}
-            },
+            "filter": "genre==Rock;year>=1960,year<=1980",
+            "fields": "id,title,score,artist,album,genre,year",
             "limit": 20,
-            "offset": 0,
+            "cursor": null,
             "sortBy": "relevance",
             "sortOrder": "desc"
         }
@@ -180,9 +180,15 @@ class SearchLibraryInput(BaseModel):
         min_length=1,
         max_length=500
     )
-    filters: Optional[SearchFilters] = Field(
+    filter: Optional[str] = Field(
         default=None,
-        description="Optional filters to narrow results"
+        description="RSQL-style filter string (e.g., 'genre==Rock;year>=1960,year<=1980')",
+        max_length=1000
+    )
+    fields: Optional[str] = Field(
+        default="id,title,score,artist,album,genre,year",
+        description="Comma-separated fields to return (default: minimal set)",
+        max_length=500
     )
     limit: int = Field(
         default=20,
@@ -190,10 +196,10 @@ class SearchLibraryInput(BaseModel):
         le=100,
         description="Maximum number of results to return (max: 100)"
     )
-    offset: int = Field(
-        default=0,
-        ge=0,
-        description="Number of results to skip (for pagination)"
+    cursor: Optional[str] = Field(
+        default=None,
+        description="Opaque cursor for pagination (base64-encoded)",
+        max_length=200
     )
     sortBy: SortField = Field(
         default=SortField.RELEVANCE,
@@ -209,27 +215,53 @@ class SearchLibraryInput(BaseModel):
     def sanitize_query(cls, v):
         """
         Sanitize search query to prevent injection attacks.
-        
+
         Removes potentially dangerous characters while preserving search functionality.
         """
         # Remove null bytes and control characters
         v = ''.join(char for char in v if ord(char) >= 32 or char in ('\n', '\t'))
-        
+
         # Strip leading/trailing whitespace
         v = v.strip()
-        
+
         if not v:
             raise ValueError("Query cannot be empty after sanitization")
-        
+
         return v
 
-    @field_validator('offset')
+    @field_validator('filter')
     @classmethod
-    def validate_pagination(cls, v):
-        """Prevent excessively large offset values (deep pagination)"""
-        if v > 10000:
-            raise ValueError("offset cannot exceed 10000 (use cursor-based pagination for deep results)")
+    def validate_filter_format(cls, v):
+        """Basic validation of RSQL filter format"""
+        if not v:
+            return v
+
+        # Basic syntax check - should contain valid operators
+        valid_ops = ['==', '!=', '>=', '<=', '>', '<', '=in=', '=out=', '=like=']
+        parts = v.split(';')
+
+        for part in parts:
+            part = part.strip()
+            if not part:
+                continue
+
+            has_valid_op = any(op in part for op in valid_ops)
+            if not has_valid_op:
+                raise ValueError(f"Invalid filter format: '{part}'. Use RSQL operators like ==, >=, <=, etc.")
+
         return v
+
+    @field_validator('fields')
+    @classmethod
+    def validate_fields_list(cls, v):
+        """Validate fields parameter"""
+        return validate_fields(v)
+
+    @field_validator('cursor')
+    @classmethod
+    def validate_cursor_format(cls, v):
+        """Validate cursor parameter"""
+        return validate_cursor(v)
 
     model_config = {
         "json_schema_extra": {
@@ -323,21 +355,20 @@ class SearchResult(BaseModel):
 class SearchLibraryOutput(BaseModel):
     """
     Success output for search_library tool.
-    
-    Returns list of matching audio tracks with pagination metadata.
+
+    Returns list of matching audio tracks with cursor pagination metadata.
     """
     success: Literal[True] = Field(description="Operation success indicator")
     results: List[SearchResult] = Field(
         description="List of matching audio tracks with relevance scores"
     )
-    total: int = Field(
-        ge=0,
-        description="Total number of matching results (may be more than returned)"
-    )
     limit: int = Field(description="Number of results requested")
-    offset: int = Field(description="Number of results skipped")
     hasMore: bool = Field(
         description="Whether more results are available"
+    )
+    nextCursor: Optional[str] = Field(
+        default=None,
+        description="Cursor for next page (null if no more results)"
     )
 
     model_config = {
@@ -369,10 +400,9 @@ class SearchLibraryOutput(BaseModel):
                             "score": 0.95
                         }
                     ],
-                    "total": 150,
                     "limit": 20,
-                    "offset": 0,
-                    "hasMore": True
+                    "hasMore": True,
+                    "nextCursor": "eyJzY29yZSI6MC45NSwiY3JlYXRlZF9hdCI6IjIwMjQtMTEtMTJUMTI6MzQ6NTYuMDAwWiIsImlkIjoiNTUwZTg0MDAtZTJiYi00MWQ0LWE3MTYtNDQ2NjU1NDQwMDAwIn0="
                 }
             ]
         }
