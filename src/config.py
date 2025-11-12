@@ -94,6 +94,7 @@ class ServerConfig(BaseSettings):
     task_queue_mode: str = "cloud"  # "cloud" or "local" for development
     allowed_task_queues: str = "audio-processing-queue"  # Comma-separated list of allowed queue names
     cloud_tasks_strict_auth: bool = True  # Require service account validation in production
+    local_queue_max_workers: int = 2  # Maximum worker threads for local queue
 
     # Feature Flags
     enable_metrics: bool = False
