@@ -769,3 +769,73 @@ def get_file_metadata(
     client = create_gcs_client(bucket_name=bucket_name)
     return client.get_file_metadata(blob_name)
 
+
+def check_gcs_health() -> Dict[str, Any]:
+    """
+    Check GCS connectivity and configuration health.
+
+    Performs basic connectivity test and configuration validation.
+
+    Returns:
+        Dict with health status and details:
+        {
+            "available": bool,
+            "configured": bool,
+            "error": str | None,
+            "bucket_name": str | None,
+            "project_id": str | None,
+            "response_time_ms": float | None
+        }
+    """
+    import time
+
+    result = {
+        "available": False,
+        "configured": False,
+        "error": None,
+        "bucket_name": None,
+        "project_id": None,
+        "response_time_ms": None
+    }
+
+    start_time = time.time()
+
+    try:
+        # Check configuration first
+        if HAS_APP_CONFIG:
+            bucket_name = app_config.gcs_bucket_name
+            project_id = app_config.gcs_project_id
+        else:
+            bucket_name = os.getenv("GCS_BUCKET_NAME")
+            project_id = os.getenv("GCS_PROJECT_ID")
+
+        if not bucket_name or not project_id:
+            result["error"] = "GCS bucket name or project ID not configured"
+            return result
+
+        result["configured"] = True
+        result["bucket_name"] = bucket_name
+        result["project_id"] = project_id
+
+        # Test connectivity by listing objects (lightweight operation)
+        # This will fail if credentials are invalid or network is down
+        client = create_gcs_client(bucket_name=bucket_name, project_id=project_id)
+
+        # Try to get bucket (this tests credentials and connectivity)
+        try:
+            bucket = client.bucket
+            # Test basic connectivity - this will throw if credentials are bad
+            bucket.reload()
+            result["available"] = True
+            result["response_time_ms"] = (time.time() - start_time) * 1000
+
+        except Exception as e:
+            result["error"] = f"GCS connectivity test failed: {str(e)}"
+            result["response_time_ms"] = (time.time() - start_time) * 1000
+
+    except Exception as e:
+        result["error"] = f"GCS health check failed: {str(e)}"
+        result["response_time_ms"] = (time.time() - start_time) * 1000
+
+    return result
+

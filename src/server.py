@@ -123,16 +123,27 @@ def health_check() -> dict:
     from src.error_utils import handle_tool_error
     from src.exceptions import MusicLibraryError, ResourceNotFoundError
     from database import check_database_availability
+    from src.storage.gcs_client import check_gcs_health
+    from src.tasks.queue import check_cloud_tasks_health
 
     try:
         logger.debug("Health check requested")
 
-        # Check database availability
+        # Check all dependencies
         db_status = check_database_availability()
+        gcs_status = check_gcs_health()
+        tasks_status = check_cloud_tasks_health()
+
+        # Determine overall health status
+        all_healthy = all([
+            db_status["available"],
+            gcs_status["available"],
+            tasks_status["available"]
+        ])
 
         # Verify server is operational
         response = {
-            "status": "healthy",
+            "status": "healthy" if all_healthy else "degraded",
             "service": config.server_name,
             "version": config.server_version,
             "transport": config.server_transport,
@@ -143,6 +154,21 @@ def health_check() -> dict:
                 "connection_type": db_status["connection_type"],
                 "response_time_ms": db_status["response_time_ms"],
                 "error": db_status["error"]
+            },
+            "gcs": {
+                "available": gcs_status["available"],
+                "configured": gcs_status["configured"],
+                "bucket_name": gcs_status["bucket_name"],
+                "response_time_ms": gcs_status["response_time_ms"],
+                "error": gcs_status["error"]
+            },
+            "cloud_tasks": {
+                "available": tasks_status["available"],
+                "configured": tasks_status["configured"],
+                "queue_name": tasks_status["queue_name"],
+                "location": tasks_status["location"],
+                "response_time_ms": tasks_status["response_time_ms"],
+                "error": tasks_status["error"]
             }
         }
 
@@ -234,6 +260,102 @@ def database_health_endpoint():
                 "error": str(e)
             }
         }, 500
+
+
+@mcp.custom_route("/health/live", methods=["GET"])
+def liveness_health_endpoint():
+    """
+    Liveness health check endpoint.
+
+    Checks if the application is running and can handle requests.
+    This is a basic check that doesn't test external dependencies.
+
+    Returns 200 if alive, 500 if not responding.
+    """
+    from datetime import datetime
+
+    try:
+        return {
+            "status": "alive",
+            "timestamp": datetime.utcnow().isoformat() + 'Z',
+            "service": config.server_name,
+            "version": config.server_version,
+            "check": "liveness"
+        }, 200
+
+    except Exception as e:
+        logger.error(f"Liveness check failed: {e}")
+        return {
+            "status": "dead",
+            "timestamp": datetime.utcnow().isoformat() + 'Z',
+            "error": str(e),
+            "check": "liveness"
+        }, 500
+
+
+@mcp.custom_route("/health/ready", methods=["GET"])
+def readiness_health_endpoint():
+    """
+    Readiness health check endpoint.
+
+    Checks if the application is ready to serve traffic by testing all dependencies.
+    This is used by load balancers and orchestrators to determine if the service
+    should receive traffic.
+
+    Returns 200 if ready, 503 if not ready.
+    """
+    from datetime import datetime
+    from database import check_database_availability
+    from src.storage.gcs_client import check_gcs_health
+    from src.tasks.queue import check_cloud_tasks_health
+
+    try:
+        # Check all critical dependencies
+        db_status = check_database_availability()
+        gcs_status = check_gcs_health()
+        tasks_status = check_cloud_tasks_health()
+
+        # Application is ready if all critical dependencies are available
+        is_ready = all([
+            db_status["available"],
+            gcs_status["available"],
+            tasks_status["available"]
+        ])
+
+        response = {
+            "status": "ready" if is_ready else "not_ready",
+            "timestamp": datetime.utcnow().isoformat() + 'Z',
+            "service": config.server_name,
+            "version": config.server_version,
+            "check": "readiness",
+            "dependencies": {
+                "database": {
+                    "available": db_status["available"],
+                    "connection_type": db_status["connection_type"]
+                },
+                "gcs": {
+                    "available": gcs_status["available"],
+                    "configured": gcs_status["configured"]
+                },
+                "cloud_tasks": {
+                    "available": tasks_status["available"],
+                    "configured": tasks_status["configured"]
+                }
+            }
+        }
+
+        status_code = 200 if is_ready else 503
+        return response, status_code
+
+    except Exception as e:
+        logger.error(f"Readiness check failed: {e}")
+        return {
+            "status": "error",
+            "timestamp": datetime.utcnow().isoformat() + 'Z',
+            "service": config.server_name,
+            "check": "readiness",
+            "error": str(e)
+        }, 503
 
 
 # ============================================================================

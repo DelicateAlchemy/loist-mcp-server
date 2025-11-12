@@ -247,3 +247,84 @@ def enqueue_music_ai_query(
     """
     # TODO: Implement music.ai task enqueuing
     raise NotImplementedError("Music AI task enqueuing not yet implemented")
+
+
+def check_cloud_tasks_health(
+    project_id: Optional[str] = None,
+    location: str = "us-central1",
+    queue_name: str = "audio-processing-queue"
+) -> Dict[str, Any]:
+    """
+    Check Cloud Tasks queue health and accessibility.
+
+    Performs basic connectivity and permission tests for Cloud Tasks.
+
+    Args:
+        project_id: GCP project ID (auto-detected if not provided)
+        location: GCP region
+        queue_name: Cloud Tasks queue name
+
+    Returns:
+        Dict with health status and details:
+        {
+            "available": bool,
+            "configured": bool,
+            "error": str | None,
+            "queue_name": str | None,
+            "location": str | None,
+            "response_time_ms": float | None
+        }
+    """
+    import time
+
+    result = {
+        "available": False,
+        "configured": False,
+        "error": None,
+        "queue_name": queue_name,
+        "location": location,
+        "response_time_ms": None
+    }
+
+    start_time = time.time()
+
+    try:
+        # Auto-detect project ID if not provided
+        if not project_id:
+            import os
+            project_id = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT")
+            if not project_id:
+                result["error"] = "GCP project ID not configured"
+                return result
+
+        result["configured"] = True
+
+        # Test Cloud Tasks client creation and basic connectivity
+        try:
+            client = _get_cloud_tasks_client()
+
+            # Try to get queue path (tests authentication and basic connectivity)
+            queue_path = client.queue_path(project_id, location, queue_name)
+
+            # Try to get queue (tests permissions and queue existence)
+            # This will throw if queue doesn't exist or permissions are insufficient
+            queue = client.get_queue(name=queue_path)
+
+            result["available"] = True
+            result["response_time_ms"] = (time.time() - start_time) * 1000
+
+        except Exception as e:
+            result["error"] = f"Cloud Tasks health check failed: {str(e)}"
+            result["response_time_ms"] = (time.time() - start_time) * 1000
+
+            # Provide more specific error messages
+            if "PERMISSION_DENIED" in str(e):
+                result["error"] = "Cloud Tasks permission denied. Check service account has 'roles/cloudtasks.viewer' role"
+            elif "NOT_FOUND" in str(e):
+                result["error"] = f"Cloud Tasks queue '{queue_name}' not found in {location}"
+
+    except Exception as e:
+        result["error"] = f"Cloud Tasks health check setup failed: {str(e)}"
+        result["response_time_ms"] = (time.time() - start_time) * 1000
+
+    return result
