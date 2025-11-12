@@ -33,6 +33,13 @@ try:
 except ImportError:
     HAS_CIRCUIT_BREAKER = False
 
+# Try to import retry utilities for enhanced error handling
+try:
+    from src.exceptions.retry import retry_call, GCS_RETRY_CONFIG, RetryExhaustedException
+    HAS_RETRY = True
+except ImportError:
+    HAS_RETRY = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -492,37 +499,62 @@ class GCSClient:
         if not source_path.exists():
             raise FileNotFoundError(f"Source file not found: {source_path}")
         
-        def _upload_operation():
-            """Perform the upload operation with circuit breaker protection."""
-            blob = self.bucket.blob(destination_blob_name)
+        def _upload_with_retry():
+            """Perform upload with retry and circuit breaker protection."""
+            def _single_upload_attempt():
+                """Single upload attempt."""
+                blob = self.bucket.blob(destination_blob_name)
 
-            # Set metadata if provided
-            if metadata:
-                blob.metadata = metadata
+                # Set metadata if provided
+                if metadata:
+                    blob.metadata = metadata
 
-            # Upload file
-            blob.upload_from_filename(
-                str(source_path),
-                content_type=content_type,
-            )
+                # Upload file
+                blob.upload_from_filename(
+                    str(source_path),
+                    content_type=content_type,
+                )
 
-            return blob
+                return blob
+
+            # Apply retry logic first, then circuit breaker
+            if HAS_RETRY:
+                def _retryable_upload():
+                    return retry_call(_single_upload_attempt, GCS_RETRY_CONFIG)
+
+                if HAS_CIRCUIT_BREAKER:
+                    gcs_circuit_breaker = get_circuit_breaker(
+                        "gcs_upload",
+                        CircuitBreakerConfig(
+                            name="gcs_upload",
+                            failure_threshold=3,  # Fail after 3 consecutive failures
+                            recovery_timeout=30.0,  # Wait 30s before trying again
+                            success_threshold=2,  # Need 2 successes to close
+                            timeout=60.0  # 60s timeout for uploads (can be large files)
+                        )
+                    )
+                    return gcs_circuit_breaker.call(_retryable_upload)
+                else:
+                    return _retryable_upload()
+            else:
+                # Fallback without retry
+                if HAS_CIRCUIT_BREAKER:
+                    gcs_circuit_breaker = get_circuit_breaker(
+                        "gcs_upload",
+                        CircuitBreakerConfig(
+                            name="gcs_upload",
+                            failure_threshold=3,
+                            recovery_timeout=30.0,
+                            success_threshold=2,
+                            timeout=60.0
+                        )
+                    )
+                    return gcs_circuit_breaker.call(_single_upload_attempt)
+                else:
+                    return _single_upload_attempt()
 
         try:
-            if HAS_CIRCUIT_BREAKER:
-                gcs_circuit_breaker = get_circuit_breaker(
-                    "gcs_upload",
-                    CircuitBreakerConfig(
-                        name="gcs_upload",
-                        failure_threshold=3,  # Fail after 3 consecutive failures
-                        recovery_timeout=30.0,  # Wait 30s before trying again
-                        success_threshold=2,  # Need 2 successes to close
-                        timeout=60.0  # 60s timeout for uploads (can be large files)
-                    )
-                )
-                blob = gcs_circuit_breaker.call(_upload_operation)
-            else:
-                blob = _upload_operation()
+            blob = _upload_with_retry()
 
             logger.info(
                 f"Uploaded file: {source_path} -> gs://{self.bucket_name}/{destination_blob_name}"
@@ -532,6 +564,11 @@ class GCSClient:
 
         except GoogleCloudError as e:
             logger.error(f"Failed to upload file {source_path}: {e}")
+            raise
+        except Exception as e:
+            if HAS_RETRY and isinstance(e, RetryExhaustedException):
+                logger.error(f"GCS upload failed after {e.attempts} retry attempts for {source_path}. Last error: {e.last_exception}")
+                raise e.last_exception from e
             raise
     
     def delete_file(self, blob_name: str) -> bool:

@@ -27,6 +27,13 @@ try:
 except ImportError:
     HAS_CIRCUIT_BREAKER = False
 
+# Try to import retry utilities for enhanced error handling
+try:
+    from src.exceptions.retry import retry_call, DATABASE_RETRY_CONFIG, RetryExhaustedException
+    HAS_RETRY = True
+except ImportError:
+    HAS_RETRY = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -189,45 +196,47 @@ class DatabasePool:
                 )
             )
 
-        def _get_connection_attempt():
-            """Attempt to get a valid connection."""
-            conn = self._pool.getconn()
+        def _get_connection_with_retry():
+            """Get connection with circuit breaker and retry logic."""
+            def _single_connection_attempt():
+                """Single connection attempt."""
+                conn = self._pool.getconn()
 
-            # Validate connection
-            if not self._validate_connection(conn):
-                self._pool.putconn(conn, close=True)
-                raise OperationalError("Connection validation failed")
+                # Validate connection
+                if not self._validate_connection(conn):
+                    self._pool.putconn(conn, close=True)
+                    raise OperationalError("Connection validation failed")
 
-            return conn
+                return conn
+
+            # Apply retry logic first, then circuit breaker
+            if HAS_RETRY and retry:
+                retry_config = DATABASE_RETRY_CONFIG
+                retry_config.max_attempts = max_retries
+
+                def _retryable_connection_attempt():
+                    return retry_call(_single_connection_attempt, retry_config)
+
+                if db_circuit_breaker:
+                    return db_circuit_breaker.call(_retryable_connection_attempt)
+                else:
+                    return _retryable_connection_attempt()
+            else:
+                # Fallback to original logic
+                if db_circuit_breaker:
+                    return db_circuit_breaker.call(_single_connection_attempt)
+                else:
+                    return _single_connection_attempt()
 
         conn = None
-        attempts = 0
-
-        while attempts < max_retries:
-            try:
-                if db_circuit_breaker:
-                    # Use circuit breaker for connection attempts
-                    conn = db_circuit_breaker.call(_get_connection_attempt)
-                else:
-                    # Fallback without circuit breaker
-                    conn = _get_connection_attempt()
-
-                # Connection is valid
-                break
-
-            except Exception as e:
-                attempts += 1
-                logger.warning(f"Connection attempt {attempts} failed: {e}")
-
-                if attempts >= max_retries:
-                    self._stats["connections_failed"] += 1
-                    raise
-
-                if not retry:
-                    raise
-
-                # Brief backoff
-                time.sleep(0.1 * attempts)
+        try:
+            conn = _get_connection_with_retry()
+        except Exception as e:
+            self._stats["connections_failed"] += 1
+            if HAS_RETRY and isinstance(e, RetryExhaustedException):
+                logger.error(f"Database connection failed after {e.attempts} retry attempts. Last error: {e.last_exception}")
+                raise e.last_exception from e
+            raise
 
         try:
             yield conn
