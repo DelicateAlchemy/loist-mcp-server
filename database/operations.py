@@ -1052,6 +1052,194 @@ def search_audio_tracks_advanced(
         )
 
 
+def search_audio_tracks_cursor(
+    query: str,
+    limit: int = 20,
+    cursor_data: Optional[Tuple[float, str, str]] = None,
+    status_filter: Optional[str] = None,
+    year_min: Optional[int] = None,
+    year_max: Optional[int] = None,
+    format_filter: Optional[str] = None,
+    min_rank: float = 0.0,
+    rank_normalization: int = 1
+) -> Dict[str, Any]:
+    """
+    Cursor-based full-text search with keyset pagination.
+
+    Uses cursor-based pagination for consistent performance and stable results.
+    Cursor encodes (score, created_at, id) for stable ordering.
+
+    Args:
+        query: Search query string
+        limit: Maximum results (1-100, default: 20)
+        cursor_data: Tuple of (score, created_at, id) from previous page, or None for first page
+        status_filter: Filter by status ('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED')
+        year_min: Minimum year (inclusive)
+        year_max: Maximum year (inclusive)
+        format_filter: Filter by audio format (e.g., 'MP3', 'FLAC')
+        min_rank: Minimum relevance score (0.0-1.0)
+        rank_normalization: ts_rank normalization method (0, 1, 2, 4, 8, 16, 32)
+
+    Returns:
+        Dictionary containing:
+            - tracks: List of matching tracks with relevance scores
+            - query: Original query string
+            - filters: Applied filters
+            - limit: Requested limit
+
+    Raises:
+        ValidationError: If parameters are invalid
+        DatabaseOperationError: If search fails
+
+    Example:
+        >>> # First page
+        >>> result = search_audio_tracks_cursor(query="rock", limit=20)
+        >>>
+        >>> # Next page using cursor from last result
+        >>> cursor = encode_cursor(result['tracks'][-1]['rank'],
+        ...                       result['tracks'][-1]['created_at'],
+        ...                       result['tracks'][-1]['id'])
+        >>> next_result = search_audio_tracks_cursor(query="rock", limit=20, cursor_data=decode_cursor(cursor))
+    """
+    # Reuse basic validation
+    if not query or not query.strip():
+        raise ValidationError("Search query cannot be empty")
+
+    if limit < 1 or limit > 100:
+        raise ValidationError("Limit must be between 1 and 100")
+
+    if min_rank < 0.0 or min_rank > 1.0:
+        raise ValidationError("min_rank must be between 0.0 and 1.0")
+
+    # Validate additional filters
+    valid_statuses = ['PENDING', 'PROCESSING', 'COMPLETED', 'FAILED']
+    if status_filter and status_filter not in valid_statuses:
+        raise ValidationError(f"Invalid status filter. Must be one of: {valid_statuses}")
+
+    if year_min is not None and (year_min < 1800 or year_min > 2100):
+        raise ValidationError("year_min must be between 1800 and 2100")
+
+    if year_max is not None and (year_max < 1800 or year_max > 2100):
+        raise ValidationError("year_max must be between 1800 and 2100")
+
+    if year_min and year_max and year_min > year_max:
+        raise ValidationError("year_min cannot be greater than year_max")
+
+    valid_normalizations = [0, 1, 2, 4, 8, 16, 32]
+    if rank_normalization not in valid_normalizations:
+        raise ValidationError(
+            f"Invalid rank_normalization. Must be one of: {valid_normalizations}"
+        )
+
+    # Prepare tsquery
+    query_sanitized = query.strip()
+    if not any(op in query_sanitized for op in ['&', '|', '!', '<->']):
+        words = query_sanitized.split()
+        tsquery_string = ' & '.join(words)
+    else:
+        tsquery_string = query_sanitized
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                # Build WHERE clause
+                where_conditions = ["search_vector @@ to_tsquery('english', %s)"]
+                params = [tsquery_string]
+
+                # Add rank filter
+                where_conditions.append(f"ts_rank(search_vector, to_tsquery('english', %s), {rank_normalization}) >= %s")
+                params.extend([tsquery_string, min_rank])
+
+                # Add cursor conditions for keyset pagination
+                if cursor_data:
+                    cursor_score, cursor_created_at, cursor_id = cursor_data
+                    # Use tuple comparison for stable ordering: (score DESC, created_at DESC, id DESC)
+                    where_conditions.append("""
+                        (ts_rank(search_vector, to_tsquery('english', %s), %s) < %s OR
+                         (ts_rank(search_vector, to_tsquery('english', %s), %s) = %s AND created_at < %s) OR
+                         (ts_rank(search_vector, to_tsquery('english', %s), %s) = %s AND created_at = %s AND id > %s))
+                    """)
+                    params.extend([
+                        tsquery_string, rank_normalization, cursor_score,
+                        tsquery_string, rank_normalization, cursor_score, cursor_created_at,
+                        tsquery_string, rank_normalization, cursor_score, cursor_created_at, cursor_id
+                    ])
+
+                # Add optional filters
+                if status_filter:
+                    where_conditions.append("status = %s")
+                    params.append(status_filter)
+
+                if year_min is not None:
+                    where_conditions.append("year >= %s")
+                    params.append(year_min)
+
+                if year_max is not None:
+                    where_conditions.append("year <= %s")
+                    params.append(year_max)
+
+                if format_filter:
+                    where_conditions.append("UPPER(format) = UPPER(%s)")
+                    params.append(format_filter)
+
+                where_clause = " AND ".join(where_conditions)
+
+                # Get ranked results with stable ordering
+                search_query = f"""
+                    SELECT
+                        id, status, artist, title, album, genre, year,
+                        duration_seconds, channels, sample_rate, bitrate,
+                        format, file_size_bytes, audio_gcs_path, thumbnail_gcs_path,
+                        created_at, updated_at,
+                        ts_rank(search_vector, to_tsquery('english', %s), %s) as rank
+                    FROM audio_tracks
+                    WHERE {where_clause}
+                    ORDER BY rank DESC, created_at DESC, id DESC
+                    LIMIT %s
+                """
+
+                # Add tsquery params for rank calculation, plus limit
+                search_params = [tsquery_string, rank_normalization] + params + [limit]
+
+                cur.execute(search_query, search_params)
+                results = cur.fetchall()
+
+                logger.info(
+                    f"Cursor search for '{query}' returned {len(results)} results "
+                    f"(limit={limit}, cursor={'present' if cursor_data else 'none'})"
+                )
+
+                return {
+                    'tracks': [dict(row) for row in results],
+                    'query': query,
+                    'filters': {
+                        'status': status_filter,
+                        'year_min': year_min,
+                        'year_max': year_max,
+                        'format': format_filter,
+                        'min_rank': min_rank,
+                        'rank_normalization': rank_normalization,
+                        'cursor_data': cursor_data,
+                    },
+                    'limit': limit,
+                }
+
+    except DatabaseError as e:
+        if "syntax error" in str(e).lower():
+            raise ValidationError(f"Invalid search query syntax: {query}")
+
+        logger.error(f"Database error during cursor search: {e}")
+        raise DatabaseOperationError(
+            f"Cursor search operation failed: database error - {str(e)}"
+        )
+
+    except Exception as e:
+        logger.error(f"Unexpected error during cursor search: {e}")
+        raise DatabaseOperationError(
+            f"Cursor search operation failed: {str(e)}"
+        )
+
+
 # ============================================================================
 # Status Update Operations
 # ============================================================================

@@ -27,6 +27,14 @@ from .query_schemas import (
     DeleteAudioOutput,
     DeleteException,
 )
+from .search_filter_parser import (
+    parse_rsql_filter,
+    encode_cursor,
+    decode_cursor,
+    parse_field_selection,
+    apply_field_selection,
+    RSQLParseError,
+)
 from .schemas import (
     ProductMetadata,
     FormatMetadata,
@@ -38,6 +46,7 @@ from .schemas import (
 from database import (
     get_audio_metadata_by_id,
     search_audio_tracks_advanced,
+    search_audio_tracks_cursor,
 )
 from database.utils import AudioTrackDB
 from src.exceptions import (
@@ -223,14 +232,11 @@ async def search_library(input_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Search across all processed audio in the library.
     
-    Performs full-text search with optional filters for:
-    - Genre, year, duration, format
-    - Artist, album (partial match)
-    
-    Supports pagination and sorting.
+    Performs full-text search with RSQL filters and cursor-based pagination.
+    Supports sparse field selection for optimized responses.
     
     Args:
-        input_data: Dictionary containing query, filters, pagination, and sort options
+        input_data: Dictionary containing query, filter, fields, cursor, limit, and sort options
         
     Returns:
         Dictionary with success status and search results, or error response
@@ -260,39 +266,56 @@ async def search_library(input_data: Dict[str, Any]) -> Dict[str, Any]:
             )
         
         query = validated_input.query
-        filters = validated_input.filters
+        filter_str = validated_input.filter
+        fields_str = validated_input.fields
         limit = validated_input.limit
-        offset = validated_input.offset
+        cursor = validated_input.cursor
         sort_by = validated_input.sortBy
         sort_order = validated_input.sortOrder
+
+        logger.debug(f"Searching for: '{query}' with filter='{filter_str}', cursor='{cursor}', limit={limit}")
         
-        logger.debug(f"Searching for: '{query}' with limit={limit}, offset={offset}")
-        
-        # Build filter parameters for database query
-        # Note: search_audio_tracks_advanced currently only supports:
-        # - status_filter, year_min/year_max, format_filter
+        # Parse RSQL filter string
+        try:
+            parsed_filters = parse_rsql_filter(filter_str) if filter_str else {}
+        except RSQLParseError as e:
+            logger.error(f"RSQL parsing failed: {e}")
+            raise QueryException(
+                error_code=QueryErrorCode.INVALID_FILTER,
+                message=f"Invalid filter syntax: {str(e)}",
+                details={"filter": filter_str}
+            )
+
+        # Parse field selection
+        requested_fields = parse_field_selection(fields_str) if fields_str else None
+
+        # Decode cursor if provided
+        cursor_data = None
+        if cursor:
+            try:
+                cursor_score, cursor_created_at, cursor_id = decode_cursor(cursor)
+                cursor_data = (cursor_score, cursor_created_at, cursor_id)
+            except Exception as e:
+                logger.error(f"Cursor decoding failed: {e}")
+                raise QueryException(
+                    error_code=QueryErrorCode.PAGINATION_ERROR,
+                    message=f"Invalid cursor format: {str(e)}",
+                    details={"cursor": cursor}
+                )
+
+        # Build database filter parameters from parsed RSQL filters
         filter_params = {}
 
-        if filters:
-            # Status filter (only show completed tracks)
-            filter_params["status_filter"] = "COMPLETED"
+        # Always filter for completed tracks only
+        filter_params["status_filter"] = "COMPLETED"
 
-            # Year range filter
-            if filters.year:
-                if filters.year.min is not None:
-                    filter_params["year_min"] = filters.year.min
-                if filters.year.max is not None:
-                    filter_params["year_max"] = filters.year.max
-
-            # Format filter (take first format if multiple specified)
-            if filters.format and len(filters.format) > 0:
-                filter_params["format_filter"] = filters.format[0].value
-
-            # TODO: Add support for other filters in search_audio_tracks_advanced:
-            # - genre, duration, artist, album filters are not yet implemented
-        else:
-            # Default: only show completed tracks
-            filter_params["status_filter"] = "COMPLETED"
+        # Map parsed RSQL filters to database parameters
+        if "year_min" in parsed_filters:
+            filter_params["year_min"] = parsed_filters["year_min"]
+        if "year_max" in parsed_filters:
+            filter_params["year_max"] = parsed_filters["year_max"]
+        if "format_filter" in parsed_filters:
+            filter_params["format_filter"] = parsed_filters["format_filter"]
         
         # Determine sort field mapping
         sort_field_map = {
@@ -307,12 +330,12 @@ async def search_library(input_data: Dict[str, Any]) -> Dict[str, Any]:
         db_sort_field = sort_field_map.get(sort_by.value, "score")
         db_sort_order = sort_order.value  # "asc" or "desc"
         
-        # Execute search query
+        # Execute search query with cursor-based pagination
         try:
-            search_results = search_audio_tracks_advanced(
+            search_results = search_audio_tracks_cursor(
                 query=query,
                 limit=limit + 1,  # Fetch one extra to check if more results exist
-                offset=offset,
+                cursor_data=cursor_data,
                 min_rank=0.01,  # Minimum relevance threshold
                 **filter_params
             )
@@ -333,14 +356,19 @@ async def search_library(input_data: Dict[str, Any]) -> Dict[str, Any]:
         
         # Extract tracks from search result
         tracks = search_results.get('tracks', [])
-        total_matches = search_results.get('total_matches', 0)
-        has_more = search_results.get('has_more', False)
+        has_more = len(tracks) > limit
 
-        logger.info(f"Found {len(tracks)} results for '{query}' (total matches: {total_matches})")
+        # Trim to requested limit
+        if has_more:
+            tracks = tracks[:limit]
+
+        logger.info(f"Found {len(tracks)} results for '{query}' (has_more: {has_more})")
 
         # Format results
         formatted_results = []
-        for result in tracks:
+        next_cursor = None
+
+        for i, result in enumerate(tracks):
             try:
                 # Get metadata from result
                 db_metadata = {
@@ -357,34 +385,48 @@ async def search_library(input_data: Dict[str, Any]) -> Dict[str, Any]:
                     "format": result.get("format", ""),
                     "thumbnail_gcs_path": result.get("thumbnail_gcs_path")
                 }
-                
+
                 # Format metadata
                 formatted_metadata = format_metadata_response(db_metadata)
-                
+
                 # Get relevance score
                 score = float(result.get("rank", 0.0))
-                
+
                 # Create search result
                 search_result = SearchResult(
                     audioId=result.get("id"),
                     metadata=formatted_metadata,
                     score=score
                 )
-                
+
+                # Apply field selection if requested
+                if requested_fields:
+                    result_dict = search_result.model_dump()
+                    filtered_result = apply_field_selection(result_dict, requested_fields)
+                    # Reconstruct SearchResult from filtered data
+                    search_result = SearchResult(**filtered_result)
+
                 formatted_results.append(search_result)
-                
+
+                # Generate next cursor from last result
+                if i == len(tracks) - 1 and has_more:
+                    next_cursor = encode_cursor(
+                        score=score,
+                        created_at=result.get("created_at", ""),
+                        track_id=result.get("id")
+                    )
+
             except Exception as e:
                 logger.warning(f"Error formatting search result: {e}")
                 continue  # Skip this result and continue with others
-        
-        # Build response using the actual totals from search
+
+        # Build response
         response = SearchLibraryOutput(
             success=True,
             results=formatted_results,
-            total=total_matches,
             limit=limit,
-            offset=offset,
-            hasMore=has_more
+            hasMore=has_more,
+            nextCursor=next_cursor
         )
         
         search_time = time.time() - start_time
