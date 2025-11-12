@@ -50,6 +50,9 @@ services:
       # Embed Configuration
       - EMBED_BASE_URL=https://857daa7fb123.ngrok-free.app
 
+      # Task Queue Mode (Local for development)
+      - TASK_QUEUE_MODE=local
+
       # Python
       - PYTHONUNBUFFERED=1
       - PYTHONDONTWRITEBYTECODE=1
