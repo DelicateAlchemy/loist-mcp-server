@@ -143,22 +143,10 @@ Search across all processed audio tracks using full-text search with optional ad
 ```typescript
 {
   query: string,              // Required: search query (1-500 chars)
-  filters?: {                 // Optional filters
-    genre?: string[],         // List of genres (OR logic)
-    year?: {                  // Year range
-      min?: number,           // Minimum year (1900-2100)
-      max?: number            // Maximum year (1900-2100)
-    },
-    duration?: {              // Duration range in seconds
-      min?: number,           // Minimum duration (>=0)
-      max?: number            // Maximum duration (>=0)
-    },
-    format?: string[],        // Audio formats (MP3, FLAC, etc.)
-    artist?: string,          // Artist name (partial match)
-    album?: string            // Album name (partial match)
-  },
+  filter?: string,            // Optional: RSQL filter string (e.g., "genre==Rock;year>=1960,year<=1980")
+  fields?: string,            // Optional: comma-separated fields to return (default: "id,title,score,artist,album,genre,year")
   limit?: number,             // Results per page (1-100, default: 20)
-  offset?: number,            // Results to skip (0-10000, default: 0)
+  cursor?: string,            // Optional: cursor for pagination (base64-encoded)
   sortBy?: string,            // Sort field (default: "relevance")
   sortOrder?: string          // Sort order (asc/desc, default: "desc")
 }
@@ -166,17 +154,131 @@ Search across all processed audio tracks using full-text search with optional ad
 
 #### Validation Rules
 
-- **query**: 
+- **query**:
   - Required, 1-500 characters
   - Sanitized to remove control characters
   - Stripped of leading/trailing whitespace
-  
+
+- **filter**: RSQL syntax validation
+  - Supports operators: `==`, `!=`, `>=`, `<=`, `>`, `<`, `=in=`, `=out=`, `=like=`
+  - AND logic with `;` separator, OR logic with `,` separator
+  - Examples: `"genre==Rock;year>=1960,year<=1980"`, `"artist=like=*beatles*"`
+
+- **fields**: Comma-separated field list validation
+  - Allowed fields: `id`, `title`, `score`, `artist`, `album`, `genre`, `year`, `duration`, `channels`, `sampleRate`, `bitrate`, `format`, `embedLink`
+  - Example: `"id,title,score,artist"`
+
+- **cursor**: Base64-encoded JSON validation
+  - Contains: `score` (float), `created_at` (ISO string), `id` (UUID string)
+  - Example: `"eyJzY29yZSI6MC45NSwiY3JlYXRlZF9hdCI6IjIwMjQtMTEtMTJUMTI6MzQ6NTYuMDAwWiIsImlkIjoiNTUwZTg0MDAtZTJiYi00MWQ0LWE3MTYtNDQ2NjU1NDQwMDAwIn0="`
+
 - **limit**: 1-100 (prevents excessive result sets)
-- **offset**: 0-10000 (prevents deep pagination performance issues)
-- **year.min / year.max**: 1900-2100
-- **duration.min / duration.max**: >=0
 - **sortBy**: One of: `relevance`, `title`, `artist`, `year`, `duration`, `created_at`
 - **sortOrder**: `asc` or `desc`
+
+### RSQL Filter Syntax
+
+The `filter` parameter uses RSQL (RESTful Service Query Language) syntax for flexible filtering:
+
+#### Operators
+- `==` - Equal
+- `!=` - Not equal
+- `>=` - Greater than or equal
+- `<=` - Less than or equal
+- `>` - Greater than
+- `<` - Less than
+- `=in=` - In list
+- `=out=` - Not in list
+- `=like=` - Like pattern (supports wildcards `*`)
+
+#### Logic
+- `;` (semicolon) - AND operator
+- `,` (comma) - OR operator
+
+#### Examples
+```
+# Simple equality
+genre==Rock
+
+# Year range (OR within field)
+year>=1960,year<=1980
+
+# Combined filters (AND between fields)
+genre==Rock;year>=1960,year<=1980
+
+# Pattern matching
+artist=like=*beatles*
+
+# Multiple genres (OR)
+genre==Rock,genre==Jazz
+
+# Complex query
+genre==Rock;year>=1960,year<=1980;format==MP3,format==FLAC
+```
+
+### Cursor-Based Pagination
+
+Instead of offset-based pagination, this tool uses cursor-based pagination for better performance:
+
+#### How It Works
+1. First request: Don't include `cursor` (starts from beginning)
+2. Response includes `nextCursor` if more results exist
+3. Next request: Include `nextCursor` from previous response
+4. Continue until `hasMore` is `false`
+
+#### Benefits
+- **Consistent Performance**: No degradation with large result sets
+- **Stable Results**: Results don't shift between pages
+- **Token Efficiency**: Opaque cursors are compact for MCP usage
+
+#### Example Usage
+```javascript
+// First page
+const response1 = await search_library({
+  query: "rock music",
+  limit: 20
+});
+
+// Next page using cursor
+if (response1.hasMore) {
+  const response2 = await search_library({
+    query: "rock music",
+    cursor: response1.nextCursor,
+    limit: 20
+  });
+}
+```
+
+### Sparse Field Selection
+
+Use the `fields` parameter to return only specific fields, reducing response size:
+
+#### Available Fields
+- `id` - Track ID
+- `title` - Track title
+- `score` - Relevance score
+- `artist` - Artist name
+- `album` - Album name
+- `genre` - Genre
+- `year` - Release year
+- `duration` - Duration in seconds
+- `channels` - Audio channels
+- `sampleRate` - Sample rate
+- `bitrate` - Bitrate
+- `format` - Audio format
+- `embedLink` - Embed URL
+
+#### Examples
+```
+# Minimal response
+fields="id,title,score"
+
+# Full metadata
+fields="id,title,score,artist,album,genre,year,duration,format"
+
+# Default (if not specified)
+fields="id,title,score,artist,album,genre,year"
+```
 
 ### Output Schema
 
@@ -209,10 +311,9 @@ Search across all processed audio tracks using full-text search with optional ad
       "score": 0.95
     }
   ],
-  "total": 150,
   "limit": 20,
-  "offset": 0,
-  "hasMore": true
+  "hasMore": true,
+  "nextCursor": "eyJzY29yZSI6MC45NSwiY3JlYXRlZF9hdCI6IjIwMjQtMTEtMTJUMTI6MzQ6NTYuMDAwWiIsImlkIjoiNTUwZTg0MDAtZTJiYi00MWQ0LWE3MTYtNDQ2NjU1NDQwMDAwIn0="
 }
 ```
 
