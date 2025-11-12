@@ -14,9 +14,12 @@ Features:
 import logging
 import json
 import hashlib
+import time
+import threading
 from typing import Dict, Any, Optional
 from pathlib import Path
 import tempfile
+from collections import defaultdict, Counter
 
 from fastmcp import FastMCP
 
@@ -27,6 +30,109 @@ from src.storage.gcs_client import create_gcs_client
 from src.exceptions import ValidationError, DatabaseOperationError, StorageError
 
 logger = logging.getLogger(__name__)
+
+# Simple in-memory metrics for waveform generation
+# Structure for future Cloud Monitoring integration
+_waveform_metrics = {
+    "total_requests": 0,
+    "successful_generations": 0,
+    "failed_generations": 0,
+    "cache_hits": 0,
+    "processing_times": [],  # Store last 100 processing times
+    "error_types": Counter(),
+    "last_reset": time.time()
+}
+
+_metrics_lock = threading.Lock()
+
+
+def _update_waveform_metrics(success: bool, processing_time: Optional[float] = None,
+                           cache_hit: bool = False, error_type: Optional[str] = None) -> None:
+    """
+    Update waveform generation metrics.
+
+    Args:
+        success: Whether the generation was successful
+        processing_time: Time taken for generation (seconds)
+        cache_hit: Whether this was served from cache
+        error_type: Type of error if failed
+    """
+    with _metrics_lock:
+        _waveform_metrics["total_requests"] += 1
+
+        if cache_hit:
+            _waveform_metrics["cache_hits"] += 1
+        elif success:
+            _waveform_metrics["successful_generations"] += 1
+        else:
+            _waveform_metrics["failed_generations"] += 1
+            if error_type:
+                _waveform_metrics["error_types"][error_type] += 1
+
+        if processing_time is not None:
+            _waveform_metrics["processing_times"].append(processing_time)
+            # Keep only last 100 processing times
+            if len(_waveform_metrics["processing_times"]) > 100:
+                _waveform_metrics["processing_times"].pop(0)
+
+
+def _log_waveform_metrics() -> None:
+    """Log current waveform metrics summary."""
+    with _metrics_lock:
+        total = _waveform_metrics["total_requests"]
+        if total == 0:
+            return
+
+        success_rate = (_waveform_metrics["successful_generations"] / total) * 100
+        cache_hit_rate = (_waveform_metrics["cache_hits"] / total) * 100
+        failure_rate = (_waveform_metrics["failed_generations"] / total) * 100
+
+        # Calculate average processing time
+        processing_times = _waveform_metrics["processing_times"]
+        avg_processing_time = sum(processing_times) / len(processing_times) if processing_times else 0
+
+        # Get top error types
+        top_errors = _waveform_metrics["error_types"].most_common(3)
+
+        logger.info(
+            f"Waveform metrics - Total: {total}, "
+            f"Success: {success_rate:.1f}%, "
+            f"Cache hits: {cache_hit_rate:.1f}%, "
+            f"Failures: {failure_rate:.1f}%, "
+            f"Avg processing time: {avg_processing_time:.2f}s"
+        )
+
+        if top_errors:
+            logger.info(f"Top errors: {dict(top_errors)}")
+
+
+def get_waveform_metrics() -> Dict[str, Any]:
+    """
+    Get current waveform metrics for monitoring.
+
+    Returns:
+        Dict containing current metrics and statistics
+    """
+    with _metrics_lock:
+        processing_times = _waveform_metrics["processing_times"]
+        avg_time = sum(processing_times) / len(processing_times) if processing_times else 0
+        min_time = min(processing_times) if processing_times else 0
+        max_time = max(processing_times) if processing_times else 0
+
+        return {
+            "total_requests": _waveform_metrics["total_requests"],
+            "successful_generations": _waveform_metrics["successful_generations"],
+            "failed_generations": _waveform_metrics["failed_generations"],
+            "cache_hits": _waveform_metrics["cache_hits"],
+            "processing_time_stats": {
+                "average_seconds": avg_time,
+                "min_seconds": min_time,
+                "max_seconds": max_time,
+                "count": len(processing_times)
+            },
+            "error_types": dict(_waveform_metrics["error_types"]),
+            "last_reset": _waveform_metrics["last_reset"]
+        }
 
 
 def _validate_cloud_tasks_auth(request_headers: Dict[str, str]) -> bool:
@@ -154,15 +260,19 @@ async def handle_waveform_task(payload: Dict[str, Any]) -> Dict[str, Any]:
         raise ValidationError("Missing required payload fields: audioId, audioGcsPath, sourceHash")
 
     logger.info(f"Processing waveform generation for audio_id: {audio_id}")
+    start_time = time.time()
 
     # Check cache first
     cached_path = check_waveform_cache(audio_id, source_hash)
     if cached_path:
+        processing_time = time.time() - start_time
         logger.info(f"Cache hit for audio_id {audio_id} - waveform already exists")
+        _update_waveform_metrics(success=True, processing_time=processing_time, cache_hit=True)
         return {
             "status": "cache_hit",
             "audioId": audio_id,
             "waveformGcsPath": cached_path,
+            "processingTimeSeconds": processing_time,
             "message": "Waveform already exists in cache"
         }
 
@@ -267,20 +377,28 @@ async def handle_waveform_task(payload: Dict[str, Any]) -> Dict[str, Any]:
                 else:
                     raise DatabaseOperationError(f"Database update failed for {audio_id}: {e}") from e
 
+            total_processing_time = time.time() - start_time
             logger.info(f"Successfully generated waveform for audio_id: {audio_id}")
+            _update_waveform_metrics(success=True, processing_time=total_processing_time)
 
             return {
                 "status": "completed",
                 "audioId": audio_id,
                 "waveformGcsPath": gcs_path,
-                "processingTimeSeconds": result["processing_time_seconds"],
+                "processingTimeSeconds": total_processing_time,
+                "waveformProcessingTimeSeconds": result["processing_time_seconds"],
                 "fileSizeBytes": result["file_size_bytes"],
                 "sampleCount": result["sample_count"],
                 "message": "Waveform generation completed successfully"
             }
 
     except Exception as e:
+        processing_time = time.time() - start_time
+        error_type = type(e).__name__
         logger.error(f"Failed to process waveform task for {audio_id}: {e}")
+
+        # Update metrics for failed operation
+        _update_waveform_metrics(success=False, processing_time=processing_time, error_type=error_type)
 
         # Re-raise with appropriate error type
         if isinstance(e, (ValidationError, WaveformGenerationError, StorageError, DatabaseOperationError)):
@@ -301,6 +419,28 @@ def register_task_handlers(mcp: FastMCP) -> None:
     Args:
         mcp: FastMCP server instance
     """
+
+    @mcp.tool()
+    def get_waveform_metrics_tool() -> dict:
+        """
+        Get current waveform generation metrics.
+
+        Returns:
+            dict: Current metrics including success rates, processing times, and error statistics
+        """
+        try:
+            logger.debug("Waveform metrics requested")
+            metrics = get_waveform_metrics()
+            return {
+                "status": "success",
+                "metrics": metrics
+            }
+        except Exception as e:
+            logger.error(f"Error retrieving waveform metrics: {e}")
+            return {
+                "status": "error",
+                "error": str(e)
+            }
 
     @mcp.custom_route("/tasks/waveform", methods=["POST"])
     async def waveform_task_handler(request):
@@ -342,6 +482,11 @@ def register_task_handlers(mcp: FastMCP) -> None:
             # Process the task
             logger.info("Processing waveform generation task")
             result = await handle_waveform_task(payload)
+
+            # Log metrics periodically (every 10 requests)
+            with _metrics_lock:
+                if _waveform_metrics["total_requests"] % 10 == 0:
+                    _log_waveform_metrics()
 
             return {
                 "success": True,
