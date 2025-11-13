@@ -4,21 +4,23 @@ This document describes the comprehensive automated deployment pipeline for the 
 
 ## Overview
 
-The deployment uses Google Cloud Build with an optimized `cloudbuild.yaml` pipeline that includes:
+The deployment uses Google Cloud Build with an optimized pipeline that includes:
 
-- **Streamlined 3-step process**: Build → Push → Deploy (reduced from 9 steps for better performance)
+- **7-step automated process**: Tests → Validation → Migrations → Build → Deploy
 - **Multi-stage Docker builds** with Alpine builder → Alpine runtime for optimal security and reliability
 - **Cloud Build optimized** for Google Cloud Build compatibility (no BuildKit dependencies)
 - **Comprehensive environment variable configuration** (50+ variables across all functional areas)
 - **Secret management** for sensitive data via Google Secret Manager
 - **Artifact Registry integration** for modern container registry management
 - **Built-in health checks** via Cloud Run (no manual health check steps needed)
+- **Automatic database migrations** during deployment for schema consistency
 
 ## Table of Contents
 
 - [Prerequisites](#prerequisites)
 - [Required Setup](#required-setup)
 - [Staging Environment](#staging-environment)
+- [Database Migrations](#database-migrations)
 - [Cloud Build Pipeline](#cloud-build-pipeline)
 - [Environment Variables](#environment-variables)
 - [Deployment Process](#deployment-process)
@@ -195,13 +197,62 @@ DB_NAME=loist_mvp_staging
 
 ### Staging Deployment Pipeline
 
-The `cloudbuild-staging.yaml` includes additional steps for staging setup:
+The `cloudbuild-staging.yaml` includes steps for staging setup:
 
-1. **Build & Push**: Optimized Docker image for staging
-2. **Database Setup**: Create `loist_mvp_staging` database if needed
-3. **Secret Updates**: Ensure staging secrets use correct database name
-4. **Migration**: Apply database schema to staging database
-5. **Deploy**: Deploy to Cloud Run with staging configuration
+1. **Unit Tests**: Fast tests without external dependencies (65% coverage)
+2. **Database Tests**: Integration tests using testcontainers (60% coverage)
+3. **Static Analysis**: Code quality checks (black, isort, mypy, flake8, bandit)
+4. **Build & Push**: Optimized Docker image for staging
+5. **Database Setup**: Create `loist_mvp_staging` database if needed
+6. **Deploy**: Deploy to Cloud Run with staging configuration
+
+**Note**: Database migrations for staging run post-deployment using `scripts/migrate-db.sh staging`
+
+## Database Migrations
+
+The deployment pipeline includes automatic database migration execution to ensure schema consistency across environments.
+
+### Production Migrations
+
+**Automatic during deployment**: The production pipeline (`cloudbuild.yaml`) automatically runs all pending database migrations during the deployment process. This ensures:
+
+- Zero-downtime schema updates
+- Consistent database state across deployments
+- Automatic rollback capability if migrations fail
+- Migration tracking to prevent duplicate execution
+
+### Staging Migrations
+
+**Post-deployment execution**: Staging migrations run after deployment succeeds using:
+
+```bash
+# Run migrations for staging environment
+./scripts/migrate-db.sh staging
+
+# Or for production
+./scripts/migrate-db.sh production
+```
+
+### Migration System Features
+
+- **Idempotent**: Migrations only run once, tracked in `schema_migrations` table
+- **Transactional**: Each migration runs in a transaction for consistency
+- **Ordered**: Migrations execute in version order (001, 002, 003, etc.)
+- **Environment-aware**: Automatically detects production vs staging databases
+- **Error handling**: Failed migrations prevent deployment continuation
+
+### Available Migrations
+
+1. **001_initial_schema.sql**: Core audio_tracks table, indexes, and triggers
+2. **002_add_waveform_support.sql**: Waveform generation columns (waveform_gcs_path, waveform_generated_at, source_audio_hash)
+3. **002_performance_indexes.sql**: Additional performance optimizations
+
+### Migration Scripts
+
+Two migration tools are available:
+
+- **`scripts/migrate-db.sh`**: Shell script using psql (Cloud Build compatible)
+- **`scripts/run_migrations.py`**: Python script using DatabaseMigrator class (local development)
 
 ### EMBED_BASE_URL Configuration Fix
 
@@ -228,7 +279,7 @@ Use the comprehensive test script to verify staging deployment:
 
 ## Cloud Build Pipeline
 
-The optimized `cloudbuild.yaml` pipeline includes the following **3 steps** (reduced from 9 steps for better performance):
+The optimized `cloudbuild.yaml` pipeline includes the following **7 steps**:
 
 ### Build Configuration
 

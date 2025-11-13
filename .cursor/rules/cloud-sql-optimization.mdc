@@ -1,0 +1,244 @@
+---
+description: Optimize Cloud SQL usage to prevent unnecessary costs during development
+globs: **/*
+alwaysApply: true
+---
+
+# Cloud SQL Cost Optimization
+
+**Always use local development for daily work. Only start Cloud SQL when testing staging/production deployments.**
+
+## Development Workflow
+
+### ✅ DO: Use Local Development (FREE)
+
+**For all daily development work, use local Docker Compose:**
+
+```bash
+# Start local development environment (uses local PostgreSQL - $0 cost)
+docker-compose up -d
+
+# This provides:
+# - MCP server on http://localhost:8080
+# - PostgreSQL on localhost:5432
+# - Hot reload for code changes
+# - Zero Cloud SQL costs
+```
+
+**Your `docker-compose.yml` is already configured correctly:**
+- Uses local PostgreSQL container (not Cloud SQL)
+- All environment variables set for local development
+- Database migrations included
+- Perfect for development work
+
+### ❌ DON'T: Leave Cloud SQL Running During Development
+
+**Cloud SQL costs ~£50-80/month when running 24/7. Stop it when not needed.**
+
+## Cloud SQL Management
+
+### Before Starting Development
+
+**Always check Cloud SQL status first:**
+
+```bash
+# Check if Cloud SQL is running
+./scripts/manage-cloud-sql.sh status
+```
+
+**If Cloud SQL is running and you're only doing local development:**
+
+```bash
+# Stop Cloud SQL to save money (~£50-80/month savings)
+./scripts/manage-cloud-sql.sh stop
+```
+
+**Cost Impact:**
+- **Running**: ~£50-80/month (~£1.67-2.67/day)
+- **Stopped**: ~£0.10-0.20/month (storage only)
+- **Savings**: ~£50-80/month when stopped
+
+### When You Need Cloud SQL
+
+**Only start Cloud SQL when:**
+1. Testing staging deployments
+2. Testing production deployments
+3. Running integration tests against Cloud SQL
+4. Debugging Cloud SQL-specific issues
+
+**Start Cloud SQL only when needed:**
+
+```bash
+# Start Cloud SQL (takes 2-3 minutes)
+./scripts/manage-cloud-sql.sh start
+
+# Wait for it to be ready, then test/deploy
+# ... do your testing ...
+
+# Stop Cloud SQL after testing to save money
+./scripts/manage-cloud-sql.sh stop
+```
+
+## Quick Reference Commands
+
+### Check Status
+```bash
+./scripts/manage-cloud-sql.sh status
+```
+
+### Stop Cloud SQL (Save Money)
+```bash
+./scripts/manage-cloud-sql.sh stop
+```
+
+### Start Cloud SQL (When Needed)
+```bash
+./scripts/manage-cloud-sql.sh start
+```
+
+### Local Development
+```bash
+# Start local environment
+docker-compose up -d
+
+# View logs
+docker-compose logs -f mcp-server
+
+# Stop local environment
+docker-compose down
+```
+
+## Cost Comparison
+
+### ❌ Bad: 24/7 Cloud SQL During Development
+- **Cloud SQL**: ~£50-80/month
+- **Total**: ~£50-80/month
+
+### ✅ Good: Local Dev + Stopped Cloud SQL
+- **Local PostgreSQL**: £0 (Docker Compose)
+- **Cloud SQL (stopped)**: ~£0.10-0.20/month
+- **Total**: ~£0.10-0.20/month
+- **Savings**: ~£50-80/month (99% reduction!)
+
+## AI Assistant Guidelines
+
+When working with this codebase, the AI should:
+
+### Before Starting Development Work
+
+1. **Remind user to check Cloud SQL status:**
+   ```bash
+   ./scripts/manage-cloud-sql.sh status
+   ```
+
+2. **If Cloud SQL is running and user is only doing local development:**
+   - Suggest stopping Cloud SQL: `./scripts/manage-cloud-sql.sh stop`
+   - Remind them to use `docker-compose up -d` for local development
+
+3. **When user mentions database issues:**
+   - First check if they're using local Docker Compose
+   - Verify local PostgreSQL is running: `docker-compose ps`
+   - Only suggest Cloud SQL if they specifically need to test staging/production
+
+### When Cloud SQL is Needed
+
+1. **Only suggest starting Cloud SQL when:**
+   - User explicitly mentions testing staging/production
+   - User needs to test Cloud SQL-specific features
+   - User is deploying to staging/production
+
+2. **Always remind to stop Cloud SQL after testing:**
+   - "Remember to stop Cloud SQL after testing: `./scripts/manage-cloud-sql.sh stop`"
+
+### Code Changes That Affect Cloud SQL
+
+1. **When modifying database configuration:**
+   - Test locally first with Docker Compose
+   - Only test on Cloud SQL when ready for staging/production
+
+2. **When adding database migrations:**
+   - Test locally first
+   - Apply to Cloud SQL only when deploying
+
+## Best Practices
+
+### ✅ DO
+
+- **Use local Docker Compose for all development**
+- **Check Cloud SQL status before starting work**
+- **Stop Cloud SQL when not testing staging/production**
+- **Start Cloud SQL only when deploying or testing**
+- **Stop Cloud SQL immediately after testing**
+
+### ❌ DON'T
+
+- **Don't leave Cloud SQL running 24/7 during development**
+- **Don't use Cloud SQL for local development** (use Docker Compose)
+- **Don't forget to stop Cloud SQL after testing**
+- **Don't assume Cloud SQL is needed for every database operation**
+
+## Integration with Development Workflow
+
+### Daily Development Session
+
+1. **Start of day:**
+   ```bash
+   # Check Cloud SQL status
+   ./scripts/manage-cloud-sql.sh status
+   
+   # If running and only doing local dev, stop it
+   ./scripts/manage-cloud-sql.sh stop
+   
+   # Start local development
+   docker-compose up -d
+   ```
+
+2. **During development:**
+   - Work with local PostgreSQL
+   - No Cloud SQL needed
+   - Fast iteration, no network latency
+
+3. **End of day:**
+   ```bash
+   # Stop local environment (optional)
+   docker-compose down
+   
+   # Ensure Cloud SQL is stopped (if you started it)
+   ./scripts/manage-cloud-sql.sh status
+   ```
+
+### When Testing Staging/Production
+
+1. **Start Cloud SQL:**
+   ```bash
+   ./scripts/manage-cloud-sql.sh start
+   ```
+
+2. **Deploy/Test:**
+   ```bash
+   git push origin dev  # Triggers staging deployment
+   # ... test staging ...
+   ```
+
+3. **Stop Cloud SQL:**
+   ```bash
+   ./scripts/manage-cloud-sql.sh stop
+   ```
+
+## Documentation References
+
+- **[Development Cost Optimization Guide](../docs/development-cost-optimization.md)** - Comprehensive guide
+- **[Cloud SQL Cost Analysis](../docs/cloud-sql-cost-analysis.md)** - Detailed cost breakdown
+- **[Manage Cloud SQL Script](../scripts/manage-cloud-sql.sh)** - Helper script for start/stop
+
+## Summary
+
+**Golden Rule**: Use local Docker Compose for development. Only start Cloud SQL when testing staging/production deployments. Always stop Cloud SQL after testing to save ~£50-80/month.
+
+**Quick Checklist:**
+- [ ] Check Cloud SQL status: `./scripts/manage-cloud-sql.sh status`
+- [ ] If running and only doing local dev: `./scripts/manage-cloud-sql.sh stop`
+- [ ] Start local dev: `docker-compose up -d`
+- [ ] Work locally (no Cloud SQL needed)
+- [ ] Only start Cloud SQL when testing staging/production
+- [ ] Stop Cloud SQL after testing

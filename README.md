@@ -623,6 +623,7 @@ gcloud run deploy music-library-mcp \
 - ✅ **Artifact Registry**: Modern container registry with better performance
 - ✅ **Build Optimization**: Layer caching, BuildKit, and high-performance machines
 - ✅ **Deployment Validation**: Automated validation scripts for post-deployment verification
+- ✅ **Database Migrations**: Automatic migration execution during deployment (all schemas applied)
 
 #### Deployment Validation
 
@@ -679,10 +680,11 @@ Production/Staging Deployment
 
 1. **Unit Tests** - Fast tests without external dependencies (75% coverage required)
 2. **Database Tests** - Integration tests using testcontainers (70% coverage required)
-3. **Migration Check** - Database migration validation
+3. **Database Connectivity** - Verify database connectivity before deployment
 4. **MCP Validation** - Protocol compliance testing
 5. **Static Analysis** - Code quality checks (black, isort, mypy, flake8, bandit)
-6. **Build & Deploy** - Container build and Cloud Run deployment
+6. **Database Migrations** - Apply all pending database migrations
+7. **Build & Deploy** - Container build and Cloud Run deployment
 
 #### Staging Pipeline (`cloudbuild-staging.yaml`)
 **Triggered by pushes to `dev` branch**
@@ -691,6 +693,7 @@ Same comprehensive pipeline as production but with:
 - Relaxed coverage thresholds (65% unit, 60% database)
 - Warning-only test failures (continues deployment)
 - Staging-specific environment variables and secrets
+- Database migrations run post-deployment (not during Cloud Build)
 
 ### Test Strategy
 

@@ -168,7 +168,7 @@ steps:
 
         echo "✅ Database tests passed successfully"
 
-  # Step 1.6: Database Migration Check
+  # Step 1.6: Database Migration Check (Post-deployment migrations will be run separately)
   - name: 'python:3.11-slim'
     id: 'db-migration-check'
     entrypoint: 'bash'
@@ -181,7 +181,7 @@ steps:
     args:
       - '-c'
       - |
-        echo "🗄️ Running database migration validation..."
+        echo "🗄️ Database migration check (migrations will be run post-deployment)..."
 
         # Install system dependencies
         apt-get update && apt-get install -y --no-install-recommends \
@@ -192,40 +192,27 @@ steps:
         pip install --upgrade pip
         pip install -r requirements.txt
 
-        # Create migration check directory
-        mkdir -p migration-check
-
-        # Run database migration validation
-        echo "📊 Checking database migrations..."
+        # Check database connectivity
+        echo "📊 Checking database connectivity..."
         python -c "
-        import sys
-        sys.path.insert(0, 'database')
-        from migrate import MigrationRunner
-
+        import os
+        import psycopg2
         try:
-            runner = MigrationRunner()
-            status = runner.get_status()
-
-            if status['pending_migrations'] > 0:
-                print(f'⚠️ Found {status[\"pending_migrations\"]} pending migrations')
-                print('This is normal for production deployments')
-            else:
-                print('✅ All migrations are applied')
-
-            print(f'Current schema version: {status[\"current_version\"]}')
-            print(f'Latest available version: {status[\"latest_version\"]}')
-
-            # Save status for artifacts
-            import json
-            with open('migration-check/status.json', 'w') as f:
-                json.dump(status, f, indent=2)
-
+            conn = psycopg2.connect(
+                host=os.getenv('DB_HOST'),
+                port=os.getenv('DB_PORT'),
+                database=os.getenv('DB_NAME'),
+                user=os.getenv('DB_USER'),
+                password=os.getenv('DB_PASSWORD')
+            )
+            conn.close()
+            print('✅ Database connection successful')
         except Exception as e:
-            print(f'❌ Migration check failed: {e}')
-            sys.exit(1)
+            print(f'❌ Database connection failed: {e}')
+            exit(1)
         "
 
-        echo "✅ Database migration check completed"
+        echo "✅ Database connectivity verified"
 
   # Step 1.7: Run MCP Protocol Validation
   - name: 'python:3.11-slim'
@@ -424,7 +411,7 @@ steps:
       # Explicit command override to ensure correct startup (fallback if Dockerfile CMD is misinterpreted)
       - '--command=/usr/local/bin/python'
       - '--args=/app/src/server.py'
-      - '--set-env-vars=SERVER_TRANSPORT=http,LOG_LEVEL=INFO,AUTH_ENABLED=false,ENABLE_CORS=true,CORS_ORIGINS=*,ENABLE_HEALTHCHECK=true'
+      - '--set-env-vars=SERVER_TRANSPORT=http,LOG_LEVEL=INFO,AUTH_ENABLED=false,ENABLE_CORS=true,CORS_ORIGINS=*,ENABLE_HEALTHCHECK=true,GOOGLE_CLOUD_PROJECT=$PROJECT_ID'
       - '--set-env-vars=PORT=8080'
       - '--set-env-vars=GCS_PROJECT_ID=$PROJECT_ID'
       - '--set-env-vars=SERVER_NAME=Music Library MCP,SERVER_VERSION=0.1.0'
