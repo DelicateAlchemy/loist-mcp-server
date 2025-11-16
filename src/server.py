@@ -5,6 +5,7 @@ FastMCP-based server for audio ingestion and embedding
 
 import os
 import sys
+import time
 from pathlib import Path
 
 # Add parent directory to Python path for imports (needed for Docker)
@@ -107,6 +108,33 @@ else:
 
 # Log startup information for debugging
 log_server_startup_info()
+
+# ============================================================================
+# Health Check Caching for Cost Optimization
+# ============================================================================
+
+# Global cache for database health status to reduce Cloud SQL queries
+_last_db_check = {"time": 0, "result": None}
+_db_check_cache_ttl = 5  # seconds
+
+def check_database_availability_cached():
+    """
+    Cached version of database availability check.
+
+    Reduces Cloud SQL queries by caching health status for short periods.
+    This significantly reduces database load from health checks.
+    """
+    global _last_db_check
+
+    now = time.time()
+    if now - _last_db_check["time"] < _db_check_cache_ttl:
+        return _last_db_check["result"]
+
+    # Fresh check
+    from database import check_database_availability
+    result = check_database_availability()
+    _last_db_check = {"time": now, "result": result}
+    return result
 
 
 @mcp.tool()
@@ -268,11 +296,12 @@ def database_health_endpoint(request):
 @mcp.custom_route("/health/live", methods=["GET"])
 def liveness_health_endpoint(request):
     """
-    Liveness health check endpoint.
+    Liveness health check endpoint - NO DATABASE QUERIES.
 
     Checks if the application is running and can handle requests.
     This is a basic check that doesn't test external dependencies.
 
+    Used by Cloud Run to determine if container should be restarted.
     Returns 200 if alive, 500 if not responding.
     """
     from datetime import datetime
@@ -305,31 +334,42 @@ def liveness_health_endpoint(request):
 @mcp.custom_route("/health/ready", methods=["GET"])
 def readiness_health_endpoint(request):
     """
-    Readiness health check endpoint.
+    Readiness health check endpoint - CONFIGURATION-BASED CHECK.
 
-    Checks if the application is ready to serve traffic by testing all dependencies.
+    Checks if the application is ready to serve traffic by verifying configuration.
+    Only checks if dependencies are configured, not if they're actually available.
     This is used by load balancers and orchestrators to determine if the service
     should receive traffic.
 
+    Uses cached database check to reduce Cloud SQL queries.
     Returns 200 if ready, 503 if not ready.
     """
     from datetime import datetime
-    from database import check_database_availability
-    from src.storage.gcs_client import check_gcs_health
-    from src.tasks.queue import check_cloud_tasks_health
 
     try:
-        # Check all critical dependencies
-        db_status = check_database_availability()
-        gcs_status = check_gcs_health()
-        tasks_status = check_cloud_tasks_health()
+        # Check configuration, not actual connectivity (cost optimization)
+        # This avoids expensive database queries during health checks
+        db_configured = config.is_database_configured
+        gcs_configured = config.is_gcs_configured
 
-        # Application is ready if all critical dependencies are available
-        is_ready = all([
-            db_status["available"],
-            gcs_status["available"],
-            tasks_status["available"]
-        ])
+        # Application is ready if critical dependencies are configured
+        # Note: Cloud Tasks is optional for basic functionality
+        is_ready = db_configured and gcs_configured
+
+        # Use cached database check for detailed status (if configured)
+        db_status = {"available": False, "connection_type": "unknown"}
+        if db_configured:
+            try:
+                # Use cached check to reduce database load
+                cached_result = check_database_availability_cached()
+                if cached_result:
+                    db_status = {
+                        "available": cached_result["available"],
+                        "connection_type": cached_result["connection_type"]
+                    }
+            except Exception as e:
+                logger.debug(f"Database availability check failed: {e}")
+                # Continue with configuration-based check
 
         response = {
             "status": "ready" if is_ready else "not_ready",
@@ -339,16 +379,12 @@ def readiness_health_endpoint(request):
             "check": "readiness",
             "dependencies": {
                 "database": {
+                    "configured": db_configured,
                     "available": db_status["available"],
                     "connection_type": db_status["connection_type"]
                 },
                 "gcs": {
-                    "available": gcs_status["available"],
-                    "configured": gcs_status["configured"]
-                },
-                "cloud_tasks": {
-                    "available": tasks_status["available"],
-                    "configured": tasks_status["configured"]
+                    "configured": gcs_configured
                 }
             }
         }

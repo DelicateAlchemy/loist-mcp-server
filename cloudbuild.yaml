@@ -408,6 +408,9 @@ steps:
       - '--max-instances=10'
       - '--min-instances=0'
       - '--port=8080'
+      # Health check optimization: use DB-free liveness check
+      - '--liveness-probe-path=/health/live'
+      - '--readiness-probe-path=/health/ready'
       # Explicit command override to ensure correct startup (fallback if Dockerfile CMD is misinterpreted)
       - '--command=/usr/local/bin/python'
       - '--args=/app/src/server.py'
@@ -419,7 +422,7 @@ steps:
       - '--set-env-vars=ON_DUPLICATE_TOOLS=error,ON_DUPLICATE_RESOURCES=warn,ON_DUPLICATE_PROMPTS=replace'
       - '--set-env-vars=MAX_WORKERS=4,REQUEST_TIMEOUT=30,STORAGE_PATH=/tmp/storage,MAX_FILE_SIZE=104857600'
       - '--set-env-vars=GCS_REGION=us-central1,GCS_SIGNED_URL_EXPIRATION=900'
-      - '--set-env-vars=DB_PORT=5432,DB_MIN_CONNECTIONS=2,DB_MAX_CONNECTIONS=10,DB_COMMAND_TIMEOUT=30'
+      - '--set-env-vars=DB_PORT=5432,DB_MIN_CONNECTIONS=0,DB_MAX_CONNECTIONS=10,DB_COMMAND_TIMEOUT=30'
       - '--set-env-vars=CORS_ALLOW_CREDENTIALS=true,CORS_ALLOW_METHODS=GET,POST,OPTIONS'
       - '--set-env-vars=CORS_ALLOW_HEADERS=Authorization,Content-Type,Range,X-Requested-With,Accept,Origin'
       - '--set-env-vars=CORS_EXPOSE_HEADERS=Content-Range,Accept-Ranges,Content-Length,Content-Type'
