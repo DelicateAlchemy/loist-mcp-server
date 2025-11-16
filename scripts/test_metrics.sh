@@ -16,12 +16,8 @@ import sys
 sys.path.insert(0, 'src')
 
 try:
-    # Import directly to avoid __init__.py import issues
-    import importlib.util
-    spec = importlib.util.spec_from_file_location('handler', 'src/tasks/handler.py')
-    handler_module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(handler_module)
-    get_waveform_metrics = handler_module.get_waveform_metrics
+    # Import using normal module imports (now that dependencies are fixed)
+    from src.tasks.handler import get_waveform_metrics
     
     # Get metrics
     try:
@@ -77,13 +73,8 @@ import sys
 sys.path.insert(0, 'src')
 
 try:
-    # Import directly to avoid __init__.py import issues
-    import importlib.util
-    spec = importlib.util.spec_from_file_location('handler', 'src/tasks/handler.py')
-    handler_module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(handler_module)
-    _update_waveform_metrics = handler_module._update_waveform_metrics
-    get_waveform_metrics = handler_module.get_waveform_metrics
+    # Import using normal module imports (now that dependencies are fixed)
+    from src.tasks.handler import _update_waveform_metrics, get_waveform_metrics
     
     # Get initial metrics
     initial_metrics = get_waveform_metrics()
@@ -130,13 +121,8 @@ import sys
 sys.path.insert(0, 'src')
 
 try:
-    # Import directly to avoid __init__.py import issues
-    import importlib.util
-    spec = importlib.util.spec_from_file_location('handler', 'src/tasks/handler.py')
-    handler_module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(handler_module)
-    _update_waveform_metrics = handler_module._update_waveform_metrics
-    get_waveform_metrics = handler_module.get_waveform_metrics
+    # Import using normal module imports (now that dependencies are fixed)
+    from src.tasks.handler import _update_waveform_metrics, get_waveform_metrics
     
     # Add some test metrics
     _update_waveform_metrics(success=True, processing_time=1.0, cache_hit=True)
@@ -190,13 +176,8 @@ import sys
 sys.path.insert(0, 'src')
 
 try:
-    # Import directly to avoid __init__.py import issues
-    import importlib.util
-    spec = importlib.util.spec_from_file_location('handler', 'src/tasks/handler.py')
-    handler_module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(handler_module)
-    _update_waveform_metrics = handler_module._update_waveform_metrics
-    get_waveform_metrics = handler_module.get_waveform_metrics
+    # Import using normal module imports (now that dependencies are fixed)
+    from src.tasks.handler import _update_waveform_metrics, get_waveform_metrics
     
     # Add metrics with different error types
     _update_waveform_metrics(success=False, error_type='ValidationError')
@@ -239,15 +220,10 @@ import sys
 sys.path.insert(0, 'src')
 
 try:
-    # Import directly to avoid __init__.py import issues
-    import importlib.util
-    spec = importlib.util.spec_from_file_location('handler', 'src/tasks/handler.py')
-    handler_module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(handler_module)
-    
+    # Import using normal module imports (now that dependencies are fixed)
     # get_waveform_metrics_tool is registered as an MCP tool, not a direct function
     # We'll test get_waveform_metrics instead and verify the structure
-    get_waveform_metrics = handler_module.get_waveform_metrics
+    from src.tasks.handler import get_waveform_metrics
     
     # Call the metrics function (the tool wraps this)
     result = get_waveform_metrics()
@@ -281,13 +257,8 @@ import threading
 sys.path.insert(0, 'src')
 
 try:
-    # Import directly to avoid __init__.py import issues
-    import importlib.util
-    spec = importlib.util.spec_from_file_location('handler', 'src/tasks/handler.py')
-    handler_module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(handler_module)
-    _update_waveform_metrics = handler_module._update_waveform_metrics
-    get_waveform_metrics = handler_module.get_waveform_metrics
+    # Import using normal module imports (now that dependencies are fixed)
+    from src.tasks.handler import _update_waveform_metrics, get_waveform_metrics
     
     # Get initial count
     initial_result = get_waveform_metrics()

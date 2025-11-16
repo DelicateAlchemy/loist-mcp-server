@@ -73,13 +73,9 @@ import sys
 import time
 sys.path.insert(0, 'src')
 
-# Import directly to avoid __init__.py import issues
+# Import using normal module imports (now that dependencies are fixed)
 try:
-    import importlib.util
-    spec = importlib.util.spec_from_file_location('local_queue', 'src/tasks/local_queue.py')
-    local_queue_module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(local_queue_module)
-    LocalTaskQueue = local_queue_module.LocalTaskQueue
+    from src.tasks.local_queue import LocalTaskQueue
 except ImportError as e:
     print(f'⚠️  Import failed (expected if dependencies missing): {e}')
     sys.exit(0)
@@ -130,14 +126,9 @@ import sys
 import time
 sys.path.insert(0, 'src')
 
-# Import directly to avoid __init__.py import issues
+# Import using normal module imports (now that dependencies are fixed)
 try:
-    import importlib.util
-    spec = importlib.util.spec_from_file_location('local_queue', 'src/tasks/local_queue.py')
-    local_queue_module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(local_queue_module)
-    LocalTaskQueue = local_queue_module.LocalTaskQueue
-    LocalTask = local_queue_module.LocalTask
+    from src.tasks.local_queue import LocalTaskQueue, LocalTask
 except ImportError as e:
     print(f'⚠️  Import failed (expected if dependencies missing): {e}')
     sys.exit(0)
@@ -190,13 +181,9 @@ import sys
 import time
 sys.path.insert(0, 'src')
 
-# Import directly to avoid __init__.py import issues
+# Import using normal module imports (now that dependencies are fixed)
 try:
-    import importlib.util
-    spec = importlib.util.spec_from_file_location('local_queue', 'src/tasks/local_queue.py')
-    local_queue_module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(local_queue_module)
-    LocalTaskQueue = local_queue_module.LocalTaskQueue
+    from src.tasks.local_queue import LocalTaskQueue
 except ImportError as e:
     print(f'⚠️  Import failed (expected if dependencies missing): {e}')
     sys.exit(0)
@@ -241,16 +228,9 @@ python3 -c "
 import sys
 sys.path.insert(0, 'src')
 
-# Import directly to avoid __init__.py import issues
+# Import using normal module imports (now that dependencies are fixed)
 try:
-    import importlib.util
-    spec = importlib.util.spec_from_file_location('local_queue', 'src/tasks/local_queue.py')
-    local_queue_module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(local_queue_module)
-    get_local_queue = local_queue_module.get_local_queue
-    enqueue_local_task = local_queue_module.enqueue_local_task
-    get_local_task_status = local_queue_module.get_local_task_status
-    shutdown_local_queue = local_queue_module.shutdown_local_queue
+    from src.tasks.local_queue import get_local_queue, enqueue_local_task, get_local_task_status, shutdown_local_queue
 except ImportError as e:
     print(f'⚠️  Import failed (expected if dependencies missing): {e}')
     sys.exit(0)
@@ -296,13 +276,9 @@ python3 -c "
 import sys
 sys.path.insert(0, 'src')
 
-# Import directly to avoid __init__.py import issues
+# Import using normal module imports (now that dependencies are fixed)
 try:
-    import importlib.util
-    spec = importlib.util.spec_from_file_location('local_queue', 'src/tasks/local_queue.py')
-    local_queue_module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(local_queue_module)
-    LocalTaskQueue = local_queue_module.LocalTaskQueue
+    from src.tasks.local_queue import LocalTaskQueue
 except ImportError as e:
     print(f'⚠️  Import failed (expected if dependencies missing): {e}')
     sys.exit(0)
@@ -352,23 +328,19 @@ import sys
 sys.path.insert(0, 'src')
 
 try:
-    # Import directly to avoid __init__.py import issues
-    import importlib.util
-    spec = importlib.util.spec_from_file_location('local_handler', 'src/tasks/local_handler.py')
-    local_handler_module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(local_handler_module)
-    handle_local_task = local_handler_module.handle_local_task
-    
+    # Import using normal module imports (now that dependencies are fixed)
+    from src.tasks.local_handler import handle_local_task
+
     # Test that handler can be imported and called
     # Note: Actual execution requires proper task payloads
     print('✅ Local task handler can be imported')
-    
+
     # Test handler function signature
     import inspect
     sig = inspect.signature(handle_local_task)
     assert 'payload' in sig.parameters, 'Handler should accept payload parameter'
     print('✅ Local task handler has correct signature')
-    
+
 except ImportError as e:
     print(f'⚠️  Local task handler test skipped: {e}')
     print('   (This is expected if handler module is not available)')
