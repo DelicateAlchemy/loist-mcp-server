@@ -408,9 +408,11 @@ steps:
       - '--max-instances=10'
       - '--min-instances=0'
       - '--port=8080'
-      # Health check optimization: use DB-free liveness check
+      # Health check optimization: use DB-free liveness check and reduced frequency
       - '--liveness-probe-path=/health/live'
       - '--readiness-probe-path=/health/ready'
+      - '--liveness-probe-interval=60'
+      - '--readiness-probe-interval=60'
       # Explicit command override to ensure correct startup (fallback if Dockerfile CMD is misinterpreted)
       - '--command=/usr/local/bin/python'
       - '--args=/app/src/server.py'
