@@ -107,13 +107,14 @@ class LocalTaskQueue:
         # Task status tracking
         self._task_statuses: Dict[str, Dict[str, Any]] = {}
 
-        # Start worker threads
+        # Start worker threads (non-daemon for graceful shutdown)
         self._workers = []
+        self._shutdown_timeout = 30.0  # Default shutdown timeout per worker
         for i in range(max_workers):
             worker = threading.Thread(
                 target=self._worker_loop,
                 name=f"task-worker-{i}",
-                daemon=True
+                daemon=False  # Allow graceful shutdown
             )
             worker.start()
             self._workers.append(worker)
@@ -190,18 +191,30 @@ class LocalTaskQueue:
             return stats
 
     def _worker_loop(self):
-        """Main worker loop that processes tasks."""
+        """Main worker loop that processes tasks with graceful shutdown handling."""
+        logger.debug(f"Worker {threading.current_thread().name} started")
+
         while not self._shutdown_event.is_set():
             try:
+                # Check for shutdown signal more frequently
+                if self._shutdown_event.wait(timeout=0.01):
+                    break
+
                 task = self._get_next_task()
                 if task:
                     self._execute_task(task)
                 else:
-                    # No tasks available, sleep briefly
-                    time.sleep(0.1)
+                    # No tasks available, sleep briefly but check shutdown frequently
+                    self._shutdown_event.wait(timeout=0.1)
+
             except Exception as e:
-                logger.error(f"Worker error: {e}")
-                time.sleep(1)  # Prevent tight error loops
+                logger.error(f"Worker {threading.current_thread().name} error: {e}")
+                # Brief pause to prevent tight error loops, but still check shutdown
+                if not self._shutdown_event.wait(timeout=1.0):
+                    continue
+                break
+
+        logger.debug(f"Worker {threading.current_thread().name} shutting down")
 
     def _get_next_task(self) -> Optional[LocalTask]:
         """
@@ -313,7 +326,7 @@ class LocalTaskQueue:
 
     def shutdown(self, timeout: float = 30.0):
         """
-        Shutdown the task queue gracefully.
+        Shutdown the task queue gracefully with improved timeout handling.
 
         Args:
             timeout: Maximum time to wait for tasks to complete
@@ -323,16 +336,101 @@ class LocalTaskQueue:
         # Signal shutdown
         self._shutdown_event.set()
 
-        # Wait for worker threads
-        for worker in self._workers:
-            worker.join(timeout=timeout / len(self._workers))
+        # Persist final statistics before shutdown
+        self._persist_statistics()
+
+        # Wait for worker threads with individual timeouts
+        shutdown_start = time.time()
+        remaining_timeout = timeout
+
+        for i, worker in enumerate(self._workers):
+            if not worker.is_alive():
+                logger.debug(f"Worker {worker.name} already stopped")
+                continue
+
+            # Allocate timeout proportionally, but ensure minimum timeout per worker
+            worker_timeout = max(remaining_timeout / (len(self._workers) - i), 1.0)
+
+            logger.debug(f"Waiting for {worker.name} to shutdown (timeout: {worker_timeout}s)")
+            worker.join(timeout=worker_timeout)
+
+            if worker.is_alive():
+                logger.warning(f"Worker {worker.name} did not shutdown gracefully within {worker_timeout}s")
+                # Continue with shutdown process - don't block other workers
+            else:
+                logger.debug(f"Worker {worker.name} shutdown successfully")
+
+            # Update remaining timeout
+            elapsed = time.time() - shutdown_start
+            remaining_timeout = max(timeout - elapsed, 0)
+
+            if remaining_timeout <= 0:
+                logger.warning("Shutdown timeout exceeded, forcing remaining workers to stop")
+                break
+
+        # Check for any remaining alive workers
+        alive_workers = [w for w in self._workers if w.is_alive()]
+        if alive_workers:
+            logger.warning(f"{len(alive_workers)} workers still alive after shutdown timeout")
 
         # Shutdown executor
-        self._executor.shutdown(wait=True)
+        try:
+            # ThreadPoolExecutor.shutdown() doesn't support timeout parameter directly
+            # We use wait=True to wait for all tasks to complete
+            self._executor.shutdown(wait=True)
+            logger.debug("Thread pool executor shutdown successfully")
+        except Exception as e:
+            logger.error(f"Error shutting down thread pool executor: {e}")
 
         # Log final statistics
-        stats = self.get_stats()
-        logger.info(f"Task queue shutdown complete. Final stats: {stats}")
+        final_stats = self.get_stats()
+        total_time = time.time() - shutdown_start
+        logger.info(f"Task queue shutdown complete in {total_time:.2f}s. Final stats: {final_stats}")
+
+        # Clear references to help garbage collection
+        self._workers.clear()
+        self._queue.clear()
+        self._task_statuses.clear()
+
+    def _persist_statistics(self):
+        """
+        Persist queue statistics for analysis and debugging.
+
+        This method saves statistics to a file or database for later analysis.
+        In a production system, this might write to a monitoring system.
+        """
+        try:
+            import json
+            import os
+            from pathlib import Path
+
+            # Get current statistics
+            stats = self.get_stats()
+            task_statuses = self._task_statuses.copy()
+
+            # Create statistics snapshot
+            snapshot = {
+                "timestamp": time.time(),
+                "queue_stats": stats,
+                "task_statuses": task_statuses,
+                "shutdown_reason": "graceful_shutdown"
+            }
+
+            # Try to save to a stats file (create directory if needed)
+            stats_dir = Path("logs/queue_stats")
+            stats_dir.mkdir(parents=True, exist_ok=True)
+
+            filename = f"queue_shutdown_{int(time.time())}.json"
+            filepath = stats_dir / filename
+
+            with open(filepath, 'w') as f:
+                json.dump(snapshot, f, indent=2, default=str)
+
+            logger.info(f"Queue statistics persisted to {filepath}")
+
+        except Exception as e:
+            logger.warning(f"Failed to persist queue statistics: {e}")
+            # Don't let statistics persistence failure prevent shutdown
 
     def __del__(self):
         """Ensure cleanup on deletion."""
