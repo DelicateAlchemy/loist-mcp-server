@@ -381,14 +381,45 @@ for name, breaker in breakers.items():
 
 ### Circuit Breaker Settings
 
-Currently, circuit breaker configuration is done programmatically. Future enhancement: environment variables:
+Circuit breaker configuration can be done programmatically or via environment variables. Environment variables provide global defaults that can be overridden per instance.
+
+#### Environment Variables
 
 ```bash
-# Future: Environment variable configuration
-CIRCUIT_BREAKER_FAILURE_THRESHOLD=5
-CIRCUIT_BREAKER_RECOVERY_TIMEOUT=60
-CIRCUIT_BREAKER_SUCCESS_THRESHOLD=3
+# Global circuit breaker configuration
+CIRCUIT_BREAKER_FAILURE_THRESHOLD=5      # Failures before opening (default: 5)
+CIRCUIT_BREAKER_RECOVERY_TIMEOUT=60.0   # Seconds to wait before recovery (default: 60.0)
+CIRCUIT_BREAKER_SUCCESS_THRESHOLD=3     # Successes needed to close from half-open (default: 3)
+CIRCUIT_BREAKER_TIMEOUT=30.0            # Request timeout in seconds (default: 30.0)
 ```
+
+#### Programmatic Configuration
+
+```python
+from src.exceptions.circuit_breaker import CircuitBreakerConfig, get_circuit_breaker
+
+# Using environment variable defaults
+config = CircuitBreakerConfig(name="database-pool")
+breaker = get_circuit_breaker("database-pool", config)
+
+# Overriding specific settings
+config = CircuitBreakerConfig(
+    name="api-client",
+    failure_threshold=3,      # Override env var default
+    recovery_timeout=30.0,    # Override env var default
+    success_threshold=2,      # Override env var default
+    timeout=10.0              # Override env var default
+)
+breaker = get_circuit_breaker("api-client", config)
+```
+
+#### Configuration Priority
+
+1. **Instance-specific parameters** (highest priority)
+2. **Environment variables** (global defaults)
+3. **Built-in defaults** (lowest priority)
+
+This allows fine-tuned configuration per service while maintaining sensible global defaults.
 
 ### Retry Settings
 
