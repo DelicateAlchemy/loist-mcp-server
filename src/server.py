@@ -157,8 +157,8 @@ def health_check() -> dict:
     try:
         logger.debug("Health check requested")
 
-        # Check all dependencies
-        db_status = check_database_availability()
+        # Check all dependencies (using cached DB check for cost optimization)
+        db_status = check_database_availability_cached()
         gcs_status = check_gcs_health()
         tasks_status = check_cloud_tasks_health()
 
