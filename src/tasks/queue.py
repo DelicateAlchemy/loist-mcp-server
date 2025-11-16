@@ -15,9 +15,6 @@ Features:
 import logging
 import json
 from typing import Dict, Any, Optional
-from google.cloud import tasks
-from google.protobuf import timestamp_pb2
-from google.api_core import exceptions as google_exceptions
 
 logger = logging.getLogger(__name__)
 
@@ -27,15 +24,21 @@ class TaskQueueError(Exception):
     pass
 
 
-def _get_cloud_tasks_client() -> tasks.CloudTasksClient:
+def _get_cloud_tasks_client():
     """
     Get or create Cloud Tasks client.
 
     Returns:
         Configured Cloud Tasks client
+
+    Raises:
+        TaskQueueError: If google-cloud-tasks is not available or client creation fails
     """
     try:
+        from google.cloud import tasks
         return tasks.CloudTasksClient()
+    except ImportError as e:
+        raise TaskQueueError("google-cloud-tasks not installed. Install with: pip install google-cloud-tasks") from e
     except Exception as e:
         logger.error(f"Failed to create Cloud Tasks client: {e}")
         raise TaskQueueError(f"Cloud Tasks client creation failed: {e}") from e
@@ -134,6 +137,14 @@ def enqueue_waveform_generation(
 
     client = _get_cloud_tasks_client()
     queue_path = _get_queue_path(project_id, location, queue_name)
+
+    # Import Cloud Tasks classes lazily
+    try:
+        from google.cloud import tasks
+        from google.protobuf import timestamp_pb2
+        from google.api_core import exceptions as google_exceptions
+    except ImportError as e:
+        raise TaskQueueError("google-cloud-tasks not installed. Install with: pip install google-cloud-tasks") from e
 
     # Create task payload
     payload = _create_task_payload(
