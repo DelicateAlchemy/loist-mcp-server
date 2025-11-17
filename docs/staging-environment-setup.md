@@ -37,55 +37,11 @@ The staging environment provides a production-like setup for comprehensive integ
 - **Domain**: `https://staging.loist.io`
 - **Region**: `us-central1`
 
-## Local Development Setup
+## Prerequisites
 
-### Prerequisites
-
-- Docker and Docker Compose
 - Google Cloud SDK (`gcloud`)
-- Service account key with appropriate permissions
-- Python 3.11+ (for local testing)
-
-### Quick Start with Docker Compose
-
-1. **Clone and navigate to the project:**
-   ```bash
-   git checkout task-15
-   cd /path/to/loist-mcp-server
-   ```
-
-2. **Set up environment variables:**
-   ```bash
-   # Copy staging environment template
-   cp .env.example .env.staging
-
-   # Edit with your values
-   nano .env.staging
-   ```
-
-3. **Start staging environment:**
-   ```bash
-   docker-compose -f docker-compose.staging.yml up -d
-   ```
-
-4. **Verify services are running:**
-   ```bash
-   docker-compose -f docker-compose.staging.yml ps
-   ```
-
-5. **Check logs:**
-   ```bash
-   docker-compose -f docker-compose.staging.yml logs -f mcp-server-staging
-   ```
-
-### Local Staging Configuration
-
-The `docker-compose.staging.yml` includes:
-
-- **Cloud SQL Proxy**: Connects to staging database
-- **MCP Server**: Staging configuration with debugging enabled
-- **Database**: Local PostgreSQL fallback for testing
-- **Networking**: Isolated staging network
+- Access to Google Cloud Project (`loist-music-library`)
+- Appropriate IAM permissions for Cloud Build and Cloud Run
 
 ### Environment Variables
 

@@ -5,11 +5,11 @@
 # Priority: medium
 # Description: Set up a comprehensive staging environment that bridges local development and production, providing a production-like setup with containerization, test data, and automated deployment pipelines for integration testing and QA.
 # Details:
-1. Docker Configuration:
-   - Create a staging-specific Dockerfile that mirrors production but includes debugging tools
-   - Configure Docker Compose for multi-service orchestration in staging
-   - Implement volume mounting for easy configuration updates without rebuilds
-   - Set up networking to mimic production service communication
+1. Cloud Infrastructure Setup:
+   - Configure Cloud Run service for staging environment
+   - Set up Cloud SQL staging database instance
+   - Create dedicated GCS staging bucket with lifecycle policies
+   - Configure IAM permissions and service accounts
 
 2. Database Setup:
    - Create a staging database instance with schema matching production
@@ -44,8 +44,8 @@
 
 # Test Strategy:
 1. Environment Validation:
-   - Verify Docker containers start correctly with staging configurations
-   - Confirm all services can communicate with each other as expected
+   - Verify Cloud Run staging service starts correctly with staging configurations
+   - Confirm all cloud services can communicate with each other as expected
    - Validate that staging environment variables are correctly loaded
    - Verify MCP server naming conventions are properly implemented with staging branch context
 
@@ -89,11 +89,11 @@
 ### Details:
 Document should include network topology, service relationships, data flow diagrams, and comparison with production environment highlighting key differences. Include resource requirements and scaling considerations.
 
-## 2. Configure Docker Containers for Staging [done]
+## 2. Configure Cloud Build Pipeline [done]
 ### Dependencies: 15.1
-### Description: Set up Docker configuration files optimized for the staging environment.
+### Description: Set up automated deployment pipeline for staging environment.
 ### Details:
-Create staging-specific Dockerfiles and docker-compose configurations. Include debugging tools, configure appropriate resource limits, and ensure containers have proper tagging for staging. Set up Docker networking to mirror production.
+Configure cloudbuild-staging.yaml with automated testing, container building, and deployment to Cloud Run staging service. Set up environment-specific configuration injection and secret management.
 
 ## 3. Set Up GCS Bucket for Staging [done]
 ### Dependencies: 15.1
@@ -111,7 +111,7 @@ Create database instances, implement schema, configure connection pooling, set u
 ### Dependencies: 15.2, 15.3, 15.4
 ### Description: Create configuration files and environment variables specific to the staging environment.
 ### Details:
-Develop a comprehensive set of environment variables, feature flags, and configuration files that differentiate staging from other environments. Include debugging options, logging levels, and performance monitoring settings.
+Develop a comprehensive set of environment variables, feature flags, and configuration files that differentiate staging from other environments. Include debugging options, logging levels, and performance monitoring settings for cloud deployment.
 
 ## 6. Set Up IAM Permissions for Staging [done]
 ### Dependencies: 15.1, 15.3

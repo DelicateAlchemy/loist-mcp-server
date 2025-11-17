@@ -140,20 +140,6 @@ The server implements a layered architecture with clear separation of concerns:
 }
 ```
 
-**Staging Environment (docker-compose.staging.yml):**
-```yaml
-version: '3.8'
-services:
-  mcp-server-staging:
-    image: loist-mcp-server:latest
-    environment:
-      - SERVER_NAME=Music Library MCP - Staging
-      - SERVER_TRANSPORT=http
-      - GCS_BUCKET_NAME=loist-mvp-staging-audio-files
-      - DB_NAME=loist_mvp_staging
-    ports:
-      - "8081:8080"  # Different port than local dev
-```
 
 **Production Deployment:**
 ```json
