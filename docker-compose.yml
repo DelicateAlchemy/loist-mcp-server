@@ -56,7 +56,7 @@ services:
     
     volumes:
       # Mount source code for live development (hot reload)
-      - ./src:/app/src:ro
+      - ./src:/app/src
       # Mount database migrations and config
       - ./database:/app/database:ro
       # Mount templates for embed page rendering

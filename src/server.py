@@ -736,6 +736,83 @@ def detect_device_type(request) -> str:
     return 'desktop'
 
 
+def detect_platform(request) -> str:
+    """
+    Detect embedding platform from request headers for platform-specific optimizations.
+
+    Priority:
+    1. Query parameter ?platform=coda|notion|etc (explicit override)
+    2. Referer header parsing
+    3. User-Agent header parsing
+    4. Default to 'generic'
+
+    Args:
+        request: Starlette Request object
+
+    Returns:
+        str: Platform name ('coda', 'notion', 'slack', 'generic', etc.)
+    """
+    # Check for explicit platform override in query parameters
+    platform_param = request.query_params.get('platform', '').lower()
+    if platform_param:
+        logger.debug(f"Platform detection: explicit override to '{platform_param}'")
+        return platform_param
+
+    # Check Referer header for platform detection
+    referer = request.headers.get('referer', '').lower()
+
+    # Platform-specific referer patterns
+    platform_patterns = {
+        'coda': ['coda.io', 'coda.com'],
+        'notion': ['notion.so'],
+        'slack': ['slack.com'],
+        'discord': ['discord.com', 'discordapp.com'],
+        'twitter': ['twitter.com', 't.co'],
+        'facebook': ['facebook.com', 'fb.com'],
+        'linkedin': ['linkedin.com'],
+        'wordpress': ['wordpress.com', '.wordpress.com'],
+        'medium': ['medium.com'],
+        'github': ['github.com'],
+        'gitlab': ['gitlab.com'],
+        'figma': ['figma.com'],
+        'canva': ['canva.com'],
+        'miro': ['miro.com'],
+        'trello': ['trello.com'],
+        'asana': ['asana.com'],
+        'linear': ['linear.app'],
+    }
+
+    for platform, patterns in platform_patterns.items():
+        if any(pattern in referer for pattern in patterns):
+            logger.debug(f"Platform detection: {platform} (Referer: {referer[:50]}...)")
+            return platform
+
+    # Check User-Agent header for platform-specific patterns
+    user_agent = request.headers.get('user-agent', '').lower()
+
+    # Platform-specific user agent patterns
+    ua_patterns = {
+        'slack': ['slack'],
+        'discord': ['discord'],
+        'twitter': ['twitter'],
+        'facebook': ['facebookexternalhit', 'facebot'],
+        'linkedin': ['linkedinbot'],
+        'whatsapp': ['whatsapp'],
+        'telegram': ['telegrambot'],
+        'skype': ['skypeuripreview'],
+        'coda': ['coda'],  # Coda might have specific UA patterns
+    }
+
+    for platform, patterns in ua_patterns.items():
+        if any(pattern in user_agent for pattern in patterns):
+            logger.debug(f"Platform detection: {platform} (User-Agent: {user_agent[:50]}...)")
+            return platform
+
+    # Default to generic
+    logger.debug(f"Platform detection: generic (Referer: {referer[:30]}..., User-Agent: {user_agent[:30]}...)")
+    return 'generic'
+
+
 async def get_waveform_context(audio_id: str) -> dict:
     """
     Get waveform context for audio track (used by waveform embed endpoints).
@@ -823,9 +900,31 @@ async def embed_page(request):
     logger.info(f"[EMBED_TEST] Embed endpoint called for audioId: {audioId}")
     logger.info(f"Embed page requested for audio ID: {audioId}")
 
+    # Detect platform for platform-specific optimizations
+    platform = detect_platform(request)
+    logger.info(f"Detected platform: {platform}")
+
     # Check for template query parameter
-    template = request.query_params.get('template', 'standard')
-    logger.info(f"Requested template: {template}")
+    # Support both 'template' and 'compact' parameters for backward compatibility
+    template = request.query_params.get('template')
+    if template is None:
+        # Check for 'compact=true' as alias for 'template=waveform'
+        compact = request.query_params.get('compact', 'false').lower() == 'true'
+        template = 'waveform' if compact else 'standard'
+    logger.info(f"Requested template: {template}, compact mode: {request.query_params.get('compact', 'false')}")
+
+    # Platform-specific template adjustments
+    if platform == 'coda':
+        # Coda seems to prefer card previews over rich embeds
+        # Force waveform template and ensure compact styling
+        template = 'waveform'
+        logger.info("Coda detected: forcing waveform template for better embed compatibility")
+    elif platform == 'notion':
+        # Notion works well with our current implementation
+        logger.info("Notion detected: using standard embed behavior")
+    elif platform == 'slack':
+        # Slack might need different handling
+        logger.info("Slack detected: using standard embed behavior")
 
     try:
         # Get metadata from database
@@ -1629,10 +1728,25 @@ async def oembed_endpoint(request):
         # Extract query parameters
         url_param = request.query_params.get("url")
         format_param = request.query_params.get("format", "json")
-        # Default dimensions optimized for horizontal audio player layout
-        # Aspect ratio ~2.5:1 (width:height) for better fit
-        maxwidth = int(request.query_params.get("maxwidth", 600))
-        maxheight = int(request.query_params.get("maxheight", 240))
+
+        # Detect platform for platform-specific optimizations
+        platform = detect_platform(request)
+
+        # Platform-specific dimension adjustments
+        if platform == 'coda':
+            # Coda seems to prefer card previews - try even more compact dimensions
+            default_width, default_height = 480, 180
+            logger.info("Coda detected for oEmbed: using compact dimensions (480x180)")
+        elif platform == 'notion':
+            # Notion works well with slightly larger embeds
+            default_width, default_height = 520, 200
+            logger.info("Notion detected for oEmbed: using standard dimensions (520x200)")
+        else:
+            # Default dimensions optimized for embedding platforms
+            default_width, default_height = 500, 200
+
+        maxwidth = int(request.query_params.get("maxwidth", default_width))
+        maxheight = int(request.query_params.get("maxheight", default_height))
 
         # Validate URL parameter
         if not url_param:
@@ -1654,8 +1768,15 @@ async def oembed_endpoint(request):
                 status_code=400,
             )
 
-        # Extract audio ID from URL
-        audio_id = url.replace(expected_prefix, "").strip()
+        # Extract audio ID from URL (handle both /embed/{id} and /embed/{id}/waveform formats)
+        url_suffix = url.replace(expected_prefix, "").strip()
+
+        # Remove /waveform suffix if present
+        if url_suffix.endswith('/waveform'):
+            audio_id = url_suffix[:-9]  # Remove '/waveform'
+        else:
+            audio_id = url_suffix
+
         if not audio_id:
             logger.warning("oEmbed request with empty audio ID")
             return JSONResponse({"error": "Invalid URL format. Missing audio ID."}, status_code=400)
@@ -1700,17 +1821,31 @@ async def oembed_endpoint(request):
         # Include proper allow attributes for Notion iframe embedding
         # allow="autoplay; encrypted-media; fullscreen" enables media playback in sandboxed iframes
         iframe_html = (
-            f'<iframe src="{embed_url}?compact=true" '
+            f'<iframe src="{embed_url}?compact=true&platform={platform}" '
             f'width="{maxwidth}" height="{maxheight}" '
             f'frameborder="0" '
-            f'allow="autoplay; encrypted-media; fullscreen" '
+            f'allow="autoplay; encrypted-media; fullscreen; accelerometer; clipboard-write; gyroscope; picture-in-picture" '
+            f'referrerpolicy="strict-origin-when-cross-origin" '
+            f'title="{title}" '
+            f'allowfullscreen '
             f'style="border-radius: 12px; border: none;" '
             f'scrolling="no"></iframe>'
         )
-        
+
+        # Platform-specific oEmbed type adjustments
+        if platform == 'coda':
+            # Coda seems to prefer card previews - try different approaches
+            oembed_type = "video"  # Stick with video type but ensure compact
+            logger.info("Coda detected: using video type with compact styling")
+        elif platform == 'notion':
+            oembed_type = "rich"  # Notion works well with rich embeds
+            logger.info("Notion detected: using rich embed type")
+        else:
+            oembed_type = "video"  # Default to video type
+
         oembed_response = {
             "version": "1.0",
-            "type": "rich",
+            "type": oembed_type,
             "provider_name": "Loist Music Library",
             "provider_url": config.embed_base_url,
             "title": title,
