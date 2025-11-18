@@ -95,7 +95,7 @@ npx @modelcontextprotocol/inspector@latest
 # URL: https://music-library-mcp-7de5nxpr4q-uc.a.run.app/mcp
 ```
 
-See: `docs/local-testing-mcp.md` for detailed MCP Inspector usage
+See: `docs/mcp-testing-guide.md` for detailed MCP Inspector usage
 
 **Status**: ⚠️  DEFERRED - Use MCP Inspector for full validation
 
@@ -203,7 +203,7 @@ See: `docs/local-testing-mcp.md` for detailed MCP Inspector usage
 
 1. **MCP Protocol Testing**
    - Deferred to MCP Inspector (proper tool for HTTP transport)
-   - See: `docs/local-testing-mcp.md`
+   - See: `docs/mcp-testing-guide.md`
 
 2. **Live Database Testing**
    - Requires database credentials
