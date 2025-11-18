@@ -22,8 +22,8 @@ from fastmcp import FastMCP
 from starlette.responses import HTMLResponse, JSONResponse
 from starlette.templating import Jinja2Templates
 
-from auth import SimpleBearerAuth
-from config import config
+from src.auth import SimpleBearerAuth
+from src.config import config
 
 # Import exceptions (clean and simple - no complex loading needed)
 from src.exceptions import (
@@ -915,10 +915,10 @@ async def embed_page(request):
 
     # Platform-specific template adjustments
     if platform == 'coda':
-        # Coda seems to prefer card previews over rich embeds
-        # Force waveform template and ensure compact styling
-        template = 'waveform'
-        logger.info("Coda detected: forcing waveform template for better embed compatibility")
+        # Coda works better with minimal waveform-only design
+        # Use minimal template for better embed compatibility
+        template = 'waveform-minimal'
+        logger.info("Coda detected: forcing minimal waveform template for better embed compatibility")
     elif platform == 'notion':
         # Notion works well with our current implementation
         logger.info("Notion detected: using standard embed behavior")
@@ -1062,7 +1062,39 @@ async def embed_page(request):
         }
         mock_request = Request(scope)
 
-        if template == 'waveform':
+        if template == 'waveform-minimal':
+            # Get waveform context for minimal waveform template
+            # Note: get_waveform_context handles exceptions gracefully and returns default context
+            logger.info("Getting waveform context for minimal template rendering")
+            waveform_context = await get_waveform_context(audioId)
+            logger.info(f"Waveform context retrieved: available={waveform_context.get('waveform_available', False)}")
+            
+            # Always use minimal waveform template when requested, even if waveform data isn't available yet
+            # The template will handle missing waveform data gracefully
+            device_type = detect_device_type(request)
+            interactive_mode = device_type == 'desktop'
+
+            logger.info(f"Using minimal waveform template with device_type: {device_type}, interactive_mode: {interactive_mode}")
+
+            response = templates.TemplateResponse(
+                "embed-waveform-minimal.html",
+                {
+                    "request": mock_request,
+                    "audio_id": audioId,
+                    "metadata": template_metadata,
+                    "stream_url": stream_url,
+                    "thumbnail_url": thumbnail_url,
+                    "mime_type": mime_type,
+                    "duration_formatted": duration_formatted,
+                    "embed_base_url": config.embed_base_url,
+                    "device_type": device_type,
+                    "is_mobile": device_type == 'mobile',
+                    "is_desktop": device_type == 'desktop',
+                    "interactive_mode": interactive_mode,
+                    **waveform_context
+                },
+            )
+        elif template == 'waveform':
             # Get waveform context for waveform template
             # Note: get_waveform_context handles exceptions gracefully and returns default context
             logger.info("Getting waveform context for template rendering")
@@ -1758,7 +1790,7 @@ async def oembed_endpoint(request):
         logger.info(f"oEmbed request for URL: {url}")
 
         # Validate URL format
-        from config import config
+        from src.config import config
 
         expected_prefix = f"{config.embed_base_url}/embed/"
         if not url.startswith(expected_prefix):
@@ -1805,7 +1837,11 @@ async def oembed_endpoint(request):
                 # Continue without thumbnail
 
         # Build embed URL (full URL to player page)
-        embed_url = f"{config.embed_base_url}/embed/{audio_id}"
+        # For Coda, use minimal waveform template; for others, use compact parameter
+        if platform == 'coda':
+            embed_url = f"{config.embed_base_url}/embed/{audio_id}?template=waveform-minimal&platform={platform}"
+        else:
+            embed_url = f"{config.embed_base_url}/embed/{audio_id}?compact=true&platform={platform}"
 
         # Format metadata
         title = metadata.get("title", "Untitled")
@@ -1820,17 +1856,30 @@ async def oembed_endpoint(request):
         # Build oEmbed response according to spec
         # Include proper allow attributes for Notion iframe embedding
         # allow="autoplay; encrypted-media; fullscreen" enables media playback in sandboxed iframes
-        iframe_html = (
-            f'<iframe src="{embed_url}?compact=true&platform={platform}" '
-            f'width="{maxwidth}" height="{maxheight}" '
-            f'frameborder="0" '
-            f'allow="autoplay; encrypted-media; fullscreen; accelerometer; clipboard-write; gyroscope; picture-in-picture" '
-            f'referrerpolicy="strict-origin-when-cross-origin" '
-            f'title="{title}" '
-            f'allowfullscreen '
-            f'style="border-radius: 12px; border: none;" '
-            f'scrolling="no"></iframe>'
-        )
+        try:
+            # Escape title for HTML attribute
+            title_escaped = title.replace('"', '&quot;').replace("'", "&#x27;")
+            iframe_html = (
+                f'<iframe src="{embed_url}" '
+                f'width="{maxwidth}" height="{maxheight}" '
+                f'frameborder="0" '
+                f'allow="autoplay; encrypted-media; fullscreen; accelerometer; clipboard-write; gyroscope; picture-in-picture" '
+                f'referrerpolicy="strict-origin-when-cross-origin" '
+                f'title="{title_escaped}" '
+                f'allowfullscreen '
+                f'style="border-radius: 12px; border: none;" '
+                f'scrolling="no"></iframe>'
+            )
+            logger.info(f"Generated iframe HTML for oEmbed: {iframe_html[:100]}...")
+        except Exception as e:
+            logger.error(f"Error generating iframe HTML: {e}")
+            # Fallback iframe HTML
+            iframe_html = (
+                f'<iframe src="{embed_url}" '
+                f'width="{maxwidth}" height="{maxheight}" '
+                f'frameborder="0" allow="autoplay; encrypted-media; fullscreen" '
+                f'style="border: none;"></iframe>'
+            )
 
         # Platform-specific oEmbed type adjustments
         if platform == 'coda':
@@ -1842,6 +1891,16 @@ async def oembed_endpoint(request):
             logger.info("Notion detected: using rich embed type")
         else:
             oembed_type = "video"  # Default to video type
+
+        # Ensure iframe_html is never empty
+        if not iframe_html or len(iframe_html.strip()) == 0:
+            logger.error("iframe_html is empty, using fallback")
+            iframe_html = (
+                f'<iframe src="{embed_url}" '
+                f'width="{maxwidth}" height="{maxheight}" '
+                f'frameborder="0" allow="autoplay; encrypted-media; fullscreen" '
+                f'style="border: none;"></iframe>'
+            )
 
         oembed_response = {
             "version": "1.0",
@@ -1855,6 +1914,8 @@ async def oembed_endpoint(request):
             "height": maxheight,
             "cache_age": 3600,  # Cache for 1 hour
         }
+        
+        logger.info(f"oEmbed response html field length: {len(iframe_html)}")
 
         # Add thumbnail if available
         if thumbnail_url:
