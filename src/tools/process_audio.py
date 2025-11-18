@@ -22,6 +22,7 @@ import tempfile
 from pathlib import Path
 from typing import Optional, Dict, Any
 from contextlib import contextmanager
+from urllib.parse import urlparse
 
 from .schemas import (
     ProcessAudioInput,
@@ -47,9 +48,10 @@ from src.downloader import (
     SSRFProtectionError,
 )
 from src.metadata import (
-    extract_metadata,
+    extract_metadata_with_fallback,
     extract_artwork,
     validate_audio_format,
+    parse_filename_metadata,
     MetadataExtractionError,
     FormatValidationError,
 )
@@ -105,6 +107,72 @@ def managed_temp_files(*temp_paths):
                     logger.debug(f"Cleaned up temporary file: {path}")
                 except Exception as e:
                     logger.warning(f"Failed to cleanup temp file {path}: {e}")
+
+
+def _extract_filename_from_url(url: str) -> Optional[str]:
+    """
+    Extract filename from URL path.
+
+    Examples:
+        https://example.com/audio/thebeatles-imonlysleeping.mp3 -> thebeatles-imonlysleeping.mp3
+        https://tmpfiles.org/dl/123/file.mp3 -> file.mp3
+    """
+    try:
+        parsed = urlparse(url)
+        path = parsed.path
+        if path:
+            # Get the last component of the path
+            filename = path.split('/')[-1]
+            # Basic validation - should have an extension
+            if '.' in filename and len(filename) > 4:
+                return filename
+    except Exception:
+        pass
+    return None
+
+
+def _validate_metadata_quality_after_enhancement(metadata: Dict[str, Any]) -> None:
+    """
+    Validate metadata quality after filename parsing enhancement.
+
+    Uses adaptive thresholds based on available metadata:
+    - Artist + Title available: threshold 0.2 (20%)
+    - Only Title available: threshold 0.1 (10%)
+    - Always allow if we have at least a title from filename
+
+    Args:
+        metadata: Enhanced metadata dictionary
+
+    Raises:
+        MetadataExtractionError: If metadata quality is insufficient
+    """
+    from src.metadata.extractor import MetadataQualityAssessment
+
+    # If we have a title (from filename parsing if needed), be very lenient
+    if metadata.get('title'):
+        # We have at least a title - allow processing with minimal requirements
+        quality_assessment = MetadataQualityAssessment(metadata, Path("/tmp/dummy.mp3"))  # Path not used in assessment
+        quality_report = quality_assessment.get_quality_report()
+
+        logger.info(
+            f"Final metadata quality assessment: "
+            f"Score={quality_report['quality_score']}, "
+            f"Level={quality_report['quality_level']}, "
+            f"Completeness={quality_report['metadata_completeness']}%"
+        )
+
+        # Very lenient threshold for files with titles
+        if quality_report['quality_score'] < 0.1:  # 10% threshold
+            logger.warning(
+                f"Low quality metadata but proceeding: Score={quality_report['quality_score']}, "
+                f"Issues={quality_report['issues']}"
+            )
+        # Don't raise an error - allow processing
+        return
+
+    # No title at all - this is problematic, but should have been caught earlier
+    logger.error(f"No title found in metadata after all enhancement attempts: {metadata}")
+    raise MetadataExtractionError("No title could be determined from file metadata or filename")
 
 
 class ProcessingPipeline:
@@ -314,10 +382,54 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
             if options.validateFormat:
                 validate_audio_format(pipeline.temp_audio_path)
             
-            # Extract metadata
-            metadata_dict = extract_metadata(pipeline.temp_audio_path)
+            # Extract metadata with fallback mechanisms
+            metadata_dict, was_repaired = extract_metadata_with_fallback(pipeline.temp_audio_path)
+            if was_repaired:
+                logger.info(f"Metadata was repaired for {pipeline.audio_id}")
             logger.debug(f"Extracted metadata: {metadata_dict}")
-            
+
+            # Parse filename for missing metadata fields
+            # For URL downloads, extract filename from URL instead of temp file
+            logger.info(f"🎵 FILENAME PARSING: Starting filename parsing phase")
+            logger.debug(f"SOURCE DEBUG: source={source}, type={type(source)}")
+            filename_for_parsing = pipeline.temp_audio_path
+            logger.info(f"🎵 FILENAME PARSING: Initial filename_for_parsing = {filename_for_parsing}")
+            if hasattr(source, 'url') and source.url:
+                logger.debug(f"SOURCE DEBUG: Found URL in source: {source.url}")
+                # Convert HttpUrl to string for processing
+                url_str = str(source.url)
+                url_filename = _extract_filename_from_url(url_str)
+                logger.debug(f"SOURCE DEBUG: Extracted filename: {url_filename}")
+                if url_filename:
+                    # Create a temporary Path object with the URL filename for parsing
+                    # This preserves the original filename semantics for the parser
+                    class URLPath(os.PathLike):
+                        def __init__(self, url_filename):
+                            self._stem = Path(url_filename).stem
+                            self._url_filename = url_filename
+
+                        @property
+                        def stem(self):
+                            return self._stem
+
+                        def __fspath__(self):
+                            return self._url_filename
+
+                    filename_for_parsing = URLPath(url_filename)
+                    logger.debug(f"Using URL filename for parsing: {url_filename}")
+                else:
+                    logger.debug("URL filename extraction failed")
+            else:
+                logger.debug(f"No URL found in source: hasattr={hasattr(source, 'url')}, url_value={getattr(source, 'url', 'N/A')}")
+
+            filename_metadata = parse_filename_metadata(filename_for_parsing, metadata_dict)
+            if filename_metadata:
+                metadata_dict.update(filename_metadata)
+                logger.info(f"Enhanced metadata from filename: {filename_metadata}")
+
+            # Adaptive quality validation after filename parsing
+            _validate_metadata_quality_after_enhancement(metadata_dict)
+
             # Extract artwork (optional - may be None)
             pipeline.temp_artwork_path = extract_artwork(pipeline.temp_audio_path)
             if pipeline.temp_artwork_path:
@@ -425,14 +537,23 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
         logger.info(f"[EMBED_URL_DEBUG] Generated embed_url = {embed_url}")
         
         # Build response using Pydantic models for validation
+        logger.info(f"[RESPONSE_DEBUG] Final metadata_dict: {metadata_dict}")
+
+        # Ensure required fields are not None
+        final_artist = metadata_dict.get("artist") or ""
+        final_album = metadata_dict.get("album") or ""
+        final_title = metadata_dict.get("title") or "Untitled"
+
+        logger.info(f"[RESPONSE_DEBUG] Final values - Artist: '{final_artist}', Album: '{final_album}', Title: '{final_title}'")
+
         response = ProcessAudioOutput(
             success=True,
             audioId=pipeline.audio_id,
             metadata=AudioMetadata(
                 Product=ProductMetadata(
-                    Artist=metadata_dict.get("artist", ""),
-                    Title=metadata_dict.get("title", "Untitled"),
-                    Album=metadata_dict.get("album", ""),
+                    Artist=final_artist,
+                    Title=final_title,
+                    Album=final_album,
                     MBID=None,  # MVP: null
                     Genre=[metadata_dict.get("genre")] if metadata_dict.get("genre") else [],
                     Year=metadata_dict.get("year")

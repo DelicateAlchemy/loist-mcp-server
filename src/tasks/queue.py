@@ -153,8 +153,9 @@ def enqueue_waveform_generation(
         ),
     )
 
-    # Configure retry settings
-    task.dispatch_deadline.CopyFrom(timestamp_pb2.Timestamp(seconds=1800))  # 30 minutes
+    # Configure dispatch deadline (30 minutes)
+    from datetime import timedelta
+    task.dispatch_deadline = timedelta(minutes=30)
 
     try:
         logger.info(f"Enqueuing waveform generation task for audio_id: {audio_id}")
