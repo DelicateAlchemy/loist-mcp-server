@@ -73,24 +73,21 @@ class SignedURLCache:
             >>> print(url)
             "https://storage.googleapis.com/bucket/audio.mp3?X-Goog-..."
         """
-        logger.info(f"[CACHE_DEBUG] get() called: gcs_path={gcs_path}, expiration={url_expiration_minutes}min")
         with self.lock:
             current_time = time.time()
             
             # Check if URL is in cache and not expired
             if gcs_path in self.cache and self.expiry.get(gcs_path, 0) > current_time:
                 self.hits += 1
-                logger.info(f"[CACHE_DEBUG] Cache HIT for {gcs_path} (hits={self.hits}, misses={self.misses})")
+                logger.debug(f"Cache HIT for {gcs_path} (hits={self.hits}, misses={self.misses})")
                 return self.cache[gcs_path]
             
             # Cache miss - generate new signed URL
             self.misses += 1
-            logger.info(f"[CACHE_DEBUG] Cache MISS for {gcs_path} (hits={self.hits}, misses={self.misses})")
+            logger.debug(f"Cache MISS for {gcs_path} (hits={self.hits}, misses={self.misses})")
             
             # Parse GCS path
-            logger.info(f"[CACHE_DEBUG] Parsing GCS path: {gcs_path}")
             if not gcs_path.startswith("gs://"):
-                logger.error(f"[CACHE_DEBUG] Invalid GCS path format (missing gs:// prefix): {gcs_path}")
                 raise ValueError(f"Invalid GCS path: {gcs_path}")
             
             # Extract bucket and blob name
@@ -98,25 +95,19 @@ class SignedURLCache:
             parts = path_without_prefix.split("/", 1)
             
             if len(parts) != 2:
-                logger.error(f"[CACHE_DEBUG] Invalid GCS path format (cannot split bucket/blob): {gcs_path}")
                 raise ValueError(f"Invalid GCS path format: {gcs_path}")
             
             bucket_name, blob_name = parts
-            logger.info(f"[CACHE_DEBUG] Parsed bucket: {bucket_name}, blob: {blob_name}")
             
             # Generate signed URL
             try:
-                logger.info(f"[CACHE_DEBUG] Calling generate_signed_url: bucket={bucket_name}, blob={blob_name}, expiration={url_expiration_minutes}min")
                 signed_url = generate_signed_url(
                     bucket_name=bucket_name,
                     blob_name=blob_name,
                     expiration_minutes=url_expiration_minutes
                 )
-                logger.info(f"[CACHE_DEBUG] Successfully generated signed URL for {gcs_path}")
             except Exception as e:
-                logger.error(f"[CACHE_DEBUG] Failed to generate signed URL for {gcs_path}: {type(e).__name__}: {e}")
-                import traceback
-                logger.error(f"[CACHE_DEBUG] Full traceback: {traceback.format_exc()}")
+                logger.error(f"Failed to generate signed URL for {gcs_path}: {e}")
                 raise
             
             # Calculate cache expiration (90% of URL expiration for safety)
@@ -126,7 +117,7 @@ class SignedURLCache:
             self.cache[gcs_path] = signed_url
             self.expiry[gcs_path] = current_time + cache_ttl
             
-            logger.info(f"[CACHE_DEBUG] Generated and cached signed URL for {gcs_path} (expires in {cache_ttl}s)")
+            logger.info(f"Generated and cached signed URL for {gcs_path} (expires in {cache_ttl}s)")
             
             return signed_url
     
@@ -214,3 +205,4 @@ def get_cache() -> SignedURLCache:
     if _global_cache is None:
         _global_cache = SignedURLCache()
     return _global_cache
+

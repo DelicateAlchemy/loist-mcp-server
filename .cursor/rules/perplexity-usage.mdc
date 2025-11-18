@@ -1,0 +1,429 @@
+---
+description: Guidelines for using Perplexity MCP models effectively within Cursor for research, code analysis, and problem-solving
+globs: **/*
+alwaysApply: false
+---
+
+# Perplexity MCP Integration Guidelines
+
+This guide outlines best practices for using Perplexity MCP models within Cursor for enhanced research capabilities and code assistance.
+
+## Available Perplexity Models
+
+### **sonar**
+- **Context window**: 131,000 tokens
+- **Max output**: 8,000 tokens per response
+- **Cost**: ~$1.00/M tokens (input or output)
+- **Use case**: Standard search, fast and economical, grounded web results
+
+### **sonar-pro**
+- **Context window**: 205,000 tokens
+- **Max output**: 8,000 tokens per response
+- **Cost**: ~$3.00/M input tokens, ~$15.00/M output tokens
+- **Use case**: Advanced queries, deeper analysis, broader retrieval context
+
+### **sonar-reasoning-pro**
+- **Context window**: 131,000 tokens
+- **Max output**: 8,000 tokens
+- **Cost**: ~$2.00/M input, ~$8.00/M output tokens
+- **Features**: Supports Chain of Thought (CoT) for step-by-step reasoning
+
+## Quick Reference: Model Selection Cheat Sheet
+
+| Situation | Model | Key Parameters | Example |
+|-----------|-------|----------------|---------|
+| 🚀 Starting a task | `sonar-reasoning-pro` | `max_tokens: 3000, recency: year` | "Design PostgreSQL schema for..." |
+| 🔧 Mid-task debugging | `sonar` | `max_tokens: 1000, recency: month` | "FastMCP decorator error..." |
+| 📊 Comparing options | `sonar-pro` | `max_tokens: 2000, recency: year` | "Compare requests vs httpx..." |
+| ✅ Validation/review | `sonar-pro` | `max_tokens: 2000, recency: year` | "Security audit checklist..." |
+
+**Default Parameters for All Queries:**
+- `return_citations: true` (always verify sources)
+- `temperature: 0.2` (technical queries) or `0.7` (design discussions)
+
+## Model Selection Guidelines
+
+### **When to Use sonar**
+- Quick documentation lookups
+- API reference searches
+- Simple bug explanations
+- Current best practices for libraries/frameworks
+- Recent technology updates
+
+**Example Use Cases:**
+- "What's the latest syntax for Python async/await error handling?"
+- "How to implement JWT authentication in Node.js 2025?"
+- "Best practices for React hooks cleanup"
+
+### **When to Use sonar-pro**
+- Complex architectural decisions
+- Multi-technology integration analysis
+- Comprehensive security reviews
+- Performance optimization strategies
+- Large-scale refactoring guidance
+
+**Example Use Cases:**
+- "Compare microservices vs monolith architecture for a Python FastAPI application"
+- "Security audit checklist for a Node.js web application with authentication"
+- "Performance optimization strategies for a React application with large datasets"
+
+### **When to Use sonar-reasoning-pro**
+- Step-by-step debugging assistance
+- Complex algorithm explanations
+- Design pattern analysis with reasoning
+- Multi-step problem solving
+- Learning and educational explanations
+
+**Example Use Cases:**
+- "Explain step-by-step how to debug a memory leak in a Node.js application"
+- "Walk through the reasoning behind choosing between different database indexing strategies"
+- "Explain the trade-offs between different authentication methods with detailed reasoning"
+
+## Taskmaster-AI Workflow Integration Patterns
+
+### **Query Construction Framework for LLM Agent Consumption**
+
+Since results feed into an LLM coding agent, structure queries to return *actionable intelligence* rather than general information:
+
+#### **Start of Task (Planning Phase)**
+```json
+{
+  "model": "sonar-reasoning-pro",
+  "query": "[Technology] [specific implementation] for [use case] with constraints: [list]. Include: [specific deliverables]",
+  "max_tokens": 3000,
+  "return_citations": true,
+  "recency": "year",
+  "temperature": 0.2
+}
+```
+
+#### **Mid-Task (Technical Clarification)**
+```json
+{
+  "model": "sonar",
+  "query": "In [technology v.X], [specific situation], error: [exact error]. Need: [specific solution]",
+  "max_tokens": 1000,
+  "return_citations": true,
+  "recency": "month",
+  "temperature": 0.2
+}
+```
+
+#### **Task Validation (Review Phase)**
+```json
+{
+  "model": "sonar-pro",
+  "query": "[Review type] checklist for [implementation] covering: [areas]",
+  "max_tokens": 2000,
+  "return_citations": true,
+  "recency": "year",
+  "temperature": 0.3
+}
+```
+
+### **Context Balance Strategy**
+
+**Front-load discriminators** (embed in query text):
+- ✅ Technology + version numbers
+- ✅ Specific use case and constraints
+- ✅ Performance requirements
+- ✅ Must-have features
+
+**Avoid overwhelming**:
+- ❌ Full code listings
+- ❌ Entire error stack traces (just key errors)
+- ❌ Generic project descriptions
+- ❌ Historical context unless relevant
+
+### **Context Inclusion Decision Tree**
+
+```
+Is this a planning query (start of task)?
+├─ YES → Minimal context
+│   ├─ Include: Problem type, requirements, constraints
+│   └─ Exclude: Implementation details, code snippets
+│
+└─ NO → Is this a debugging query?
+    ├─ YES → Specific context
+    │   ├─ Include: Error messages, tech versions, API names
+    │   └─ Exclude: Full stack traces, unrelated code
+    │
+    └─ NO → Validation/review query
+        ├─ Include: What was built, key decisions, tech stack
+        └─ Exclude: Implementation details, full code listings
+```
+
+**Context Budget (Single Tool Call):**
+- ⚖️ **Too little**: "Fix my code" → Generic answers
+- ✅ **Just right**: "In FastMCP 2.x, '@mcp.get()' decorator fails with AttributeError. Need correct custom route decorator syntax"
+- ❌ **Too much**: Full code listing + error + project history → Overwhelms discriminators
+
+### **Single Tool Call Optimization**
+
+Given the constraint of ONE tool call per research need:
+
+| Task Phase | Model | Query Pattern | Example |
+|------------|-------|---------------|---------|
+| **Task Start** | `sonar-reasoning-pro` | "Design [system] for [requirements] with [constraints]. Include: [deliverables]" | "PostgreSQL schema for audio metadata with tsvector search, 100K+ tracks, sub-200ms queries" |
+| **Implementation** | `sonar-pro` | "Compare [options] for [use case] with [constraints]" | "requests vs httpx for streaming audio downloads with retry logic" |
+| **Debugging** | `sonar` | "In [tech v.X], [situation], error: [specific]. Need: [solution]" | "FastMCP 2.x custom route decorator error: '@mcp.get()' not working" |
+| **Validation** | `sonar-pro` | "[Review type] checklist for [implementation]" | "Security audit for HTTP downloader with SSRF protection" |
+
+## Critical Parameters You Must Set
+
+### **Essential Parameters for All Queries**
+- **recency**: Always set! Use "month" for fast-moving tech, "year" for established patterns
+- **return_citations**: Always true (enables verification and source checking)
+- **temperature**: 0.2 for technical queries (deterministic), 0.7 for design discussions
+- **max_tokens**: 
+  - 1000 for quick answers (debugging)
+  - 2000 for implementation guides  
+  - 3000+ for architectural decisions
+
+### **Advanced Parameters for Specific Cases**
+- **frequency_penalty**: 1.0-2.0 for reasoning chains (reduce repetition)
+- **presence_penalty**: 0.0-0.8 (0.0 default, higher for diverse sources)
+- **top_p**: 0.9 standard, 0.7 for more focused responses
+- **top_k**: 0 (disabled) for most cases
+- **search_domain_filter**: Array of domains for authoritative sources
+
+### **Advanced Parameters Table**
+
+| Parameter | When to Use | Example Value | Impact |
+|-----------|-------------|---------------|--------|
+| `search_domain_filter` | Need authoritative sources | `["postgresql.org", "docs.python.org"]` | Limits to official docs |
+| `frequency_penalty` | Reducing repetition | `1.5` | Penalizes repeating same info |
+| `presence_penalty` | Want diverse sources | `0.8` | Encourages breadth over depth |
+| `top_p` | More focused responses | `0.7` (vs 0.9 default) | Narrows probability distribution |
+
+**Example with domain filtering:**
+```json
+{
+  "model": "sonar-reasoning-pro",
+  "query": "PostgreSQL full-text search with tsvector...",
+  "search_domain_filter": ["postgresql.org", "stackoverflow.com"],
+  "recency": "year"
+}
+```
+
+### **Model Selection Strategy for Cost Efficiency**
+
+| Model | Cost per 1M tokens | Best Use Case | When to Choose |
+|-------|-------------------|---------------|----------------|
+| **sonar** | $1/$1 (in/out) | Quick lookups, debugging | Simple technical questions, API syntax |
+| **sonar-pro** | $3/$15 (in/out) | Complex analysis, comparisons | Architecture decisions, comprehensive reviews |
+| **sonar-reasoning-pro** | $2/$8 (in/out) | Step-by-step guidance | Planning phases, complex debugging |
+
+## Integration with Cursor Workflow
+
+### **Research Before Implementation**
+1. Use Perplexity to research best practices before starting new features
+2. Gather current information about libraries and frameworks
+3. Understand security implications and performance considerations
+
+### **Problem Solving During Development**
+1. Use reasoning models for complex debugging scenarios
+2. Research alternative approaches when facing implementation challenges
+3. Validate architectural decisions with comprehensive analysis
+
+### **Learning and Documentation**
+1. Use step-by-step reasoning for understanding complex concepts
+2. Research current best practices for documentation and code organization
+3. Stay updated with latest developments in your technology stack
+
+## Best Practices
+
+### **Query Construction**
+- **Be specific**: Include technology stack, version numbers, and context
+- **Include constraints**: Mention performance, security, or scalability requirements
+- **Use current context**: Reference recent years or specific versions when relevant
+- **Ask for reasoning**: Request explanations for complex decisions
+
+### **Response Handling**
+- **Verify citations**: Check the credibility and recency of sources
+- **Cross-reference**: Validate information against official documentation
+- **Adapt to context**: Modify suggestions to fit your specific codebase
+- **Document decisions**: Record research findings for future reference
+
+### **Cost Management**
+- **Monitor usage**: Track token consumption across different models
+- **Optimize queries**: Refine questions to get more focused responses
+- **Choose appropriate models**: Match model capabilities to query complexity
+- **Batch related queries**: Group similar questions to maximize context efficiency
+
+## Real Taskmaster-AI Example Scenarios
+
+### **Scenario 1: Task 2.1 - PostgreSQL Schema Design (Planning Phase)**
+**Context**: Starting new task for audio metadata database
+**Query**: "Design PostgreSQL schema for audio file library with these requirements: (1) Metadata fields: artist, title, album, genre, year, duration, channels, sample_rate, bitrate, format (2) Full-text search across artist/title/album/genre using tsvector with weighted ranking (3) GCS storage paths (4) Performance target: sub-200ms queries for 100K+ tracks (5) Include: complete CREATE TABLE statements, GIN indexes, search vector triggers, and optimization rationale"
+**Model**: `sonar-reasoning-pro`
+**Parameters**: `max_tokens: 3000, recency: year, temperature: 0.2`
+**Rationale**: Complex architectural decision requiring step-by-step reasoning
+
+### **Scenario 2: Task 3.1 - HTTP Download Implementation (Implementation Phase)**
+**Context**: Mid-task, comparing libraries for audio streaming
+**Query**: "Python HTTP audio file downloader with: streaming downloads, file size validation via HEAD request, retry logic with exponential backoff, SSRF protection blocking private IP ranges, and timeout handling. Compare requests library vs httpx for production use in 2025. Include code examples for each security feature."
+**Model**: `sonar-pro`
+**Parameters**: `max_tokens: 2000, recency: year, temperature: 0.2`
+**Rationale**: Comprehensive comparison with implementation details
+
+### **Scenario 3: Task 11.6 - oEmbed Debugging (Mid-Task Debug)**
+**Context**: FastMCP decorator not working during implementation
+**Query**: "FastMCP Python framework custom route decorator syntax for implementing oEmbed endpoint. Error: decorator '@mcp.get()' not working. Need correct decorator pattern for custom HTTP routes in FastMCP 2.x with example code."
+**Model**: `sonar`
+**Parameters**: `max_tokens: 1000, recency: month, temperature: 0.2`
+**Rationale**: Specific debugging query, fast response needed
+
+### **Scenario 4: Task 3.3 - Security Validation (Review Phase)**
+**Context**: Validating SSRF protection implementation
+**Query**: "Security audit checklist for Python HTTP downloader with SSRF protection. Cover: private IP blocking, localhost protection, redirect chain validation, DNS rebinding attacks, and cloud metadata endpoint exposure. Include specific test cases and code examples."
+**Model**: `sonar-pro`
+**Parameters**: `max_tokens: 2000, recency: year, temperature: 0.3`
+**Rationale**: Comprehensive security review with actionable checklist
+
+## Solving the "Awful Sparks vs Sparks" Problem
+
+### **Query Disambiguation Strategy**
+Your band query failed due to lack of disambiguating context. For technical queries:
+
+❌ **Too Generic**: "best practices for PostgreSQL schema"
+✅ **Properly Scoped**: "PostgreSQL schema design for audio file metadata with full-text search using tsvector, targeting 100K+ records with sub-200ms query performance requirements"
+
+### **Front-load Critical Discriminators**
+- Technology + version numbers
+- Specific use case and domain
+- Performance/security constraints
+- Must-have features
+- Target scale/volume
+
+## Integration with Taskmaster-AI Workflow
+
+### **Task Research Integration**
+Add research queries to task definitions:
+
+```json
+{
+  "id": 2.1,
+  "title": "Design PostgreSQL Database Schema",
+  "research_query": {
+    "trigger": "task_start",
+    "model": "sonar-reasoning-pro",
+    "query": "PostgreSQL schema design for audio metadata with tsvector search, 100K+ tracks, sub-200ms queries. Include: table structure, indexes, triggers, optimization rationale",
+    "parameters": {
+      "max_tokens": 3000,
+      "recency": "year",
+      "temperature": 0.2
+    }
+  }
+}
+```
+
+### **Context Management Best Practices**
+- **Minimal context for planning**: Focus on problem space, not implementation
+- **Specific context for debugging**: Include exact error messages, versions
+- **Balanced context for validation**: Describe what was built, not how
+
+### **Role/Persona Embedding for Context**
+
+Since you have a single tool call, embed role context directly in the query text:
+
+**Format:**
+```
+"As a [role] working on [project type], I need to [specific task] with constraints: [list]"
+```
+
+**Example roles:**
+- **Backend architect**: "As a backend architect designing a FastAPI audio processing server..."
+- **Security engineer**: "As a security engineer reviewing SSRF protections..."
+- **DevOps engineer**: "As a DevOps engineer deploying to Cloud Run..."
+- **Database administrator**: "As a DBA optimizing PostgreSQL for 100K+ records..."
+
+**Why this works:**
+- ✅ Primes the model with relevant perspective
+- ✅ Helps disambiguate between general vs specialized answers
+- ✅ Works within single tool call constraint
+- ✅ More natural than JSON structure in text query
+
+### **Chain-of-Thought Optimization**
+
+Use sonar-reasoning-pro with **explicit reasoning structure**:
+
+**Pattern 1: Decision Analysis**
+```
+"Analyze step-by-step: 
+[Step 1] List requirements and constraints
+[Step 2] Evaluate option A with pros/cons
+[Step 3] Evaluate option B with pros/cons  
+[Step 4] Comparison matrix
+[Step 5] Final recommendation with rationale"
+```
+
+**Pattern 2: Implementation Planning**
+```
+"Explain step-by-step implementation:
+[Step 1] High-level architecture overview
+[Step 2] Component breakdown
+[Step 3] Integration points
+[Step 4] Potential pitfalls and mitigations
+[Step 5] Validation strategy"
+```
+
+**Pattern 3: Debugging Analysis**
+```
+"Debug systematically:
+[Step 1] Symptom analysis and error interpretation
+[Step 2] Potential root causes ranked by likelihood
+[Step 3] Diagnostic steps for each cause
+[Step 4] Solution approaches
+[Step 5] Prevention strategies"
+```
+
+**When to use structured reasoning:**
+- ✅ Complex architectural decisions (Task 2.1 - Schema design)
+- ✅ Security analysis (Task 3.3 - SSRF protection)
+- ✅ Multi-option comparisons (Task 3.1 - requests vs httpx)
+- ❌ Simple syntax lookups (use sonar instead)
+- ❌ Quick API reference (use sonar instead)
+
+## Common Query Failure Patterns and Fixes
+
+### **Problem 1: Getting Generic Results**
+❌ **Query**: "PostgreSQL schema best practices"  
+✅ **Fixed**: "PostgreSQL schema design for audio metadata with tsvector full-text search, targeting 100K+ records with sub-200ms query performance in 2025"
+
+**What changed**: Added use case, performance constraint, scale, year
+
+---
+
+### **Problem 2: Wrong Topic Entirely (The "Awful Sparks" Problem)**
+❌ **Query**: "Tell me about Awful Sparks"  
+✅ **Fixed**: "Awful Sparks indie rock band discography and music style analysis"
+
+**What changed**: Added disambiguating genre context
+
+---
+
+### **Problem 3: Outdated Information**
+❌ **Query**: "FastMCP custom routes" (no recency)  
+✅ **Fixed**: "FastMCP 2.x custom HTTP route decorator syntax in 2025" + `recency: "month"`
+
+**What changed**: Added version, year, recency filter
+
+---
+
+### **Problem 4: Too Broad When Debugging**
+❌ **Query**: "My server isn't working"  
+✅ **Fixed**: "FastMCP Python server in HTTP mode shows 'transport: stdio' despite SERVER_TRANSPORT=http in .env.local. Need environment variable precedence rules."
+
+**What changed**: Specific tech, specific symptom, specific config, clear ask
+
+## Integration Notes
+
+- **MCP Client Role**: Cursor acts as the arbiter of information, deciding what context to provide to Perplexity
+- **Single Tool Call Constraint**: Optimize queries for maximum value in one call
+- **Result Integration**: Use Perplexity insights to inform code changes, architectural decisions, and problem-solving approaches
+- **Documentation**: Record research findings and decisions in project documentation
+
+---
+
+*This guide should be updated as Perplexity MCP capabilities evolve and new use cases emerge.*

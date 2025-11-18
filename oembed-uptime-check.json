@@ -1,0 +1,36 @@
+{
+  "displayName": "Loist MCP Server - oEmbed Endpoint",
+  "monitoredResource": {
+    "type": "uptime_url",
+    "labels": {
+      "host": "https:",
+      "project_id": "loist-music-library"
+    }
+  },
+  "httpCheck": {
+    "requestMethod": "GET",
+    "path": "/.well-known/oembed.json",
+    "port": 443,
+    "useSsl": true,
+    "validateSsl": true,
+    "headers": {
+      "User-Agent": "Google-Cloud-Monitoring-Uptime-Check"
+    }
+  },
+  "timeout": "10s",
+  "period": "300s",
+  "contentMatchers": [
+    {
+      "content": "\"provider_name\":\"Loist Music Library\"",
+      "matcher": "CONTAINS_STRING"
+    }
+  ],
+  "selectedRegions": [
+    "USA_OREGON",
+    "USA_IOWA", 
+    "USA_SOUTH_CAROLINA",
+    "EUROPE_IRELAND",
+    "ASIA_PACIFIC_SINGAPORE"
+  ],
+  "checkerType": "STATIC_IP_CHECKERS"
+}

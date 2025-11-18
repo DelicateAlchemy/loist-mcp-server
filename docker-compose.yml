@@ -11,7 +11,7 @@ services:
       - "8080:8080"
     environment:
       # Server Configuration
-      - SERVER_NAME=Music Library MCP - Local Development
+      - SERVER_NAME=Music Library MCP
       - SERVER_VERSION=0.1.0
       - SERVER_HOST=0.0.0.0
       - SERVER_PORT=8080
@@ -33,40 +33,34 @@ services:
       # Feature Flags
       - ENABLE_HEALTHCHECK=true
       
-      # Database Configuration (Local PostgreSQL - Override any .env settings)
+      # Database Configuration
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_NAME=loist_mvp
       - DB_USER=loist_user
       - DB_PASSWORD=dev_password
       - DATABASE_URL=postgresql://loist_user:dev_password@postgres:5432/loist_mvp
-      - DB_CONNECTION_NAME=  # Explicitly empty to force local PostgreSQL
       
-      # Google Cloud Storage Configuration
-      - GOOGLE_APPLICATION_CREDENTIALS=/app/service-account-key.json
-      - GCS_BUCKET_NAME=${GCS_BUCKET_NAME:-loist-mvp-audio-files}
-      - GCS_PROJECT_ID=${GCS_PROJECT_ID:-}
-      
-      # Embed Configuration
-      - EMBED_BASE_URL=https://857daa7fb123.ngrok-free.app
-
-      # Task Queue Mode (Local for development)
-      - TASK_QUEUE_MODE=local
-
       # Python
       - PYTHONUNBUFFERED=1
       - PYTHONDONTWRITEBYTECODE=1
+      
+      # Google Cloud Storage Configuration
+      - GCS_BUCKET_NAME=loist-mvp-audio-files
+      - GCS_PROJECT_ID=loist-mvp-dev
+      - GCS_REGION=us-central1
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/service-account-key.json
     
     volumes:
       # Mount source code for live development (hot reload)
       - ./src:/app/src:ro
       # Mount database migrations and config
       - ./database:/app/database:ro
-      # Mount templates for embed page rendering
-      - ./templates:/app/templates:ro
       # Mount for local storage (when implementing file features)
       - ./storage:/app/storage
-      # Mount GCS service account credentials
+      # Mount templates directory
+      - ./templates:/app/templates:ro
+      # Mount GCS service account key for local testing
       - ./service-account-key.json:/app/service-account-key.json:ro
     
     restart: unless-stopped

@@ -23,17 +23,6 @@ from .query_schemas import (
     SearchResult,
     QueryException,
     QueryErrorCode,
-    DeleteAudioInput,
-    DeleteAudioOutput,
-    DeleteException,
-)
-from .search_filter_parser import (
-    parse_rsql_filter,
-    encode_cursor,
-    decode_cursor,
-    parse_field_selection,
-    apply_field_selection,
-    RSQLParseError,
 )
 from .schemas import (
     ProductMetadata,
@@ -46,9 +35,7 @@ from .schemas import (
 from database import (
     get_audio_metadata_by_id,
     search_audio_tracks_advanced,
-    search_audio_tracks_cursor,
 )
-from database.utils import AudioTrackDB
 from src.exceptions import (
     DatabaseOperationError,
     ResourceNotFoundError,
@@ -75,9 +62,8 @@ def format_metadata_response(db_metadata: Dict[str, Any]) -> AudioMetadata:
         AudioMetadata: Formatted metadata following API contract
     """
     # Generate embed URL
-    from config import config
     audio_id = db_metadata.get("id")
-    embed_url = f"{config.embed_base_url}/embed/{audio_id}"
+    embed_url = f"https://loist.io/embed/{audio_id}"
     
     # Format product metadata
     product = ProductMetadata(
@@ -90,8 +76,10 @@ def format_metadata_response(db_metadata: Dict[str, Any]) -> AudioMetadata:
     )
     
     # Format technical metadata
+    # Handle both "duration" and "duration_seconds" field names for compatibility
+    duration = db_metadata.get("duration") or db_metadata.get("duration_seconds", 0.0)
     format_metadata = FormatMetadata(
-        Duration=db_metadata.get("duration_seconds", 0.0),
+        Duration=duration,
         Channels=db_metadata.get("channels", 2),
         SampleRate=db_metadata.get("sample_rate", 44100),
         Bitrate=db_metadata.get("bitrate", 0),
@@ -198,7 +186,7 @@ async def get_audio_metadata(input_data: Dict[str, Any]) -> Dict[str, Any]:
         formatted_metadata = format_metadata_response(db_metadata)
         resources = format_resources(
             audio_id,
-            has_thumbnail=bool(db_metadata.get("thumbnail_gcs_path"))
+            has_thumbnail=bool(db_metadata.get("thumbnail_path"))
         )
         
         # Build response using Pydantic for validation
@@ -232,11 +220,14 @@ async def search_library(input_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Search across all processed audio in the library.
     
-    Performs full-text search with RSQL filters and cursor-based pagination.
-    Supports sparse field selection for optimized responses.
+    Performs full-text search with optional filters for:
+    - Genre, year, duration, format
+    - Artist, album (partial match)
+    
+    Supports pagination and sorting.
     
     Args:
-        input_data: Dictionary containing query, filter, fields, cursor, limit, and sort options
+        input_data: Dictionary containing query, filters, pagination, and sort options
         
     Returns:
         Dictionary with success status and search results, or error response
@@ -266,56 +257,40 @@ async def search_library(input_data: Dict[str, Any]) -> Dict[str, Any]:
             )
         
         query = validated_input.query
-        filter_str = validated_input.filter
-        fields_str = validated_input.fields
+        filters = validated_input.filters
         limit = validated_input.limit
-        cursor = validated_input.cursor
+        offset = validated_input.offset
         sort_by = validated_input.sortBy
         sort_order = validated_input.sortOrder
-
-        logger.debug(f"Searching for: '{query}' with filter='{filter_str}', cursor='{cursor}', limit={limit}")
         
-        # Parse RSQL filter string
-        try:
-            parsed_filters = parse_rsql_filter(filter_str) if filter_str else {}
-        except RSQLParseError as e:
-            logger.error(f"RSQL parsing failed: {e}")
-            raise QueryException(
-                error_code=QueryErrorCode.INVALID_FILTER,
-                message=f"Invalid filter syntax: {str(e)}",
-                details={"filter": filter_str}
-            )
-
-        # Parse field selection
-        requested_fields = parse_field_selection(fields_str) if fields_str else None
-
-        # Decode cursor if provided
-        cursor_data = None
-        if cursor:
-            try:
-                cursor_score, cursor_created_at, cursor_id = decode_cursor(cursor)
-                cursor_data = (cursor_score, cursor_created_at, cursor_id)
-            except Exception as e:
-                logger.error(f"Cursor decoding failed: {e}")
-                raise QueryException(
-                    error_code=QueryErrorCode.PAGINATION_ERROR,
-                    message=f"Invalid cursor format: {str(e)}",
-                    details={"cursor": cursor}
-                )
-
-        # Build database filter parameters from parsed RSQL filters
+        logger.debug(f"Searching for: '{query}' with limit={limit}, offset={offset}")
+        
+        # Build filter parameters for database query
+        # Note: Currently only basic filters are supported by search_audio_tracks_advanced
         filter_params = {}
-
-        # Always filter for completed tracks only
+        
+        # Always filter to completed tracks only
         filter_params["status_filter"] = "COMPLETED"
-
-        # Map parsed RSQL filters to database parameters
-        if "year_min" in parsed_filters:
-            filter_params["year_min"] = parsed_filters["year_min"]
-        if "year_max" in parsed_filters:
-            filter_params["year_max"] = parsed_filters["year_max"]
-        if "format_filter" in parsed_filters:
-            filter_params["format_filter"] = parsed_filters["format_filter"]
+        
+        if filters:
+            # Year range filter
+            if filters.year:
+                if filters.year.min is not None:
+                    filter_params["year_min"] = filters.year.min
+                if filters.year.max is not None:
+                    filter_params["year_max"] = filters.year.max
+            
+            # Format filter (only takes first format if multiple provided)
+            if filters.format:
+                # database function expects single format string, not list
+                filter_params["format_filter"] = filters.format[0].value if isinstance(filters.format, list) else filters.format.value
+            
+            # Note: The following filters are not yet supported by search_audio_tracks_advanced:
+            # - genre (would need to be added to database function)
+            # - duration (would need to be added to database function)
+            # - artist (would need to be added to database function)
+            # - album (would need to be added to database function)
+            # These could be implemented as post-filtering on results if needed
         
         # Determine sort field mapping
         sort_field_map = {
@@ -330,12 +305,12 @@ async def search_library(input_data: Dict[str, Any]) -> Dict[str, Any]:
         db_sort_field = sort_field_map.get(sort_by.value, "score")
         db_sort_order = sort_order.value  # "asc" or "desc"
         
-        # Execute search query with cursor-based pagination
+        # Execute search query
         try:
-            search_results = search_audio_tracks_cursor(
+            search_response = search_audio_tracks_advanced(
                 query=query,
                 limit=limit + 1,  # Fetch one extra to check if more results exist
-                cursor_data=cursor_data,
+                offset=offset,
                 min_rank=0.01,  # Minimum relevance threshold
                 **filter_params
             )
@@ -354,23 +329,25 @@ async def search_library(input_data: Dict[str, Any]) -> Dict[str, Any]:
                 details={"query": query, "exception_type": type(e).__name__}
             )
         
-        # Extract tracks from search result
-        tracks = search_results.get('tracks', [])
-        has_more = len(tracks) > limit
-
-        # Trim to requested limit
+        # Extract tracks from response
+        search_results = search_response.get('tracks', [])
+        total_matches = search_response.get('total_matches', 0)
+        
+        # Check if more results exist (pagination)
+        has_more = len(search_results) > limit
         if has_more:
-            tracks = tracks[:limit]
-
-        logger.info(f"Found {len(tracks)} results for '{query}' (has_more: {has_more})")
-
+            search_results = search_results[:limit]  # Remove the extra result
+        
+        logger.info(f"Found {len(search_results)} results for '{query}' (total matches: {total_matches})")
+        
         # Format results
         formatted_results = []
-        next_cursor = None
-
-        for i, result in enumerate(tracks):
+        for result in search_results:
             try:
                 # Get metadata from result
+                # Note: database returns "duration_seconds" and "thumbnail_gcs_path"
+                # Handle None values with defaults
+                duration_seconds = result.get("duration_seconds") or 0.0
                 db_metadata = {
                     "id": result.get("id"),
                     "artist": result.get("artist", ""),
@@ -378,55 +355,46 @@ async def search_library(input_data: Dict[str, Any]) -> Dict[str, Any]:
                     "album": result.get("album", ""),
                     "genre": result.get("genre"),
                     "year": result.get("year"),
-                    "duration_seconds": result.get("duration_seconds", 0.0),
+                    "duration": duration_seconds,  # Map duration_seconds to duration
+                    "duration_seconds": duration_seconds,  # Keep both for compatibility
                     "channels": result.get("channels", 2),
                     "sample_rate": result.get("sample_rate", 44100),
                     "bitrate": result.get("bitrate", 0),
                     "format": result.get("format", ""),
-                    "thumbnail_gcs_path": result.get("thumbnail_gcs_path")
+                    "thumbnail_path": result.get("thumbnail_gcs_path"),  # Map thumbnail_gcs_path to thumbnail_path
+                    "thumbnail_gcs_path": result.get("thumbnail_gcs_path")  # Keep both for compatibility
                 }
-
+                
                 # Format metadata
                 formatted_metadata = format_metadata_response(db_metadata)
-
-                # Get relevance score
+                
+                # Get relevance score (database returns as "rank")
                 score = float(result.get("rank", 0.0))
-
+                
                 # Create search result
                 search_result = SearchResult(
                     audioId=result.get("id"),
                     metadata=formatted_metadata,
                     score=score
                 )
-
-                # Apply field selection if requested
-                if requested_fields:
-                    result_dict = search_result.model_dump()
-                    filtered_result = apply_field_selection(result_dict, requested_fields)
-                    # Reconstruct SearchResult from filtered data
-                    search_result = SearchResult(**filtered_result)
-
+                
                 formatted_results.append(search_result)
-
-                # Generate next cursor from last result
-                if i == len(tracks) - 1 and has_more:
-                    next_cursor = encode_cursor(
-                        score=score,
-                        created_at=result.get("created_at", ""),
-                        track_id=result.get("id")
-                    )
-
+                
             except Exception as e:
                 logger.warning(f"Error formatting search result: {e}")
                 continue  # Skip this result and continue with others
-
+        
+        # Use the actual total from the database query
+        total = total_matches
+        
         # Build response
         response = SearchLibraryOutput(
             success=True,
             results=formatted_results,
+            total=total,
             limit=limit,
-            hasMore=has_more,
-            nextCursor=next_cursor
+            offset=offset,
+            hasMore=has_more
         )
         
         search_time = time.time() - start_time
@@ -451,106 +419,6 @@ async def search_library(input_data: Dict[str, Any]) -> Dict[str, Any]:
         return error_response.model_dump()
 
 
-async def delete_audio(input_data: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Delete a previously processed audio track.
-
-    This is a destructive operation that permanently removes an audio track
-    from the database. GCS files are left in place for lifecycle management.
-
-    Args:
-        input_data: Dictionary containing audioId and optional userId for future auth
-
-    Returns:
-        Dictionary with success status and deletion confirmation, or error response
-
-    Raises:
-        DeleteException: For not found or database errors
-
-    Example:
-        >>> result = await delete_audio({"audioId": "550e8400-..."})
-        >>> print(result["deleted"])
-        True
-    """
-    logger.info("Deleting audio track")
-
-    try:
-        # Validate input
-        try:
-            validated_input = DeleteAudioInput(**input_data)
-        except Exception as e:
-            logger.error(f"Input validation failed: {e}")
-            raise DeleteException(
-                error_code=QueryErrorCode.INVALID_QUERY,
-                message=f"Invalid input: {str(e)}",
-                details={"validation_errors": str(e)}
-            )
-
-        audio_id = validated_input.audioId
-        logger.debug(f"Deleting audio track: {audio_id}")
-
-        # TODO: Add user authorization check when auth is implemented
-        # if validated_input.userId:
-        #     # Verify user owns the track or has delete permissions
-        #     pass
-
-        # Delete from database
-        try:
-            from uuid import UUID
-            track_id = UUID(audio_id)
-            deleted = AudioTrackDB.delete_track(track_id)
-        except DatabaseOperationError as e:
-            logger.error(f"Database error deleting track: {e}")
-            raise DeleteException(
-                error_code=QueryErrorCode.DATABASE_ERROR,
-                message=f"Failed to delete track: {str(e)}",
-                details={"audioId": audio_id}
-            )
-        except Exception as e:
-            logger.error(f"Unexpected error during deletion: {e}")
-            raise DeleteException(
-                error_code=QueryErrorCode.DELETE_FAILED,
-                message=f"Unexpected error deleting track: {str(e)}",
-                details={"audioId": audio_id, "exception_type": type(e).__name__}
-            )
-
-        # Log deletion result
-        if deleted:
-            logger.info(f"Successfully deleted track: {audio_id}")
-        else:
-            logger.warning(f"Track not found for deletion: {audio_id}")
-            raise DeleteException(
-                error_code=QueryErrorCode.RESOURCE_NOT_FOUND,
-                message=f"Audio track with ID '{audio_id}' was not found",
-                details={"audioId": audio_id}
-            )
-
-        # Build success response using Pydantic for validation
-        response = DeleteAudioOutput(
-            success=True,
-            audioId=audio_id,
-            deleted=deleted
-        )
-
-        return response.model_dump()
-
-    except DeleteException as e:
-        # Known delete error
-        logger.error(f"Delete error: {e.message}")
-        error_response = e.to_error_response()
-        return error_response.model_dump()
-
-    except Exception as e:
-        # Unexpected error
-        logger.exception(f"Unexpected error deleting track: {e}")
-        error_response = DeleteException(
-            error_code=QueryErrorCode.DELETE_FAILED,
-            message=f"Unexpected error: {str(e)}",
-            details={"exception_type": type(e).__name__}
-        ).to_error_response()
-        return error_response.model_dump()
-
-
 # ============================================================================
 # Synchronous Wrappers (if needed)
 # ============================================================================
@@ -568,19 +436,9 @@ def get_audio_metadata_sync(input_data: Dict[str, Any]) -> Dict[str, Any]:
 def search_library_sync(input_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Synchronous wrapper for search_library.
-
+    
     FastMCP supports async tools, but this is available if needed.
     """
     import asyncio
     return asyncio.run(search_library(input_data))
-
-
-def delete_audio_sync(input_data: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Synchronous wrapper for delete_audio.
-
-    FastMCP supports async tools, but this is available if needed.
-    """
-    import asyncio
-    return asyncio.run(delete_audio(input_data))
 

@@ -64,13 +64,11 @@ from database import (
     mark_as_failed,
     get_connection,
 )
-from src.tasks.queue import enqueue_waveform_generation
 from src.exceptions import (
     MusicLibraryError,
     StorageError,
     DatabaseOperationError,
     ValidationError,
-    ResourceNotFoundError,
 )
 
 logger = logging.getLogger(__name__)
@@ -209,30 +207,19 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
         pipeline.audio_id = str(uuid.uuid4())
         logger.info(f"Generated audio ID: {pipeline.audio_id}")
         
-        # Note: Removed premature database record creation to avoid constraint violations
-        # The record will be created later with all required fields after GCS upload
-        # This fixes the "Premature Status Updates" architectural issue
-        logger.debug(f"Processing audio with ID: {pipeline.audio_id}")
-        
         # ====================================================================
         # Stage 2: HTTP Download (Subtask 7.2)
         # ====================================================================
         logger.info(f"Downloading audio from: {source.url}")
-        logger.debug(f"Download options: max_size_mb={options.maxSizeMB}, timeout={options.timeout}")
         
         try:
             # Validate URL scheme (http/https only)
-            logger.debug("Validating URL scheme...")
             validate_url(str(source.url))
-            logger.debug("URL scheme validation passed")
             
             # SSRF protection check
-            logger.debug("Performing SSRF protection check...")
             validate_ssrf(str(source.url))
-            logger.debug("SSRF protection check passed")
             
             # Download to temporary file
-            logger.debug(f"Starting download with max_size_mb={options.maxSizeMB}, timeout_seconds={options.timeout}")
             pipeline.temp_audio_path = download_from_url(
                 url=str(source.url),
                 headers=source.headers,
@@ -241,12 +228,9 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
             )
             
             logger.info(f"Downloaded audio to: {pipeline.temp_audio_path}")
-            logger.debug(f"Download successful, file size: {Path(pipeline.temp_audio_path).stat().st_size if pipeline.temp_audio_path else 'N/A'} bytes")
             
         except URLValidationError as e:
-            import traceback
             logger.error(f"URL validation failed: {e}")
-            logger.error(f"Traceback:\n{traceback.format_exc()}")
             raise ProcessAudioException(
                 error_code=ErrorCode.VALIDATION_ERROR,
                 message=f"Invalid URL: {str(e)}"
@@ -272,36 +256,10 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
                 details={"timeout_seconds": options.timeout}
             )
         except DownloadError as e:
-            import traceback
             logger.error(f"Download failed: {e}")
-            logger.error(f"DownloadError type: {type(e).__name__}")
-            logger.error(f"DownloadError traceback:\n{traceback.format_exc()}")
             raise ProcessAudioException(
                 error_code=ErrorCode.FETCH_FAILED,
-                message=f"Failed to download audio: {str(e)}",
-                details={"download_error_type": type(e).__name__, "traceback": traceback.format_exc()}
-            )
-        except Exception as download_exc:
-            # Catch any other unexpected exceptions during download
-            import traceback
-            logger.error(f"Unexpected exception during download phase: {download_exc}")
-            logger.error(f"Exception type: {type(download_exc).__name__}")
-            logger.error(f"Exception module: {type(download_exc).__module__ if hasattr(type(download_exc), '__module__') else 'N/A'}")
-            logger.error(f"Full traceback:\n{traceback.format_exc()}")
-            
-            # Check if this is the NameError about ResourceNotFoundError
-            if isinstance(download_exc, NameError) and "ResourceNotFoundError" in str(download_exc):
-                logger.error("⚠️ NameError about ResourceNotFoundError detected in DOWNLOAD phase!")
-                logger.error(f"  This suggests ResourceNotFoundError is referenced during download operations")
-            
-            raise ProcessAudioException(
-                error_code=ErrorCode.FETCH_FAILED,
-                message=f"Unexpected error during download: {str(download_exc)}",
-                details={
-                    "exception_type": type(download_exc).__name__,
-                    "exception_message": str(download_exc),
-                    "occurred_in": "download_phase"
-                }
+                message=f"Failed to download audio: {str(e)}"
             )
         
         # ====================================================================
@@ -348,21 +306,21 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
             filename = source.filename or f"{pipeline.audio_id}.{metadata_dict.get('format', 'mp3').lower()}"
             
             # Upload audio file
-            audio_blob = upload_audio_file(
+            blob = upload_audio_file(
                 source_path=pipeline.temp_audio_path,
-                destination_blob_name=f"audio/{pipeline.audio_id}/{filename}"
+                destination_blob_name=f"audio/{pipeline.audio_id}/{filename}",
+                metadata={"content_type": source.mimeType or f"audio/{metadata_dict.get('format', 'mp3').lower()}"}
             )
-            # Construct full GCS path (gs://bucket/path) for database storage
-            pipeline.gcs_audio_path = f"gs://{audio_blob.bucket.name}/{audio_blob.name}"
+            pipeline.gcs_audio_path = f"gs://{blob.bucket.name}/{blob.name}"
             logger.info(f"Uploaded audio to GCS: {pipeline.gcs_audio_path}")
             
             # Upload artwork if present
             if pipeline.temp_artwork_path:
                 artwork_blob = upload_audio_file(
                     source_path=pipeline.temp_artwork_path,
-                    destination_blob_name=f"audio/{pipeline.audio_id}/artwork.jpg"
+                    destination_blob_name=f"audio/{pipeline.audio_id}/artwork.jpg",
+                    metadata={"content_type": "image/jpeg"}
                 )
-                # Construct full GCS path (gs://bucket/path) for database storage
                 pipeline.gcs_artwork_path = f"gs://{artwork_blob.bucket.name}/{artwork_blob.name}"
                 logger.info(f"Uploaded artwork to GCS: {pipeline.gcs_artwork_path}")
             
@@ -379,28 +337,32 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
         logger.info("Saving metadata to database")
         
         try:
-            # Prepare database metadata (separate from GCS paths)
+            # Prepare database record
             db_metadata = {
                 "artist": metadata_dict.get("artist", ""),
                 "title": metadata_dict.get("title", "Untitled"),
                 "album": metadata_dict.get("album", ""),
                 "genre": metadata_dict.get("genre"),
                 "year": metadata_dict.get("year"),
-                "duration_seconds": metadata_dict.get("duration", 0),
+                "duration": metadata_dict.get("duration", 0),
                 "channels": metadata_dict.get("channels", 2),
                 "sample_rate": metadata_dict.get("sample_rate", 44100),
                 "bitrate": metadata_dict.get("bitrate", 0),
                 "format": metadata_dict.get("format", ""),
             }
             
-            # Save to database using correct function signature
+            # Save to database using transaction
             saved_record = save_audio_metadata(
                 metadata=db_metadata,
-                audio_gcs_path=pipeline.gcs_audio_path,
-                thumbnail_gcs_path=pipeline.gcs_artwork_path,
+                audio_gcs_path=str(pipeline.gcs_audio_path),
+                thumbnail_gcs_path=str(pipeline.gcs_artwork_path) if pipeline.gcs_artwork_path else None,
                 track_id=pipeline.audio_id
             )
             pipeline.db_committed = True
+            
+            # Mark as processing first, then completed
+            mark_as_processing(pipeline.audio_id)
+            logger.debug(f"Marked {pipeline.audio_id} as PROCESSING")
             
             # Mark as completed
             mark_as_completed(pipeline.audio_id)
@@ -419,10 +381,7 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
         logger.info("Formatting response")
         
         # Generate embed URL
-        from config import config
-        logger.info(f"[EMBED_URL_DEBUG] config.embed_base_url = {config.embed_base_url}")
-        embed_url = f"{config.embed_base_url}/embed/{pipeline.audio_id}"
-        logger.info(f"[EMBED_URL_DEBUG] Generated embed_url = {embed_url}")
+        embed_url = f"https://loist.io/embed/{pipeline.audio_id}"
         
         # Build response using Pydantic models for validation
         response = ProcessAudioOutput(
@@ -456,76 +415,17 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
         
         processing_time = time.time() - start_time
         logger.info(f"Audio processing completed in {processing_time:.2f}s")
-
-        # ====================================================================
-        # Trigger Waveform Generation (Async)
-        # ====================================================================
-        # Fire-and-for-get: trigger waveform generation after successful processing
-        # This is the single entry point for waveform generation in the system
-        try:
-            logger.info("Triggering asynchronous waveform generation")
-
-            # Check database availability in development environments
-            # In production (Cloud Run), always attempt to enqueue
-            import os
-            is_production = bool(os.getenv("K_SERVICE"))  # Cloud Run sets this
-
-            if not is_production:
-                from database import check_database_availability
-                db_status = check_database_availability()
-
-                if not db_status["available"]:
-                    logger.warning("Database not available in development environment")
-                    logger.warning(f"Connection type: {db_status['connection_type']}")
-                    logger.warning(f"Error: {db_status['error']}")
-                    logger.warning("Skipping waveform generation task enqueue - database unavailable")
-                    logger.warning("Audio processing completed successfully, but waveform generation requires database access")
-                else:
-                    logger.debug(f"Database available ({db_status['connection_type']}) - proceeding with waveform task")
-            else:
-                logger.debug("Production environment detected - proceeding with waveform task")
-
-            # Only enqueue if database is available (in dev) or we're in production
-            should_enqueue = is_production or (not is_production and check_database_availability()["available"])
-
-            if should_enqueue:
-                # Calculate SHA-256 hash of the source audio file for cache invalidation
-                import hashlib
-                source_hash = hashlib.sha256()
-                with open(pipeline.temp_audio_path, "rb") as f:
-                    for chunk in iter(lambda: f.read(4096), b""):
-                        source_hash.update(chunk)
-                source_hash_str = source_hash.hexdigest()
-
-                # Enqueue waveform generation task
-                task_id = enqueue_waveform_generation(
-                    audio_id=pipeline.audio_id,
-                    audio_gcs_path=pipeline.gcs_audio_path,
-                    source_hash=source_hash_str
-                )
-                logger.info(f"Enqueued waveform generation task: {task_id}")
-            else:
-                logger.warning("Skipping waveform task enqueue due to database unavailability in development")
-
-        except Exception as e:
-            # Don't fail the main processing if waveform generation fails to enqueue
-            logger.warning(f"Failed to enqueue waveform generation task: {e}")
-            logger.warning("Audio processing completed successfully, but waveform generation may not occur")
-
+        
         # Cleanup temporary files (successful path)
         pipeline.cleanup()
-
+        
         return response.model_dump()
         
     except ProcessAudioException as e:
         # ====================================================================
         # Error Handling (Subtask 7.6)
         # ====================================================================
-        import traceback
         logger.error(f"Processing failed: {e.message}")
-        logger.error(f"Error code: {e.error_code}")
-        logger.error(f"Error details: {e.details}")
-        logger.error(f"Traceback:\n{traceback.format_exc()}")
         
         # Mark as failed in database if we have an ID
         if pipeline.audio_id:
@@ -536,8 +436,7 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
                 )
                 logger.debug(f"Marked {pipeline.audio_id} as FAILED")
             except Exception as db_error:
-                logger.error(f"Failed to update status to FAILED: {db_error}")
-                logger.error(f"Database exception traceback:\n{traceback.format_exc()}")
+                logger.warning(f"Failed to update status to FAILED: {db_error}")
         
         # Cleanup temporary files (error path)
         pipeline.cleanup()
@@ -548,36 +447,7 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
         
     except Exception as e:
         # Catch-all for unexpected errors
-        # Log comprehensive exception details for debugging
-        import traceback
-        exc_type = type(e).__name__
-        exc_message = str(e)
-        exc_traceback = traceback.format_exc()
-        
-        logger.error(f"Unexpected error during processing:")
-        logger.error(f"  Exception Type: {exc_type}")
-        logger.error(f"  Exception Message: {exc_message}")
-        logger.error(f"  Exception Args: {e.args if hasattr(e, 'args') else 'N/A'}")
-        logger.error(f"  Exception Module: {type(e).__module__ if hasattr(type(e), '__module__') else 'N/A'}")
-        logger.error(f"  Full Traceback:\n{exc_traceback}")
-        
-        # Enhanced debugging for NameError issues
-        if exc_type == "NameError" and "ResourceNotFoundError" in exc_message:
-            logger.error("⚠️ DETECTED: NameError referencing ResourceNotFoundError!")
-            logger.error(f"  This suggests ResourceNotFoundError is not in scope where it's being referenced")
-            logger.error(f"  Exception occurred in: {exc_traceback.split('File')[-1].split(',')[0] if 'File' in exc_traceback else 'Unknown location'}")
-            
-            # Check if this is related to FastMCP serialization
-            if "fastmcp" in exc_traceback.lower() or "json" in exc_traceback.lower():
-                logger.error("  ⚠️ This appears to be a FastMCP serialization issue!")
-                logger.error("  FastMCP may be trying to serialize exception class information in a different context")
-            
-            # Check module namespace
-            import sys
-            current_module = sys.modules.get(__name__, None)
-            if current_module:
-                logger.error(f"  ResourceNotFoundError in module namespace: {hasattr(current_module, 'ResourceNotFoundError')}")
-                logger.error(f"  Available exception classes: {[name for name in dir(current_module) if 'Error' in name]}")
+        logger.exception(f"Unexpected error during processing: {e}")
         
         # Mark as failed if we have an ID
         if pipeline.audio_id:
@@ -586,23 +456,18 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
                     track_id=pipeline.audio_id,
                     error_message=f"Unexpected error: {str(e)}"
                 )
-            except Exception as db_exc:
-                logger.error(f"Failed to mark as failed in database: {db_exc}")
-                logger.error(f"Database exception traceback:\n{traceback.format_exc()}")
+            except Exception:
+                pass  # Best effort
         
         # Cleanup
         pipeline.cleanup()
         
-        # Return generic error with enhanced details
+        # Return generic error
         error_response = ProcessAudioError(
             success=False,
             error=ErrorCode.FETCH_FAILED,
             message=f"Unexpected error: {str(e)}",
-            details={
-                "exception_type": exc_type,
-                "exception_message": exc_message,
-                "traceback_preview": exc_traceback.split('\n')[-5:] if exc_traceback else None,
-            }
+            details={"exception_type": type(e).__name__}
         )
         return error_response.model_dump()
 

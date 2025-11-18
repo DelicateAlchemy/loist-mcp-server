@@ -1,0 +1,36 @@
+{
+  "displayName": "Loist MCP Server - Health Endpoint",
+  "monitoredResource": {
+    "type": "uptime_url",
+    "labels": {
+      "host": "https:",
+      "project_id": "loist-music-library"
+    }
+  },
+  "httpCheck": {
+    "requestMethod": "GET",
+    "path": "/health",
+    "port": 443,
+    "useSsl": true,
+    "validateSsl": true,
+    "headers": {
+      "User-Agent": "Google-Cloud-Monitoring-Uptime-Check"
+    }
+  },
+  "timeout": "10s",
+  "period": "60s",
+  "contentMatchers": [
+    {
+      "content": "\"status\":\"healthy\"",
+      "matcher": "CONTAINS_STRING"
+    }
+  ],
+  "selectedRegions": [
+    "USA_OREGON",
+    "USA_IOWA", 
+    "USA_SOUTH_CAROLINA",
+    "EUROPE_IRELAND",
+    "ASIA_PACIFIC_SINGAPORE"
+  ],
+  "checkerType": "STATIC_IP_CHECKERS"
+}

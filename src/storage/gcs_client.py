@@ -774,21 +774,28 @@ def upload_audio_file(
     """
     client = create_gcs_client(bucket_name=bucket_name)
     
-    # Determine content type for audio files
-    content_type = "audio/mpeg"  # Default
+    # Determine content type from file extension
+    content_type = "application/octet-stream"  # Default
     if isinstance(source_path, str):
         source_path = Path(source_path)
     
     suffix = source_path.suffix.lower()
-    audio_types = {
+    content_types = {
+        # Audio formats
         ".mp3": "audio/mpeg",
         ".wav": "audio/wav",
         ".flac": "audio/flac",
         ".ogg": "audio/ogg",
         ".m4a": "audio/mp4",
         ".aac": "audio/aac",
+        # Image formats
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".gif": "image/gif",
+        ".webp": "image/webp",
     }
-    content_type = audio_types.get(suffix, "audio/mpeg")
+    content_type = content_types.get(suffix, "application/octet-stream")
     
     return client.upload_file(
         source_path=source_path,

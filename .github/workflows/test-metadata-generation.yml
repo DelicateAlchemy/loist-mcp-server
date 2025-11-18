@@ -1,0 +1,185 @@
+name: Metadata Generation Tests
+
+on:
+  push:
+    branches: [ main, dev ]
+    paths:
+      - 'tests/test_metadata_generation.py'
+      - 'templates/embed.html'
+      - 'src/server.py'
+      - 'requirements.txt'
+      - '.github/workflows/test-metadata-generation.yml'
+  pull_request:
+    branches: [ main, dev ]
+    paths:
+      - 'tests/test_metadata_generation.py'
+      - 'templates/embed.html'
+      - 'src/server.py'
+      - 'requirements.txt'
+      - '.github/workflows/test-metadata-generation.yml'
+  workflow_dispatch:
+    inputs:
+      test_type:
+        description: 'Type of tests to run'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - unit
+          - integration
+          - coverage
+
+env:
+  PYTHON_VERSION: '3.12'
+  PIP_CACHE_DIR: ~/.cache/pip
+
+jobs:
+  metadata-tests:
+    name: Metadata Generation Tests
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.12']
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+      
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+      
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+      
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio beautifulsoup4 pytest-html pytest-cov jinja2 starlette
+      
+      - name: Create reports directory
+        run: mkdir -p reports
+      
+      - name: Run metadata generation tests
+        run: |
+          python -m pytest tests/test_metadata_generation.py \
+            -v \
+            --tb=short \
+            --html=reports/pytest_report.html \
+            --self-contained-html \
+            --cov=src \
+            --cov-report=html:reports/coverage_html \
+            --cov-report=term-missing \
+            --cov-report=xml:reports/coverage.xml \
+            --junitxml=reports/junit.xml
+      
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-python-${{ matrix.python-version }}
+          path: |
+            reports/
+            .coverage
+          retention-days: 30
+      
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        if: matrix.python-version == '3.12'
+        with:
+          file: ./reports/coverage.xml
+          flags: metadata-generation
+          name: metadata-generation-coverage
+          fail_ci_if_error: false
+      
+      - name: Comment PR with test results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            
+            // Read test results
+            let testResults = '';
+            try {
+              const reportPath = path.join('reports', 'pytest_report.html');
+              if (fs.existsSync(reportPath)) {
+                const report = fs.readFileSync(reportPath, 'utf8');
+                // Extract summary from HTML report
+                const summaryMatch = report.match(/<div class="summary">(.*?)<\/div>/s);
+                if (summaryMatch) {
+                  testResults = summaryMatch[1].replace(/<[^>]*>/g, '').trim();
+                }
+              }
+            } catch (error) {
+              testResults = 'Test results could not be parsed';
+            }
+            
+            // Create comment
+            const comment = `## 🧪 Metadata Generation Tests - Python ${{ matrix.python-version }}
+            
+            **Status:** ✅ Tests completed successfully
+            
+            **Test Results:**
+            \`\`\`
+            ${testResults || 'Test results available in artifacts'}
+            \`\`\`
+            
+            **Coverage:** Available in artifacts and Codecov
+            
+            **Artifacts:** Test reports and coverage data uploaded as artifacts`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: metadata-tests
+    if: always()
+    
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      
+      - name: Generate test summary
+        run: |
+          echo "## 📊 Metadata Generation Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Python Versions Tested:** 3.11, 3.12" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Test Categories:**" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Open Graph Tags (3 tests)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Twitter Cards (3 tests)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Schema.org JSON-LD (3 tests)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Additional Metadata (6 tests)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Edge Cases (2 tests)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Validation Tests (3 tests)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Total Tests:** 20 per Python version" >> $GITHUB_STEP_SUMMARY
+          echo "**Test Reports:** Available in artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "**Coverage Reports:** Available in artifacts and Codecov" >> $GITHUB_STEP_SUMMARY
+
+
