@@ -1081,6 +1081,185 @@ async def delete_track(audio_id: str):
 
 ---
 
+## HTTP REST API Endpoints
+
+The MCP server now exposes HTTP REST API endpoints that wrap the MCP tools and resources, enabling direct HTTP access for frontend applications. These endpoints are available when the server runs in HTTP transport mode.
+
+### Authentication & CORS
+
+- **Authentication**: Bearer token authentication (when enabled via `AUTH_ENABLED=true`)
+- **CORS**: Configurable CORS support for frontend integration
+- **Transport**: Endpoints are available at `/api/*` when server runs with `server_transport=http`
+
+### Endpoints
+
+#### GET `/api/tracks/{audioId}`
+
+Get metadata for a specific audio track.
+
+**Parameters:**
+- `audioId` (path): UUID of the audio track
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "title": "Example Track",
+    "artist": "Example Artist",
+    "album": "Example Album",
+    "genre": "Rock",
+    "year": 2023,
+    "duration_seconds": 245.678,
+    "format": "MP3",
+    "created_at": "2023-01-01T00:00:00Z"
+  }
+}
+```
+
+**Error Responses:**
+- `400`: Invalid audio ID format
+- `404`: Track not found
+
+#### GET `/api/search`
+
+Search for audio tracks with optional filtering and pagination.
+
+**Query Parameters:**
+- `q` (required): Search query string
+- `genre` (optional): Filter by music genre
+- `limit` (optional): Maximum results (1-100, default: 20)
+- `offset` (optional): Results offset (default: 0)
+- `sortBy` (optional): Sort field (relevance, title, artist, year, duration, created_at)
+- `sortOrder` (optional): Sort order (asc, desc, default: desc)
+
+**Example Request:**
+```
+GET /api/search?q=beatles&genre=Rock&limit=10&sortBy=year&sortOrder=desc
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "title": "Hey Jude",
+      "artist": "The Beatles",
+      "album": "Past Masters",
+      "genre": "Rock",
+      "year": 1970,
+      "duration_seconds": 245.678,
+      "relevance_score": 0.95
+    }
+  ],
+  "total": 150,
+  "limit": 10,
+  "offset": 0
+}
+```
+
+**Error Responses:**
+- `400`: Missing or invalid query parameter
+
+#### GET `/api/tracks/{audioId}/stream`
+
+Get signed streaming URL for an audio track.
+
+**Parameters:**
+- `audioId` (path): UUID of the audio track
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "stream_url": "https://storage.googleapis.com/bucket/audio.mp3?X-Goog-Algorithm=GOOG4-RSA-SHA256...",
+    "expires_at": "2023-01-01T01:00:00Z"
+  }
+}
+```
+
+**Error Responses:**
+- `400`: Invalid audio ID format
+- `404`: Track not found
+
+#### GET `/api/tracks/{audioId}/thumbnail`
+
+Get signed URL for track thumbnail/artwork.
+
+**Parameters:**
+- `audioId` (path): UUID of the audio track
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "thumbnail_url": "https://storage.googleapis.com/bucket/thumbnail.jpg?X-Goog-Algorithm=GOOG4-RSA-SHA256...",
+    "expires_at": "2023-01-01T01:00:00Z"
+  }
+}
+```
+
+**Special Cases:**
+- Returns `success: false` with `error: "NO_THUMBNAIL"` if no artwork is available (HTTP 200)
+- This is not considered an error - tracks without artwork are normal
+
+**Error Responses:**
+- `400`: Invalid audio ID format
+- `404`: Track not found
+
+### Error Response Format
+
+All endpoints return errors in a consistent JSON format:
+
+```json
+{
+  "success": false,
+  "message": "Human-readable error message",
+  "error": "ERROR_CODE"
+}
+```
+
+### Frontend Integration
+
+```javascript
+// Example: Search for tracks
+const searchTracks = async (query, genre = null) => {
+  const params = new URLSearchParams({ q: query });
+  if (genre) params.append('genre', genre);
+
+  const response = await fetch(`/api/search?${params}`);
+  const result = await response.json();
+
+  if (result.success) {
+    return result.data;
+  } else {
+    throw new Error(result.message);
+  }
+};
+
+// Example: Get track metadata
+const getTrack = async (audioId) => {
+  const response = await fetch(`/api/tracks/${audioId}`);
+  const result = await response.json();
+
+  if (result.success) {
+    return result.data;
+  } else {
+    if (response.status === 404) {
+      return null; // Track not found
+    }
+    throw new Error(result.message);
+  }
+};
+```
+
+---
+
 ## Testing
 
 ### Unit Tests
