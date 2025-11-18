@@ -316,11 +316,15 @@ Retry logic is automatically integrated into:
 
 1. **Database Pool** (`database/pool.py`):
    - Retries connection acquisition
-   - Uses `DATABASE_RETRY_CONFIG`
+   - Uses `CONSERVATIVE_CONFIG` for reliable database operations
 
 2. **GCS Client** (`src/storage/gcs_client.py`):
    - Retries upload/download operations
-   - Uses `GCS_RETRY_CONFIG`
+   - Uses `CONSERVATIVE_CONFIG` for cloud storage reliability
+
+3. **Storage Manager** (`src/storage/manager.py`):
+   - Configurable retry behavior for all storage operations
+   - Defaults to `CONSERVATIVE_CONFIG`, accepts custom configurations
 
 ## Best Practices
 
@@ -377,18 +381,154 @@ for name, breaker in breakers.items():
 
 ### Circuit Breaker Settings
 
-Currently, circuit breaker configuration is done programmatically. Future enhancement: environment variables:
+Circuit breaker configuration can be done programmatically or via environment variables. Environment variables provide global defaults that can be overridden per instance.
+
+#### Environment Variables
 
 ```bash
-# Future: Environment variable configuration
-CIRCUIT_BREAKER_FAILURE_THRESHOLD=5
-CIRCUIT_BREAKER_RECOVERY_TIMEOUT=60
-CIRCUIT_BREAKER_SUCCESS_THRESHOLD=3
+# Global circuit breaker configuration
+CIRCUIT_BREAKER_FAILURE_THRESHOLD=5      # Failures before opening (default: 5)
+CIRCUIT_BREAKER_RECOVERY_TIMEOUT=60.0   # Seconds to wait before recovery (default: 60.0)
+CIRCUIT_BREAKER_SUCCESS_THRESHOLD=3     # Successes needed to close from half-open (default: 3)
+CIRCUIT_BREAKER_TIMEOUT=30.0            # Request timeout in seconds (default: 30.0)
 ```
+
+#### Programmatic Configuration
+
+```python
+from src.exceptions.circuit_breaker import CircuitBreakerConfig, get_circuit_breaker
+
+# Using environment variable defaults
+config = CircuitBreakerConfig(name="database-pool")
+breaker = get_circuit_breaker("database-pool", config)
+
+# Overriding specific settings
+config = CircuitBreakerConfig(
+    name="api-client",
+    failure_threshold=3,      # Override env var default
+    recovery_timeout=30.0,    # Override env var default
+    success_threshold=2,      # Override env var default
+    timeout=10.0              # Override env var default
+)
+breaker = get_circuit_breaker("api-client", config)
+```
+
+#### Configuration Priority
+
+1. **Instance-specific parameters** (highest priority)
+2. **Environment variables** (global defaults)
+3. **Built-in defaults** (lowest priority)
+
+This allows fine-tuned configuration per service while maintaining sensible global defaults.
 
 ### Retry Settings
 
 Retry configuration is done programmatically. Pre-configured configs are recommended for most use cases.
+
+### Preset Retry Configurations
+
+The system provides three preset retry configurations optimized for different scenarios:
+
+#### CONSERVATIVE_CONFIG
+```python
+CONSERVATIVE_CONFIG = RetryConfig(
+    max_attempts=3,      # Conservative number of retries
+    initial_delay=1.0,   # Start with 1 second delay
+    max_delay=16.0,      # Cap at 16 seconds
+    exponential_base=2.0,# Standard exponential backoff
+    jitter=True          # Add randomness to prevent thundering herd
+)
+```
+**Use for**: Database operations, critical API calls, most cloud storage operations
+**Rationale**: Balances reliability with reasonable latency. Suitable for most production workloads.
+
+#### AGGRESSIVE_CONFIG
+```python
+AGGRESSIVE_CONFIG = RetryConfig(
+    max_attempts=5,      # More retry attempts
+    initial_delay=0.5,   # Shorter initial delay
+    max_delay=8.0,       # Lower maximum delay
+    exponential_base=1.5,# Gentler exponential growth
+    jitter=True          # Add randomness
+)
+```
+**Use for**: Fast-recovering services, time-sensitive operations, user-facing requests
+**Rationale**: Prioritizes speed over maximum reliability. Good when quick recovery is more important than exhaustive retries.
+
+#### PATIENT_CONFIG
+```python
+PATIENT_CONFIG = RetryConfig(
+    max_attempts=4,      # Moderate retry attempts
+    initial_delay=2.0,   # Longer initial delay
+    max_delay=60.0,      # Much higher maximum delay
+    exponential_base=2.5,# Steeper exponential growth
+    jitter=True          # Add randomness
+)
+```
+**Use for**: Large file uploads/downloads, background processing, operations with high variability
+**Rationale**: Optimized for operations that may take longer to recover. Prevents overwhelming slow-recovering services.
+
+### Choosing the Right Configuration
+
+| Scenario | Recommended Config | Why |
+|----------|-------------------|-----|
+| Database queries | `CONSERVATIVE_CONFIG` | Reliable with reasonable timeouts |
+| GCS operations | `CONSERVATIVE_CONFIG` | Good balance for cloud storage |
+| User-facing APIs | `AGGRESSIVE_CONFIG` | Faster recovery for better UX |
+| Large file uploads | `PATIENT_CONFIG` | Handles long recovery times |
+| Background tasks | `PATIENT_CONFIG` | Can afford longer delays |
+| Critical operations | `CONSERVATIVE_CONFIG` | High reliability needed |
+
+### Custom Retry Configuration
+
+For specialized needs, create custom `RetryConfig` instances:
+
+```python
+from src.storage.retry import RetryConfig
+
+# Custom config for very fast operations
+fast_config = RetryConfig(
+    max_attempts=2,
+    initial_delay=0.1,
+    max_delay=1.0,
+    exponential_base=2.0,
+    jitter=True
+)
+
+# Custom config for extremely patient operations
+ultra_patient = RetryConfig(
+    max_attempts=6,
+    initial_delay=5.0,
+    max_delay=300.0,  # 5 minutes
+    exponential_base=2.0,
+    jitter=True
+)
+```
+
+### Integration Examples
+
+```python
+from src.storage.retry import with_retry, CONSERVATIVE_CONFIG, AGGRESSIVE_CONFIG
+from src.storage.manager import StorageManager
+
+# Using decorator with preset config
+@with_retry(CONSERVATIVE_CONFIG)
+def upload_file(file_path):
+    # Upload logic here
+    pass
+
+# Using storage manager with custom config
+storage = StorageManager(retry_config=AGGRESSIVE_CONFIG)
+storage.upload_file("path/to/file")
+
+# Functional approach
+from src.storage.retry import retry_operation
+result = retry_operation(
+    lambda: risky_operation(),
+    config=CONSERVATIVE_CONFIG,
+    operation_name="my-operation"
+)
+```
 
 ## Troubleshooting
 
