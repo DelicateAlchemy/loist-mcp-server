@@ -15,6 +15,9 @@ Features:
 import logging
 import json
 from typing import Dict, Any, Optional
+from google.cloud import tasks
+from google.protobuf import timestamp_pb2
+from google.api_core import exceptions as google_exceptions
 
 logger = logging.getLogger(__name__)
 
@@ -24,21 +27,15 @@ class TaskQueueError(Exception):
     pass
 
 
-def _get_cloud_tasks_client():
+def _get_cloud_tasks_client() -> tasks.CloudTasksClient:
     """
     Get or create Cloud Tasks client.
 
     Returns:
         Configured Cloud Tasks client
-
-    Raises:
-        TaskQueueError: If google-cloud-tasks is not available or client creation fails
     """
     try:
-        from google.cloud import tasks
         return tasks.CloudTasksClient()
-    except ImportError as e:
-        raise TaskQueueError("google-cloud-tasks not installed. Install with: pip install google-cloud-tasks") from e
     except Exception as e:
         logger.error(f"Failed to create Cloud Tasks client: {e}")
         raise TaskQueueError(f"Cloud Tasks client creation failed: {e}") from e
@@ -86,21 +83,23 @@ def enqueue_waveform_generation(
     location: str = "us-central1",
     queue_name: str = "audio-processing-queue",
     target_url: Optional[str] = None,
+    task_queue_mode: Optional[str] = None,
 ) -> str:
     """
     Enqueue a waveform generation task.
 
-    Creates a Cloud Task to generate a DAW-style SVG waveform for the given audio file.
-    Task will be processed asynchronously by the waveform handler endpoint.
+    Supports both Cloud Tasks (production) and local queue (development) modes.
+    In local mode, tasks are executed in-memory without requiring GCP infrastructure.
 
     Args:
         audio_id: UUID of the audio track
         audio_gcs_path: GCS path to the source audio file
         source_hash: SHA-256 hash of the source audio file
-        project_id: GCP project ID (auto-detected if not provided)
-        location: GCP region (default: us-central1)
-        queue_name: Cloud Tasks queue name (default: audio-processing-queue)
-        target_url: HTTP endpoint URL to call (auto-configured if not provided)
+        project_id: GCP project ID (auto-detected if not provided, cloud mode only)
+        location: GCP region (default: us-central1, cloud mode only)
+        queue_name: Cloud Tasks queue name (default: audio-processing-queue, cloud mode only)
+        target_url: HTTP endpoint URL to call (auto-configured if not provided, cloud mode only)
+        task_queue_mode: Queue mode - "cloud" or "local" (auto-detected from config if not provided)
 
     Returns:
         Task name/ID string
@@ -116,75 +115,120 @@ def enqueue_waveform_generation(
         ... )
         >>> print(f"Enqueued task: {task_id}")
     """
-    # Auto-detect project ID if not provided
-    if not project_id:
-        import os
-        project_id = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT")
+    # Determine queue mode (auto-detect from config if not provided)
+    if task_queue_mode is None:
+        try:
+            from src.config import config
+            task_queue_mode = config.task_queue_mode
+        except ImportError:
+            task_queue_mode = "cloud"  # Default fallback
+
+    # Use local queue mode
+    if task_queue_mode == "local":
+        try:
+            from src.tasks.local_queue import enqueue_local_task
+
+            # Create task payload
+            payload = _create_task_payload(
+                "waveform",
+                audioId=audio_id,
+                audioGcsPath=audio_gcs_path,
+                sourceHash=source_hash,
+            )
+
+            # Parse payload for local handler
+            task_payload = json.loads(payload)
+
+            logger.info(f"Enqueuing local waveform generation task for audio_id: {audio_id}")
+            task_id = enqueue_local_task(task_payload, target_url or "http://localhost:8080/tasks/waveform")
+
+            logger.info(f"Successfully enqueued local task: {task_id}")
+            return task_id
+
+        except Exception as e:
+            logger.error(f"Failed to enqueue local waveform task for {audio_id}: {e}")
+            raise TaskQueueError(f"Failed to enqueue local waveform task: {e}") from e
+
+    # Use Cloud Tasks mode (original implementation)
+    else:
+        # Auto-detect project ID if not provided
         if not project_id:
-            raise TaskQueueError("project_id not provided and GOOGLE_CLOUD_PROJECT env var not set")
+            import os
+            project_id = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT")
+            if not project_id:
+                raise TaskQueueError("project_id not provided and GOOGLE_CLOUD_PROJECT env var not set")
 
-    # Auto-configure target URL if not provided
-    if not target_url:
-        # Default to waveform handler endpoint on current service
-        # In Cloud Run, this would be the URL of the waveform processing service
-        import os
-        service_url = os.getenv("WAVEFORM_SERVICE_URL")
-        if service_url:
-            target_url = f"{service_url}/tasks/waveform"
-        else:
-            # Fallback for local development
-            target_url = "http://localhost:8080/tasks/waveform"
+        # Auto-configure target URL if not provided
+        if not target_url:
+            # Default to waveform handler endpoint on current service
+            # In Cloud Run, this would be the URL of the waveform processing service
+            import os
+            service_url = os.getenv("WAVEFORM_SERVICE_URL")
+            if service_url:
+                target_url = f"{service_url}/tasks/waveform"
+            else:
+                # Fallback for local development
+                target_url = "http://localhost:8080/tasks/waveform"
 
-    client = _get_cloud_tasks_client()
-    queue_path = _get_queue_path(project_id, location, queue_name)
+        client = _get_cloud_tasks_client()
+        queue_path = _get_queue_path(project_id, location, queue_name)
 
-    # Import Cloud Tasks classes lazily
-    try:
-        from google.cloud import tasks
-        from google.protobuf import timestamp_pb2
-        from google.api_core import exceptions as google_exceptions
-    except ImportError as e:
-        raise TaskQueueError("google-cloud-tasks not installed. Install with: pip install google-cloud-tasks") from e
+        # Create task payload
+        payload = _create_task_payload(
+            "waveform",
+            audioId=audio_id,
+            audioGcsPath=audio_gcs_path,
+            sourceHash=source_hash,
+        )
 
-    # Create task payload
-    payload = _create_task_payload(
-        "waveform",
-        audioId=audio_id,
-        audioGcsPath=audio_gcs_path,
-        sourceHash=source_hash,
-    )
+        # Create task
+        task = tasks.Task(
+            http_request=tasks.HttpRequest(
+                http_method=tasks.HttpMethod.POST,
+                url=target_url,
+                headers={"Content-Type": "application/json"},
+                body=payload.encode(),
+            ),
+        )
 
-    # Create task
-    task = tasks.Task(
-        http_request=tasks.HttpRequest(
-            http_method=tasks.HttpMethod.POST,
-            url=target_url,
-            headers={"Content-Type": "application/json"},
-            body=payload.encode(),
-        ),
-    )
+        # Configure retry settings
+        task.dispatch_deadline.CopyFrom(timestamp_pb2.Timestamp(seconds=1800))  # 30 minutes
 
-    # Configure retry settings
-    task.dispatch_deadline.CopyFrom(timestamp_pb2.Timestamp(seconds=1800))  # 30 minutes
+        try:
+            logger.info(f"Enqueuing Cloud Tasks waveform generation task for audio_id: {audio_id}")
+            response = client.create_task(parent=queue_path, task=task)
 
-    try:
-        logger.info(f"Enqueuing waveform generation task for audio_id: {audio_id}")
-        response = client.create_task(parent=queue_path, task=task)
+            task_name = response.name
+            logger.info(f"Successfully enqueued Cloud Tasks: {task_name}")
 
-        task_name = response.name
-        logger.info(f"Successfully enqueued task: {task_name}")
+            # Extract just the task ID from the full path
+            task_id = task_name.split('/')[-1]
+            return task_id
 
-        # Extract just the task ID from the full path
-        task_id = task_name.split('/')[-1]
-        return task_id
+        except google_exceptions.GoogleAPICallError as e:
+            if "PERMISSION_DENIED" in str(e) or "403" in str(e):
+                logger.error(f"Cloud Tasks permission denied for {audio_id}: {e}")
+                raise TaskQueueError(f"Cloud Tasks access denied. Check service account permissions for 'roles/cloudtasks.enqueuer': {e}") from e
+            elif "NOT_FOUND" in str(e) or "404" in str(e):
+                logger.error(f"Cloud Tasks queue not found for {audio_id}: {e}")
+                raise TaskQueueError(f"Cloud Tasks queue '{queue_name}' not found. Verify queue exists in region '{location}': {e}") from e
+            elif "RESOURCE_EXHAUSTED" in str(e) or "quota" in str(e).lower():
+                logger.error(f"Cloud Tasks quota exceeded for {audio_id}: {e}")
+                raise TaskQueueError(f"Cloud Tasks quota exceeded. Check current usage limits: {e}") from e
+            else:
+                logger.error(f"Cloud Tasks API error enqueuing waveform task for {audio_id}: {e}")
+                raise TaskQueueError(f"Cloud Tasks API error: {e}") from e
 
-    except google_exceptions.GoogleAPICallError as e:
-        logger.error(f"Cloud Tasks API error enqueuing waveform task for {audio_id}: {e}")
-        raise TaskQueueError(f"Failed to enqueue waveform task: {e}") from e
-
-    except Exception as e:
-        logger.error(f"Unexpected error enqueuing waveform task for {audio_id}: {e}")
-        raise TaskQueueError(f"Failed to enqueue waveform task: {e}") from e
+        except Exception as e:
+            if "GOOGLE_CLOUD_PROJECT" in str(e) or "project_id" in str(e).lower():
+                logger.error(f"Missing GCP project configuration for {audio_id}: {e}")
+                raise TaskQueueError(f"GCP project not configured. Set GOOGLE_CLOUD_PROJECT environment variable: {e}") from e
+            elif "credentials" in str(e).lower() or "authentication" in str(e).lower():
+                logger.error(f"GCP authentication failed for {audio_id}: {e}")
+                raise TaskQueueError(f"GCP authentication failed. Check service account credentials: {e}") from e
+            else:
+                logger.error(f"Unexpected error enqueuing waveform task for {audio_id}: {e}")
+                raise TaskQueueError(f"Unexpected error enqueuing Cloud Tasks: {e}") from e
 
 
 # ============================================================================
@@ -241,3 +285,84 @@ def enqueue_music_ai_query(
     """
     # TODO: Implement music.ai task enqueuing
     raise NotImplementedError("Music AI task enqueuing not yet implemented")
+
+
+def check_cloud_tasks_health(
+    project_id: Optional[str] = None,
+    location: str = "us-central1",
+    queue_name: str = "audio-processing-queue"
+) -> Dict[str, Any]:
+    """
+    Check Cloud Tasks queue health and accessibility.
+
+    Performs basic connectivity and permission tests for Cloud Tasks.
+
+    Args:
+        project_id: GCP project ID (auto-detected if not provided)
+        location: GCP region
+        queue_name: Cloud Tasks queue name
+
+    Returns:
+        Dict with health status and details:
+        {
+            "available": bool,
+            "configured": bool,
+            "error": str | None,
+            "queue_name": str | None,
+            "location": str | None,
+            "response_time_ms": float | None
+        }
+    """
+    import time
+
+    result = {
+        "available": False,
+        "configured": False,
+        "error": None,
+        "queue_name": queue_name,
+        "location": location,
+        "response_time_ms": None
+    }
+
+    start_time = time.time()
+
+    try:
+        # Auto-detect project ID if not provided
+        if not project_id:
+            import os
+            project_id = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT")
+            if not project_id:
+                result["error"] = "GCP project ID not configured"
+                return result
+
+        result["configured"] = True
+
+        # Test Cloud Tasks client creation and basic connectivity
+        try:
+            client = _get_cloud_tasks_client()
+
+            # Try to get queue path (tests authentication and basic connectivity)
+            queue_path = client.queue_path(project_id, location, queue_name)
+
+            # Try to get queue (tests permissions and queue existence)
+            # This will throw if queue doesn't exist or permissions are insufficient
+            queue = client.get_queue(name=queue_path)
+
+            result["available"] = True
+            result["response_time_ms"] = (time.time() - start_time) * 1000
+
+        except Exception as e:
+            result["error"] = f"Cloud Tasks health check failed: {str(e)}"
+            result["response_time_ms"] = (time.time() - start_time) * 1000
+
+            # Provide more specific error messages
+            if "PERMISSION_DENIED" in str(e):
+                result["error"] = "Cloud Tasks permission denied. Check service account has 'roles/cloudtasks.viewer' role"
+            elif "NOT_FOUND" in str(e):
+                result["error"] = f"Cloud Tasks queue '{queue_name}' not found in {location}"
+
+    except Exception as e:
+        result["error"] = f"Cloud Tasks health check setup failed: {str(e)}"
+        result["response_time_ms"] = (time.time() - start_time) * 1000
+
+    return result

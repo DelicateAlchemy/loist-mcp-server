@@ -90,6 +90,12 @@ class ServerConfig(BaseSettings):
     # Embed Configuration
     embed_base_url: str = "https://loist.io"  # Base URL for embed links (configurable for local dev)
 
+    # Task Queue Configuration
+    task_queue_mode: str = "cloud"  # "cloud" or "local" for development
+    allowed_task_queues: str = "audio-processing-queue"  # Comma-separated list of allowed queue names
+    cloud_tasks_strict_auth: bool = True  # Require service account validation in production
+    local_queue_max_workers: int = 2  # Maximum worker threads for local queue
+
     # Feature Flags
     enable_metrics: bool = False
     enable_healthcheck: bool = True
@@ -115,6 +121,11 @@ class ServerConfig(BaseSettings):
     def cors_expose_headers_list(self) -> list[str]:
         """Parse CORS expose headers string into list"""
         return [header.strip() for header in self.cors_expose_headers.split(",") if header.strip()]
+
+    @property
+    def allowed_task_queues_list(self) -> list[str]:
+        """Parse allowed task queues string into list"""
+        return [queue.strip() for queue in self.allowed_task_queues.split(",") if queue.strip()]
     
     @property
     def log_level_int(self) -> int:

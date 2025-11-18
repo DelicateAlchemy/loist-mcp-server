@@ -14,12 +14,12 @@ Features:
 import logging
 import json
 import hashlib
-import threading
 import time
+import threading
 from typing import Dict, Any, Optional
 from pathlib import Path
 import tempfile
-from dataclasses import dataclass, field
+from collections import defaultdict, Counter
 
 from fastmcp import FastMCP
 
@@ -29,152 +29,128 @@ from database.operations import update_waveform_metadata, check_waveform_cache
 from src.storage.gcs_client import create_gcs_client
 from src.exceptions import ValidationError, DatabaseOperationError, StorageError
 
+# Try to import circuit breaker for fault tolerance
+try:
+    from src.exceptions.circuit_breaker import get_circuit_breaker, CircuitBreakerConfig, CircuitBreakerOpenException
+    HAS_CIRCUIT_BREAKER = True
+except ImportError:
+    HAS_CIRCUIT_BREAKER = False
+
 logger = logging.getLogger(__name__)
 
+# Simple in-memory metrics for waveform generation
+# Structure for future Cloud Monitoring integration
+_waveform_metrics = {
+    "total_requests": 0,
+    "successful_generations": 0,
+    "failed_generations": 0,
+    "cache_hits": 0,
+    "processing_times": [],  # Store last 100 processing times
+    "error_types": Counter(),
+    "last_reset": time.time()
+}
 
-@dataclass
-class WaveformMetrics:
-    """Thread-safe metrics for waveform processing operations."""
-
-    # Core counters (use atomic operations when possible)
-    _total_requests: int = 0
-    _successful_generations: int = 0
-    _failed_generations: int = 0
-    _cache_hits: int = 0
-
-    # Processing time statistics
-    _processing_times: list = field(default_factory=list)
-    _processing_times_lock: threading.RLock = field(default_factory=threading.RLock)
-
-    # Error tracking
-    _error_counts: Dict[str, int] = field(default_factory=dict)
-    _error_counts_lock: threading.RLock = field(default_factory=threading.RLock)
-
-    # Thread safety locks
-    _counters_lock: threading.RLock = field(default_factory=threading.RLock)
-
-    def increment_total_requests(self):
-        """Atomically increment total requests counter."""
-        with self._counters_lock:
-            self._total_requests += 1
-
-    def increment_successful_generations(self):
-        """Atomically increment successful generations counter."""
-        with self._counters_lock:
-            self._successful_generations += 1
-
-    def increment_failed_generations(self):
-        """Atomically increment failed generations counter."""
-        with self._counters_lock:
-            self._failed_generations += 1
-
-    def increment_cache_hits(self):
-        """Atomically increment cache hits counter."""
-        with self._counters_lock:
-            self._cache_hits += 1
-
-    def add_processing_time(self, processing_time: float):
-        """Thread-safe addition of processing time."""
-        with self._processing_times_lock:
-            self._processing_times.append(processing_time)
-            # Keep only last 1000 measurements to prevent unbounded growth
-            if len(self._processing_times) > 1000:
-                self._processing_times.pop(0)
-
-    def increment_error_count(self, error_type: str):
-        """Thread-safe increment of error type counter."""
-        with self._error_counts_lock:
-            self._error_counts[error_type] = self._error_counts.get(error_type, 0) + 1
-
-    def get_metrics_snapshot(self) -> Dict[str, Any]:
-        """
-        Get a thread-safe snapshot of current metrics.
-
-        Returns a copy of metrics that can be safely read without locks.
-        """
-        with self._counters_lock:
-            total_requests = self._total_requests
-            successful_generations = self._successful_generations
-            failed_generations = self._failed_generations
-            cache_hits = self._cache_hits
-
-        with self._processing_times_lock:
-            processing_times = self._processing_times.copy()
-
-        with self._error_counts_lock:
-            error_types = self._error_counts.copy()
-
-        # Calculate derived metrics
-        processing_time_stats = {}
-        if processing_times:
-            processing_time_stats = {
-                "count": len(processing_times),
-                "average_seconds": sum(processing_times) / len(processing_times),
-                "min_seconds": min(processing_times),
-                "max_seconds": max(processing_times)
-            }
-
-        return {
-            "total_requests": total_requests,
-            "successful_generations": successful_generations,
-            "failed_generations": failed_generations,
-            "cache_hits": cache_hits,
-            "processing_time_stats": processing_time_stats,
-            "error_types": error_types
-        }
+_metrics_lock = threading.Lock()
 
 
-# Global metrics instance
-_waveform_metrics = WaveformMetrics()
-
-
-def _update_waveform_metrics(
-    success: bool,
-    processing_time: Optional[float] = None,
-    cache_hit: bool = False,
-    error_type: Optional[str] = None
-):
+def _update_waveform_metrics(success: bool, processing_time: Optional[float] = None,
+                           cache_hit: bool = False, error_type: Optional[str] = None) -> None:
     """
-    Update waveform processing metrics in a thread-safe manner.
+    Update waveform generation metrics.
 
     Args:
-        success: Whether the operation was successful
-        processing_time: Time taken for processing (in seconds)
+        success: Whether the generation was successful
+        processing_time: Time taken for generation (seconds)
         cache_hit: Whether this was served from cache
-        error_type: Type of error if operation failed
+        error_type: Type of error if failed
     """
-    _waveform_metrics.increment_total_requests()
+    with _metrics_lock:
+        _waveform_metrics["total_requests"] += 1
 
-    if cache_hit:
-        _waveform_metrics.increment_cache_hits()
-    elif success:
-        _waveform_metrics.increment_successful_generations()
-    else:
-        _waveform_metrics.increment_failed_generations()
+        if cache_hit:
+            _waveform_metrics["cache_hits"] += 1
+        elif success:
+            _waveform_metrics["successful_generations"] += 1
+        else:
+            _waveform_metrics["failed_generations"] += 1
+            if error_type:
+                _waveform_metrics["error_types"][error_type] += 1
 
-    if processing_time is not None:
-        _waveform_metrics.add_processing_time(processing_time)
+        if processing_time is not None:
+            _waveform_metrics["processing_times"].append(processing_time)
+            # Keep only last 100 processing times
+            if len(_waveform_metrics["processing_times"]) > 100:
+                _waveform_metrics["processing_times"].pop(0)
 
-    if error_type is not None:
-        _waveform_metrics.increment_error_count(error_type)
+
+def _log_waveform_metrics() -> None:
+    """Log current waveform metrics summary."""
+    with _metrics_lock:
+        total = _waveform_metrics["total_requests"]
+        if total == 0:
+            return
+
+        success_rate = (_waveform_metrics["successful_generations"] / total) * 100
+        cache_hit_rate = (_waveform_metrics["cache_hits"] / total) * 100
+        failure_rate = (_waveform_metrics["failed_generations"] / total) * 100
+
+        # Calculate average processing time
+        processing_times = _waveform_metrics["processing_times"]
+        avg_processing_time = sum(processing_times) / len(processing_times) if processing_times else 0
+
+        # Get top error types
+        top_errors = _waveform_metrics["error_types"].most_common(3)
+
+        logger.info(
+            f"Waveform metrics - Total: {total}, "
+            f"Success: {success_rate:.1f}%, "
+            f"Cache hits: {cache_hit_rate:.1f}%, "
+            f"Failures: {failure_rate:.1f}%, "
+            f"Avg processing time: {avg_processing_time:.2f}s"
+        )
+
+        if top_errors:
+            logger.info(f"Top errors: {dict(top_errors)}")
 
 
 def get_waveform_metrics() -> Dict[str, Any]:
     """
-    Get current waveform processing metrics snapshot.
+    Get current waveform metrics for monitoring.
 
     Returns:
-        Dictionary containing current metrics
+        Dict containing current metrics and statistics
     """
-    return _waveform_metrics.get_metrics_snapshot()
+    with _metrics_lock:
+        processing_times = _waveform_metrics["processing_times"]
+        avg_time = sum(processing_times) / len(processing_times) if processing_times else 0
+        min_time = min(processing_times) if processing_times else 0
+        max_time = max(processing_times) if processing_times else 0
+
+        return {
+            "total_requests": _waveform_metrics["total_requests"],
+            "successful_generations": _waveform_metrics["successful_generations"],
+            "failed_generations": _waveform_metrics["failed_generations"],
+            "cache_hits": _waveform_metrics["cache_hits"],
+            "processing_time_stats": {
+                "average_seconds": avg_time,
+                "min_seconds": min_time,
+                "max_seconds": max_time,
+                "count": len(processing_times)
+            },
+            "error_types": dict(_waveform_metrics["error_types"]),
+            "last_reset": _waveform_metrics["last_reset"]
+        }
 
 
 def _validate_cloud_tasks_auth(request_headers: Dict[str, str]) -> bool:
     """
     Validate that request is from Google Cloud Tasks.
 
-    Checks for Cloud Tasks specific headers and service account authentication.
-    In production, this should validate the service account making the request.
+    Performs comprehensive authentication validation including:
+    - Cloud Tasks User-Agent validation
+    - Queue name validation against configured allowed queues
+    - Service account identity validation (configurable strictness)
+    - Request signature validation (future enhancement)
 
     Args:
         request_headers: HTTP request headers
@@ -182,20 +158,64 @@ def _validate_cloud_tasks_auth(request_headers: Dict[str, str]) -> bool:
     Returns:
         True if request is authenticated, False otherwise
     """
-    # For MVP, we accept requests that appear to come from Cloud Tasks
-    # In production, should validate the service account identity
+    # Import config for validation settings
+    try:
+        from src.config import config
+        allowed_queues = config.allowed_task_queues_list
+        strict_auth = config.cloud_tasks_strict_auth
+    except ImportError:
+        # Fallback if config not available
+        allowed_queues = ["audio-processing-queue"]
+        strict_auth = True
 
     # Check for Cloud Tasks user agent
     user_agent = request_headers.get("User-Agent", "")
     if "Google-Cloud-Tasks" not in user_agent:
-        logger.warning(f"Suspicious request - User-Agent: {user_agent}")
+        logger.warning(f"Invalid User-Agent for Cloud Tasks request: {user_agent}")
         return False
 
-    # Additional validation could include:
-    # - Validating the service account identity
-    # - Checking request signatures
-    # - Validating the queue name
+    # Validate queue name header
+    queue_name = request_headers.get("X-CloudTasks-QueueName", "")
+    if not queue_name:
+        logger.warning("Missing X-CloudTasks-QueueName header")
+        return False
 
+    # Validate against configured allowed queues
+    if queue_name not in allowed_queues:
+        logger.warning(f"Unexpected queue name: {queue_name}. Allowed: {allowed_queues}")
+        return False
+
+    # Service account validation based on strictness setting
+    service_account = request_headers.get("X-CloudTasks-ServiceAccount", "")
+    if service_account:
+        # Validate service account format
+        if not service_account.endswith("@developer.gserviceaccount.com"):
+            logger.warning(f"Invalid service account format: {service_account}")
+            return False
+
+        # Additional validation could include:
+        # - Checking against expected service accounts
+        # - Validating project ID in service account email
+        logger.debug(f"Validated service account: {service_account}")
+    else:
+        # Check if we're in production (Cloud Run)
+        import os
+        is_production = bool(os.getenv("K_SERVICE"))
+
+        if is_production and strict_auth:
+            logger.warning("Missing service account identity in production environment with strict auth enabled")
+            return False
+        elif is_production:
+            logger.debug("Allowing request without service account in production (strict auth disabled)")
+        else:
+            logger.debug("Allowing request without service account in development")
+
+    # Future enhancements could include:
+    # - Request signature validation using HMAC
+    # - Timestamp validation to prevent replay attacks
+    # - IP address validation for Cloud Tasks ranges
+
+    logger.debug(f"Cloud Tasks authentication successful for queue: {queue_name}")
     return True
 
 
@@ -246,19 +266,20 @@ async def handle_waveform_task(payload: Dict[str, Any]) -> Dict[str, Any]:
     if not audio_id or not audio_gcs_path or not source_hash:
         raise ValidationError("Missing required payload fields: audioId, audioGcsPath, sourceHash")
 
-    start_time = time.time()
     logger.info(f"Processing waveform generation for audio_id: {audio_id}")
+    start_time = time.time()
 
     # Check cache first
     cached_path = check_waveform_cache(audio_id, source_hash)
     if cached_path:
         processing_time = time.time() - start_time
-        _update_waveform_metrics(success=True, processing_time=processing_time, cache_hit=True)
         logger.info(f"Cache hit for audio_id {audio_id} - waveform already exists")
+        _update_waveform_metrics(success=True, processing_time=processing_time, cache_hit=True)
         return {
             "status": "cache_hit",
             "audioId": audio_id,
             "waveformGcsPath": cached_path,
+            "processingTimeSeconds": processing_time,
             "message": "Waveform already exists in cache"
         }
 
@@ -287,8 +308,18 @@ async def handle_waveform_task(payload: Dict[str, Any]) -> Dict[str, Any]:
 
             blob_name = path_part[slash_index + 1:]  # Everything after bucket/
 
-            blob = client.bucket.blob(blob_name)
-            blob.download_to_filename(str(temp_audio_path))
+            try:
+                blob = client.bucket.blob(blob_name)
+                blob.download_to_filename(str(temp_audio_path))
+            except Exception as e:
+                if "403" in str(e) or "forbidden" in str(e).lower():
+                    raise StorageError(f"GCS access denied for {audio_gcs_path}. Check service account permissions: {e}") from e
+                elif "404" in str(e) or "not found" in str(e).lower():
+                    raise StorageError(f"Audio file not found in GCS: {audio_gcs_path}. File may have been deleted: {e}") from e
+                elif "network" in str(e).lower() or "timeout" in str(e).lower():
+                    raise StorageError(f"Network error downloading from GCS: {audio_gcs_path}. Check connectivity: {e}") from e
+                else:
+                    raise StorageError(f"Unexpected GCS download error for {audio_gcs_path}: {e}") from e
 
             # Verify downloaded file hash matches expected
             actual_hash = _calculate_file_hash(temp_audio_path)
@@ -300,52 +331,85 @@ async def handle_waveform_task(payload: Dict[str, Any]) -> Dict[str, Any]:
 
             # Generate waveform SVG
             logger.info("Generating waveform SVG")
-            result = generate_waveform_svg(
-                audio_path=temp_audio_path,
-                output_path=temp_svg_path,
-                width=2000,  # DAW-style width
-                height=200   # DAW-style height
-            )
+            try:
+                result = generate_waveform_svg(
+                    audio_path=temp_audio_path,
+                    output_path=temp_svg_path,
+                    width=2000,  # DAW-style width
+                    height=200   # DAW-style height
+                )
+            except WaveformGenerationError as e:
+                if "ffmpeg" in str(e).lower():
+                    raise WaveformGenerationError(f"FFmpeg processing failed for {audio_id}. Ensure FFmpeg is installed and accessible: {e}") from e
+                elif "format" in str(e).lower() or "codec" in str(e).lower():
+                    raise WaveformGenerationError(f"Audio format not supported for {audio_id}. Supported formats: MP3, WAV, FLAC, M4A: {e}") from e
+                elif "corrupt" in str(e).lower() or "invalid" in str(e).lower():
+                    raise WaveformGenerationError(f"Audio file appears corrupted for {audio_id}. File may be truncated or invalid: {e}") from e
+                else:
+                    raise WaveformGenerationError(f"Waveform generation failed for {audio_id}: {e}") from e
 
             # Upload SVG to GCS
             logger.info("Uploading waveform SVG to GCS")
-            gcs_path = upload_waveform_svg(
-                svg_path=temp_svg_path,
-                audio_id=audio_id,
-                content_hash=source_hash
-            )
+            try:
+                gcs_path = upload_waveform_svg(
+                    svg_path=temp_svg_path,
+                    audio_id=audio_id,
+                    content_hash=source_hash
+                )
+            except StorageError as e:
+                if "403" in str(e) or "forbidden" in str(e).lower():
+                    raise StorageError(f"GCS upload access denied for {audio_id}. Check service account permissions for waveform bucket: {e}") from e
+                elif "quota" in str(e).lower() or "exceeded" in str(e).lower():
+                    raise StorageError(f"GCS storage quota exceeded for {audio_id}. Free up space or increase quota: {e}") from e
+                elif "network" in str(e).lower() or "timeout" in str(e).lower():
+                    raise StorageError(f"Network error uploading waveform for {audio_id}. Check connectivity: {e}") from e
+                else:
+                    raise StorageError(f"GCS upload failed for {audio_id}: {e}") from e
 
             # Update database metadata
             logger.info("Updating database with waveform metadata")
-            update_waveform_metadata(
-                audio_id=audio_id,
-                waveform_gcs_path=gcs_path,
-                source_hash=source_hash
-            )
+            try:
+                update_waveform_metadata(
+                    audio_id=audio_id,
+                    waveform_gcs_path=gcs_path,
+                    source_hash=source_hash
+                )
+            except DatabaseOperationError as e:
+                if "connection" in str(e).lower() or "cloudsql" in str(e).lower():
+                    raise DatabaseOperationError(f"Database connection failed for {audio_id}. Check Cloud SQL Proxy or direct connection: {e}") from e
+                elif "duplicate" in str(e).lower() or "unique" in str(e).lower():
+                    raise DatabaseOperationError(f"Waveform metadata already exists for {audio_id}. This may indicate a duplicate task: {e}") from e
+                elif "timeout" in str(e).lower():
+                    raise DatabaseOperationError(f"Database operation timed out for {audio_id}. Database may be overloaded: {e}") from e
+                else:
+                    raise DatabaseOperationError(f"Database update failed for {audio_id}: {e}") from e
 
+            total_processing_time = time.time() - start_time
             logger.info(f"Successfully generated waveform for audio_id: {audio_id}")
-
-            # Update metrics for successful generation
-            processing_time = time.time() - start_time
-            _update_waveform_metrics(success=True, processing_time=processing_time, cache_hit=False)
+            _update_waveform_metrics(success=True, processing_time=total_processing_time)
 
             return {
                 "status": "completed",
                 "audioId": audio_id,
                 "waveformGcsPath": gcs_path,
-                "processingTimeSeconds": result["processing_time_seconds"],
+                "processingTimeSeconds": total_processing_time,
+                "waveformProcessingTimeSeconds": result["processing_time_seconds"],
                 "fileSizeBytes": result["file_size_bytes"],
                 "sampleCount": result["sample_count"],
                 "message": "Waveform generation completed successfully"
             }
 
     except Exception as e:
-        # Update metrics for failed generation
         processing_time = time.time() - start_time
         error_type = type(e).__name__
-        _update_waveform_metrics(success=False, processing_time=processing_time, cache_hit=False, error_type=error_type)
-
         logger.error(f"Failed to process waveform task for {audio_id}: {e}")
+
+        # Update metrics for failed operation
+        _update_waveform_metrics(success=False, processing_time=processing_time, error_type=error_type)
+
+        # Handle circuit breaker open exceptions specially
+        if HAS_CIRCUIT_BREAKER and isinstance(e, CircuitBreakerOpenException):
+            raise WaveformGenerationError(f"Service temporarily unavailable due to circuit breaker: {e}") from e
 
         # Re-raise with appropriate error type
         if isinstance(e, (ValidationError, WaveformGenerationError, StorageError, DatabaseOperationError)):
@@ -368,31 +432,79 @@ def register_task_handlers(mcp: FastMCP) -> None:
     """
 
     @mcp.tool()
-    def get_waveform_metrics_tool() -> Dict[str, Any]:
+    def get_waveform_metrics_tool() -> dict:
         """
-        Get current waveform processing metrics.
-
-        Returns comprehensive statistics about waveform generation operations
-        including success rates, processing times, cache hit rates, and error
-        tracking.
+        Get current waveform generation metrics.
 
         Returns:
-            Dictionary containing current metrics with the following structure:
-            {
-                "total_requests": int,
-                "successful_generations": int,
-                "failed_generations": int,
-                "cache_hits": int,
-                "processing_time_stats": {
-                    "count": int,
-                    "average_seconds": float,
-                    "min_seconds": float,
-                    "max_seconds": float
-                },
-                "error_types": {"ErrorType": count, ...}
-            }
+            dict: Current metrics including success rates, processing times, and error statistics
         """
-        return {"status": "success", "metrics": get_waveform_metrics()}
+        try:
+            logger.debug("Waveform metrics requested")
+            metrics = get_waveform_metrics()
+            return {
+                "status": "success",
+                "metrics": metrics
+            }
+        except Exception as e:
+            logger.error(f"Error retrieving waveform metrics: {e}")
+            return {
+                "status": "error",
+                "error": str(e)
+            }
+
+    @mcp.tool()
+    def get_circuit_breaker_status() -> dict:
+        """
+        Get status of all circuit breakers.
+
+        Returns:
+            dict: Status of all registered circuit breakers including state and statistics
+        """
+        try:
+            if not HAS_CIRCUIT_BREAKER:
+                return {
+                    "status": "unavailable",
+                    "message": "Circuit breaker module not available"
+                }
+
+            from src.exceptions.circuit_breaker import get_all_circuit_breakers
+            breakers = get_all_circuit_breakers()
+
+            status = {}
+            for name, breaker in breakers.items():
+                stats = breaker.stats
+                status[name] = {
+                    "state": breaker.state.value,
+                    "config": {
+                        "failure_threshold": breaker.config.failure_threshold,
+                        "recovery_timeout": breaker.config.recovery_timeout,
+                        "success_threshold": breaker.config.success_threshold,
+                        "timeout": breaker.config.timeout
+                    },
+                    "stats": {
+                        "total_requests": stats.total_requests,
+                        "successful_requests": stats.successful_requests,
+                        "failed_requests": stats.failed_requests,
+                        "consecutive_failures": stats.consecutive_failures,
+                        "consecutive_successes": stats.consecutive_successes,
+                        "last_failure_time": stats.last_failure_time,
+                        "last_success_time": stats.last_success_time,
+                        "state_changes": stats.state_changes
+                    }
+                }
+
+            return {
+                "status": "success",
+                "circuit_breakers": status
+            }
+
+        except Exception as e:
+            logger.error(f"Error retrieving circuit breaker status: {e}")
+            return {
+                "status": "error",
+                "error": str(e)
+            }
 
     @mcp.custom_route("/tasks/waveform", methods=["POST"])
     async def waveform_task_handler(request):
@@ -434,6 +546,11 @@ def register_task_handlers(mcp: FastMCP) -> None:
             # Process the task
             logger.info("Processing waveform generation task")
             result = await handle_waveform_task(payload)
+
+            # Log metrics periodically (every 10 requests)
+            with _metrics_lock:
+                if _waveform_metrics["total_requests"] % 10 == 0:
+                    _log_waveform_metrics()
 
             return {
                 "success": True,

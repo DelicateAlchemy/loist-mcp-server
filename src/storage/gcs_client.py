@@ -26,6 +26,20 @@ try:
 except ImportError:
     HAS_APP_CONFIG = False
 
+# Try to import circuit breaker for fault tolerance
+try:
+    from src.exceptions.circuit_breaker import get_circuit_breaker, CircuitBreakerConfig
+    HAS_CIRCUIT_BREAKER = True
+except ImportError:
+    HAS_CIRCUIT_BREAKER = False
+
+# Try to import retry utilities for enhanced error handling
+try:
+    from src.exceptions.retry import retry_call, GCS_RETRY_CONFIG, RetryExhaustedException
+    HAS_RETRY = True
+except ImportError:
+    HAS_RETRY = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -148,9 +162,27 @@ class GCSClient:
     
     @property
     def bucket(self) -> storage.Bucket:
-        """Get or create bucket reference."""
+        """Get or create bucket reference with circuit breaker protection."""
         if self._bucket is None:
-            self._bucket = self.client.bucket(self.bucket_name)
+            def _get_bucket():
+                """Get bucket with circuit breaker protection."""
+                return self.client.bucket(self.bucket_name)
+
+            if HAS_CIRCUIT_BREAKER:
+                gcs_circuit_breaker = get_circuit_breaker(
+                    "gcs_bucket",
+                    CircuitBreakerConfig(
+                        name="gcs_bucket",
+                        failure_threshold=3,  # Fail after 3 consecutive failures
+                        recovery_timeout=30.0,  # Wait 30s before trying again
+                        success_threshold=2,  # Need 2 successes to close
+                        timeout=15.0  # 15s timeout for bucket operations
+                    )
+                )
+                self._bucket = gcs_circuit_breaker.call(_get_bucket)
+            else:
+                self._bucket = _get_bucket()
+
         return self._bucket
     
     def generate_signed_url(
@@ -467,27 +499,76 @@ class GCSClient:
         if not source_path.exists():
             raise FileNotFoundError(f"Source file not found: {source_path}")
         
+        def _upload_with_retry():
+            """Perform upload with retry and circuit breaker protection."""
+            def _single_upload_attempt():
+                """Single upload attempt."""
+                blob = self.bucket.blob(destination_blob_name)
+
+                # Set metadata if provided
+                if metadata:
+                    blob.metadata = metadata
+
+                # Upload file
+                blob.upload_from_filename(
+                    str(source_path),
+                    content_type=content_type,
+                )
+
+                return blob
+
+            # Apply retry logic first, then circuit breaker
+            if HAS_RETRY:
+                def _retryable_upload():
+                    return retry_call(_single_upload_attempt, GCS_RETRY_CONFIG)
+
+                if HAS_CIRCUIT_BREAKER:
+                    gcs_circuit_breaker = get_circuit_breaker(
+                        "gcs_upload",
+                        CircuitBreakerConfig(
+                            name="gcs_upload",
+                            failure_threshold=3,  # Fail after 3 consecutive failures
+                            recovery_timeout=30.0,  # Wait 30s before trying again
+                            success_threshold=2,  # Need 2 successes to close
+                            timeout=60.0  # 60s timeout for uploads (can be large files)
+                        )
+                    )
+                    return gcs_circuit_breaker.call(_retryable_upload)
+                else:
+                    return _retryable_upload()
+            else:
+                # Fallback without retry
+                if HAS_CIRCUIT_BREAKER:
+                    gcs_circuit_breaker = get_circuit_breaker(
+                        "gcs_upload",
+                        CircuitBreakerConfig(
+                            name="gcs_upload",
+                            failure_threshold=3,
+                            recovery_timeout=30.0,
+                            success_threshold=2,
+                            timeout=60.0
+                        )
+                    )
+                    return gcs_circuit_breaker.call(_single_upload_attempt)
+                else:
+                    return _single_upload_attempt()
+
         try:
-            blob = self.bucket.blob(destination_blob_name)
-            
-            # Set metadata if provided
-            if metadata:
-                blob.metadata = metadata
-            
-            # Upload file
-            blob.upload_from_filename(
-                str(source_path),
-                content_type=content_type,
-            )
-            
+            blob = _upload_with_retry()
+
             logger.info(
                 f"Uploaded file: {source_path} -> gs://{self.bucket_name}/{destination_blob_name}"
             )
-            
+
             return blob
-            
+
         except GoogleCloudError as e:
             logger.error(f"Failed to upload file {source_path}: {e}")
+            raise
+        except Exception as e:
+            if HAS_RETRY and isinstance(e, RetryExhaustedException):
+                logger.error(f"GCS upload failed after {e.attempts} retry attempts for {source_path}. Last error: {e.last_exception}")
+                raise e.last_exception from e
             raise
     
     def delete_file(self, blob_name: str) -> bool:
@@ -768,4 +849,74 @@ def get_file_metadata(
     """
     client = create_gcs_client(bucket_name=bucket_name)
     return client.get_file_metadata(blob_name)
+
+
+def check_gcs_health() -> Dict[str, Any]:
+    """
+    Check GCS connectivity and configuration health.
+
+    Performs basic connectivity test and configuration validation.
+
+    Returns:
+        Dict with health status and details:
+        {
+            "available": bool,
+            "configured": bool,
+            "error": str | None,
+            "bucket_name": str | None,
+            "project_id": str | None,
+            "response_time_ms": float | None
+        }
+    """
+    import time
+
+    result = {
+        "available": False,
+        "configured": False,
+        "error": None,
+        "bucket_name": None,
+        "project_id": None,
+        "response_time_ms": None
+    }
+
+    start_time = time.time()
+
+    try:
+        # Check configuration first
+        if HAS_APP_CONFIG:
+            bucket_name = app_config.gcs_bucket_name
+            project_id = app_config.gcs_project_id
+        else:
+            bucket_name = os.getenv("GCS_BUCKET_NAME")
+            project_id = os.getenv("GCS_PROJECT_ID")
+
+        if not bucket_name or not project_id:
+            result["error"] = "GCS bucket name or project ID not configured"
+            return result
+
+        result["configured"] = True
+        result["bucket_name"] = bucket_name
+        result["project_id"] = project_id
+
+        # Test connectivity by listing objects (lightweight operation)
+        # This will fail if credentials are invalid or network is down
+        client = create_gcs_client(bucket_name=bucket_name, project_id=project_id)
+
+        # Try to get bucket (this tests credentials and connectivity)
+        try:
+            bucket = client.bucket
+            # Test basic connectivity - this will throw if credentials are bad
+            bucket.reload()
+            result["available"] = True
+            result["response_time_ms"] = (time.time() - start_time) * 1000
+
+        except Exception as e:
+            result["error"] = f"GCS connectivity test failed: {str(e)}"
+            result["response_time_ms"] = (time.time() - start_time) * 1000
+
+    except Exception as e:
+        result["error"] = f"GCS health check failed: {str(e)}"
+        result["response_time_ms"] = (time.time() - start_time) * 1000
+
+    return result
 
