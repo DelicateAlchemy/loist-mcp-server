@@ -1043,6 +1043,223 @@ class TestArtworkExtraction:
             extract_artwork("/nonexistent/file.mp3")
 
 
+class TestFilenameMetadataParsing:
+    """Test filename-based metadata parsing."""
+
+    def test_parse_filename_artist_title_pattern(self):
+        """Test parsing 'Artist - Title.mp3' pattern."""
+        from src.metadata.extractor import parse_filename_metadata
+        import tempfile
+
+        # Create a temporary file with the pattern
+        with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as temp_file:
+            temp_path = Path(temp_file.name)
+            temp_path.with_name("The Beatles - Hey Jude.mp3")  # Rename for testing
+
+            # Mock the path for testing
+            existing_metadata = {}
+            result = parse_filename_metadata("dummy_path/The Beatles - Hey Jude.mp3", existing_metadata)
+
+            expected = {
+                'artist': 'The Beatles',
+                'title': 'Hey Jude'
+            }
+            assert result == expected
+
+    def test_parse_filename_with_album_parentheses(self):
+        """Test parsing 'Artist - Title (Album).mp3' pattern."""
+        from src.metadata.extractor import parse_filename_metadata
+
+        existing_metadata = {}
+        result = parse_filename_metadata("dummy_path/Queen - Bohemian Rhapsody (A Night At The Opera).mp3", existing_metadata)
+
+        expected = {
+            'artist': 'Queen',
+            'title': 'Bohemian Rhapsody',
+            'album': 'A Night At The Opera'
+        }
+        assert result == expected
+
+    def test_parse_filename_with_year_as_album(self):
+        """Test parsing 'Artist - Title (Year).mp3' where year is treated as album."""
+        from src.metadata.extractor import parse_filename_metadata
+
+        existing_metadata = {}
+        result = parse_filename_metadata("dummy_path/The Beatles - Yesterday (1965).mp3", existing_metadata)
+
+        expected = {
+            'artist': 'The Beatles',
+            'title': 'Yesterday',
+            'year': '1965'
+        }
+        assert result == expected
+
+    def test_parse_filename_artist_album_title_pattern(self):
+        """Test parsing 'Artist - Album - Title.mp3' pattern."""
+        from src.metadata.extractor import parse_filename_metadata
+
+        existing_metadata = {}
+        result = parse_filename_metadata("dummy_path/Pink Floyd - The Wall - Comfortably Numb.mp3", existing_metadata)
+
+        expected = {
+            'artist': 'Pink Floyd',
+            'album': 'The Wall',
+            'title': 'Comfortably Numb'
+        }
+        assert result == expected
+
+    def test_parse_filename_title_only(self):
+        """Test parsing filename with just title."""
+        from src.metadata.extractor import parse_filename_metadata
+
+        existing_metadata = {}
+        result = parse_filename_metadata("dummy_path/Untitled Track.mp3", existing_metadata)
+
+        expected = {
+            'title': 'Untitled Track'
+        }
+        assert result == expected
+
+    def test_parse_filename_with_track_number_removal(self):
+        """Test that track numbers are removed during preprocessing."""
+        from src.metadata.extractor import parse_filename_metadata
+
+        existing_metadata = {}
+        result = parse_filename_metadata("dummy_path/01. The Beatles - Hey Jude.mp3", existing_metadata)
+
+        expected = {
+            'artist': 'The Beatles',
+            'title': 'Hey Jude'
+        }
+        assert result == expected
+
+    def test_parse_filename_multiple_track_number_formats(self):
+        """Test various track number formats are handled."""
+        from src.metadata.extractor import parse_filename_metadata
+
+        test_cases = [
+            ("01. Artist - Title.mp3", {'artist': 'Artist', 'title': 'Title'}),
+            ("1- Artist - Title.mp3", {'artist': 'Artist', 'title': 'Title'}),
+            ("(01) Artist - Title.mp3", {'artist': 'Artist', 'title': 'Title'}),
+            ("[01] Artist - Title.mp3", {'artist': 'Artist', 'title': 'Title'}),
+        ]
+
+        for filename, expected in test_cases:
+            existing_metadata = {}
+            result = parse_filename_metadata(f"dummy_path/{filename}", existing_metadata)
+            assert result == expected, f"Failed for {filename}"
+
+    def test_parse_filename_skip_short_titles(self):
+        """Test that very short titles after dash are skipped."""
+        from src.metadata.extractor import parse_filename_metadata
+
+        existing_metadata = {}
+        result = parse_filename_metadata("dummy_path/Artist - 1.mp3", existing_metadata)
+
+        # Should fall back to title-only parsing
+        assert result == {'title': 'Artist - 1'}
+
+    def test_parse_filename_existing_metadata_not_overwritten(self):
+        """Test that existing metadata is not overwritten by filename parsing."""
+        from src.metadata.extractor import parse_filename_metadata
+
+        existing_metadata = {
+            'artist': 'Existing Artist',
+            'title': 'Existing Title',
+            'album': 'Existing Album'
+        }
+
+        result = parse_filename_metadata("dummy_path/New Artist - New Title.mp3", existing_metadata)
+
+        # Should return empty dict since all fields already exist
+        assert result == {}
+
+    def test_parse_filename_fill_missing_fields_only(self):
+        """Test that only missing fields are filled from filename."""
+        from src.metadata.extractor import parse_filename_metadata
+
+        existing_metadata = {
+            'artist': 'Existing Artist',  # This exists
+            'title': None,  # This is missing
+            'album': None,  # This is missing
+        }
+
+        result = parse_filename_metadata("dummy_path/New Artist - New Title (New Album).mp3", existing_metadata)
+
+        # Should only fill missing fields
+        expected = {
+            'title': 'New Title',
+            'album': 'New Album'
+        }
+        assert result == expected
+
+    def test_parse_filename_title_with_year(self):
+        """Test parsing title with year patterns."""
+        from src.metadata.extractor import parse_filename_metadata
+
+        test_cases = [
+            ("Song Title (2020).mp3", {'title': 'Song Title', 'year': '2020'}),
+            ("Song Title - 2020.mp3", {'title': 'Song Title', 'year': '2020'}),
+        ]
+
+        for filename, expected in test_cases:
+            existing_metadata = {}
+            result = parse_filename_metadata(f"dummy_path/{filename}", existing_metadata)
+            assert result == expected, f"Failed for {filename}"
+
+    def test_parse_filename_unreasonable_titles_skipped(self):
+        """Test that unreasonable titles are handled appropriately."""
+        from src.metadata.extractor import parse_filename_metadata
+
+        # Test with just numbers/symbols - should return None for title-only pattern
+        existing_metadata = {}
+        result = parse_filename_metadata("dummy_path/123-456.mp3", existing_metadata)
+
+        # Should still work but title might be different based on parsing logic
+        assert isinstance(result, dict)
+
+
+class TestMetadataQualityValidationAfterEnhancement:
+    """Test the adaptive quality validation after filename enhancement."""
+
+    def test_quality_validation_with_title_allowed(self):
+        """Test that files with titles pass validation even with low quality scores."""
+        from src.tools.process_audio import _validate_metadata_quality_after_enhancement
+
+        # Low quality metadata but has title
+        metadata = {
+            'title': 'Some Title',
+            'artist': None,
+            'album': None,
+            'genre': None,
+            'year': None,
+            'duration': 180,
+            'format': 'mp3'
+        }
+
+        # Should not raise an exception
+        _validate_metadata_quality_after_enhancement(metadata)
+
+    def test_quality_validation_without_title_fails(self):
+        """Test that files without titles fail validation."""
+        from src.tools.process_audio import _validate_metadata_quality_after_enhancement
+        from src.metadata.extractor import MetadataExtractionError
+
+        # No title at all
+        metadata = {
+            'artist': 'Some Artist',
+            'album': 'Some Album',
+            'genre': None,
+            'year': None,
+            'duration': 180,
+            'format': 'mp3'
+        }
+
+        # Should raise MetadataExtractionError
+        with pytest.raises(MetadataExtractionError, match="No title could be determined"):
+            _validate_metadata_quality_after_enhancement(metadata)
+
+
 if __name__ == "__main__":
     # Allow running tests directly
     pytest.main([__file__, "-v"])

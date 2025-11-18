@@ -72,9 +72,3 @@ def pytest_configure(config: pytest.Config) -> None:
     )
 
 
-@pytest.fixture(scope="session")
-def pytest_config():
-    """
-    Provide access to pytest configuration in tests if needed.
-    """
-    return None

@@ -16,6 +16,7 @@ from .extractor import (
     extract_id3_tags,
     extract_artwork,
     assess_metadata_quality,
+    parse_filename_metadata,
     MetadataExtractionError,
     MetadataQualityError,
 )
@@ -34,6 +35,7 @@ __all__ = [
     "extract_id3_tags",
     "extract_artwork",
     "assess_metadata_quality",
+    "parse_filename_metadata",
     "MetadataExtractionError",
     "MetadataQualityError",
     "FormatValidator",

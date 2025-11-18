@@ -19,7 +19,13 @@ The server features a modern, scalable architecture with:
 
 ## MCP Server Naming Strategy
 
-This project supports local development, staging, and production deployments with distinct naming conventions to avoid conflicts in MCP client configurations:
+This project supports **2 distinct environments** with clear separation between local development and cloud staging/production:
+
+- **Local Development**: Fast iteration with Docker containers
+- **Staging**: Cloud-based integration testing and QA
+- **Production**: Live production deployment
+
+Each environment has distinct naming conventions to avoid conflicts in MCP client configurations:
 
 ### Local Development
 - **Cursor MCP Server Name**: `loist-music-library-local`
@@ -27,7 +33,7 @@ This project supports local development, staging, and production deployments wit
 - **Environment**: Docker containers with local PostgreSQL + GCS integration
 - **Transport**: stdio (for Cursor MCP integration)
 
-### Development/Staging Environment
+### Staging Environment
 - **Cursor MCP Server Name**: `loist-music-library-staging`
 - **FastMCP Server Name**: `Music Library MCP - Staging`
 - **Environment**: Cloud Run with staging PostgreSQL + dedicated GCS staging buckets
@@ -140,20 +146,6 @@ The server implements a layered architecture with clear separation of concerns:
 }
 ```
 
-**Staging Environment (docker-compose.staging.yml):**
-```yaml
-version: '3.8'
-services:
-  mcp-server-staging:
-    image: loist-mcp-server:latest
-    environment:
-      - SERVER_NAME=Music Library MCP - Staging
-      - SERVER_TRANSPORT=http
-      - GCS_BUCKET_NAME=loist-mvp-staging-audio-files
-      - DB_NAME=loist_mvp_staging
-    ports:
-      - "8081:8080"  # Different port than local dev
-```
 
 **Production Deployment:**
 ```json

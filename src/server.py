@@ -5,6 +5,7 @@ FastMCP-based server for audio ingestion and embedding
 
 import os
 import sys
+import time
 from pathlib import Path
 
 # Add parent directory to Python path for imports (needed for Docker)
@@ -18,11 +19,11 @@ from contextlib import asynccontextmanager
 from typing import Optional
 
 from fastmcp import FastMCP
-from starlette.responses import HTMLResponse
+from starlette.responses import HTMLResponse, JSONResponse
 from starlette.templating import Jinja2Templates
 
-from auth import SimpleBearerAuth
-from config import config
+from src.auth import SimpleBearerAuth
+from src.config import config
 
 # Import exceptions (clean and simple - no complex loading needed)
 from src.exceptions import (
@@ -68,13 +69,12 @@ logger.info("✅ Server setup validation passed")
 # Initialize FastMCP server cleanly
 mcp = create_fastmcp_server()
 
+# Register task handlers for async processing
+from src.tasks.handler import register_task_handlers
+register_task_handlers(mcp)
+
 # Configure Jinja2 templates
 templates = setup_jinja_templates()
-
-# Register HTTP API routes that wrap MCP tools and resources
-from src.http_api import register_http_api_routes
-register_http_api_routes(mcp)
-logger.info("✅ HTTP API routes registered")
 
 
 @asynccontextmanager
@@ -109,6 +109,33 @@ else:
 # Log startup information for debugging
 log_server_startup_info()
 
+# ============================================================================
+# Health Check Caching for Cost Optimization
+# ============================================================================
+
+# Global cache for database health status to reduce Cloud SQL queries
+_last_db_check = {"time": 0, "result": None}
+_db_check_cache_ttl = 5  # seconds
+
+def check_database_availability_cached():
+    """
+    Cached version of database availability check.
+
+    Reduces Cloud SQL queries by caching health status for short periods.
+    This significantly reduces database load from health checks.
+    """
+    global _last_db_check
+
+    now = time.time()
+    if now - _last_db_check["time"] < _db_check_cache_ttl:
+        return _last_db_check["result"]
+
+    # Fresh check
+    from database import check_database_availability
+    result = check_database_availability()
+    _last_db_check = {"time": now, "result": result}
+    return result
+
 
 @mcp.tool()
 def health_check() -> dict:
@@ -123,19 +150,70 @@ def health_check() -> dict:
     """
     from src.error_utils import handle_tool_error
     from src.exceptions import MusicLibraryError, ResourceNotFoundError
+    from database import check_database_availability
+    from src.storage.gcs_client import check_gcs_health
+    from src.tasks.queue import check_cloud_tasks_health
 
     try:
         logger.debug("Health check requested")
 
+        # Check all dependencies (using cached DB check for cost optimization)
+        db_status = check_database_availability_cached()
+        gcs_status = check_gcs_health()
+        tasks_status = check_cloud_tasks_health()
+
+        # Determine overall health status
+        all_healthy = all([
+            db_status["available"],
+            gcs_status["available"],
+            tasks_status["available"]
+        ])
+
         # Verify server is operational
         response = {
-            "status": "healthy",
+            "status": "healthy" if all_healthy else "degraded",
             "service": config.server_name,
             "version": config.server_version,
             "transport": config.server_transport,
             "log_level": config.log_level,
             "authentication": "enabled" if config.auth_enabled else "disabled",
+            "database": {
+                "available": db_status["available"],
+                "connection_type": db_status["connection_type"],
+                "response_time_ms": db_status["response_time_ms"],
+                "error": db_status["error"]
+            },
+            "gcs": {
+                "available": gcs_status["available"],
+                "configured": gcs_status["configured"],
+                "bucket_name": gcs_status["bucket_name"],
+                "response_time_ms": gcs_status["response_time_ms"],
+                "error": gcs_status["error"]
+            },
+            "cloud_tasks": {
+                "available": tasks_status["available"],
+                "configured": tasks_status["configured"],
+                "queue_name": tasks_status["queue_name"],
+                "location": tasks_status["location"],
+                "response_time_ms": tasks_status["response_time_ms"],
+                "error": tasks_status["error"]
+            }
         }
+
+        # Include connection pool stats if database is available
+        if db_status["available"]:
+            try:
+                from database import get_connection_pool
+                pool = get_connection_pool()
+                pool_stats = pool.get_stats()
+                response["database"]["pool_stats"] = {
+                    "connections_created": pool_stats.get("connections_created", 0),
+                    "queries_executed": pool_stats.get("queries_executed", 0),
+                    "last_health_check": pool_stats.get("last_health_check")
+                }
+            except Exception as e:
+                logger.debug(f"Could not get pool stats: {e}")
+                response["database"]["pool_stats_error"] = str(e)
 
         logger.info("Health check passed")
         return response
@@ -145,6 +223,187 @@ def health_check() -> dict:
         error_response = handle_tool_error(e, "health_check")
         logger.error(f"Health check failed: {error_response}")
         return error_response
+
+
+@mcp.custom_route("/health/database", methods=["GET"])
+def database_health_endpoint(request):
+    """
+    Dedicated database health check endpoint.
+
+    Returns detailed database connectivity and performance information.
+    Useful for monitoring systems and load balancers.
+    """
+    from datetime import datetime
+
+    try:
+        from database import check_database_availability, get_connection_pool
+
+        # Check database availability
+        db_status = check_database_availability()
+
+        response = {
+            "status": "healthy" if db_status["available"] else "unhealthy",
+            "timestamp": datetime.utcnow().isoformat() + 'Z',
+            "database": {
+                "available": db_status["available"],
+                "connection_type": db_status["connection_type"],
+                "response_time_ms": db_status["response_time_ms"],
+                "error": db_status["error"]
+            }
+        }
+
+        # Add detailed pool information if available
+        if db_status["available"]:
+            try:
+                pool = get_connection_pool()
+                health = pool.health_check()
+                pool_stats = pool.get_stats()
+
+                response["database"].update({
+                    "version": health.get("database_version"),
+                    "pool_size": health.get("max_connections"),
+                    "pool_stats": {
+                        "connections_created": pool_stats.get("connections_created", 0),
+                        "connections_closed": pool_stats.get("connections_closed", 0),
+                        "connections_failed": pool_stats.get("connections_failed", 0),
+                        "queries_executed": pool_stats.get("queries_executed", 0),
+                        "last_health_check": pool_stats.get("last_health_check")
+                    }
+                })
+            except Exception as e:
+                response["database"]["pool_error"] = str(e)
+
+        # Set HTTP status code based on availability
+        status_code = 200 if db_status["available"] else 503
+
+        return JSONResponse(content=response, status_code=status_code)
+
+    except Exception as e:
+        logger.error(f"Database health endpoint error: {e}")
+        return JSONResponse(
+            content={
+                "status": "error",
+                "timestamp": datetime.utcnow().isoformat() + 'Z',
+                "database": {
+                    "available": False,
+                    "error": str(e)
+                }
+            },
+            status_code=500
+        )
+
+
+@mcp.custom_route("/health/live", methods=["GET"])
+def liveness_health_endpoint(request):
+    """
+    Liveness health check endpoint - NO DATABASE QUERIES.
+
+    Checks if the application is running and can handle requests.
+    This is a basic check that doesn't test external dependencies.
+
+    Used by Cloud Run to determine if container should be restarted.
+    Returns 200 if alive, 500 if not responding.
+    """
+    from datetime import datetime
+
+    try:
+        return JSONResponse(
+            content={
+                "status": "alive",
+                "timestamp": datetime.utcnow().isoformat() + 'Z',
+                "service": config.server_name,
+                "version": config.server_version,
+                "check": "liveness"
+            },
+            status_code=200
+        )
+
+    except Exception as e:
+        logger.error(f"Liveness check failed: {e}")
+        return JSONResponse(
+            content={
+                "status": "dead",
+                "timestamp": datetime.utcnow().isoformat() + 'Z',
+                "error": str(e),
+                "check": "liveness"
+            },
+            status_code=500
+        )
+
+
+@mcp.custom_route("/health/ready", methods=["GET"])
+def readiness_health_endpoint(request):
+    """
+    Readiness health check endpoint - CONFIGURATION-BASED CHECK.
+
+    Checks if the application is ready to serve traffic by verifying configuration.
+    Only checks if dependencies are configured, not if they're actually available.
+    This is used by load balancers and orchestrators to determine if the service
+    should receive traffic.
+
+    Uses cached database check to reduce Cloud SQL queries.
+    Returns 200 if ready, 503 if not ready.
+    """
+    from datetime import datetime
+
+    try:
+        # Check configuration, not actual connectivity (cost optimization)
+        # This avoids expensive database queries during health checks
+        db_configured = config.is_database_configured
+        gcs_configured = config.is_gcs_configured
+
+        # Application is ready if critical dependencies are configured
+        # Note: Cloud Tasks is optional for basic functionality
+        is_ready = db_configured and gcs_configured
+
+        # Use cached database check for detailed status (if configured)
+        db_status = {"available": False, "connection_type": "unknown"}
+        if db_configured:
+            try:
+                # Use cached check to reduce database load
+                cached_result = check_database_availability_cached()
+                if cached_result:
+                    db_status = {
+                        "available": cached_result["available"],
+                        "connection_type": cached_result["connection_type"]
+                    }
+            except Exception as e:
+                logger.debug(f"Database availability check failed: {e}")
+                # Continue with configuration-based check
+
+        response = {
+            "status": "ready" if is_ready else "not_ready",
+            "timestamp": datetime.utcnow().isoformat() + 'Z',
+            "service": config.server_name,
+            "version": config.server_version,
+            "check": "readiness",
+            "dependencies": {
+                "database": {
+                    "configured": db_configured,
+                    "available": db_status["available"],
+                    "connection_type": db_status["connection_type"]
+                },
+                "gcs": {
+                    "configured": gcs_configured
+                }
+            }
+        }
+
+        status_code = 200 if is_ready else 503
+        return JSONResponse(content=response, status_code=status_code)
+
+    except Exception as e:
+        logger.error(f"Readiness check failed: {e}")
+        return JSONResponse(
+            content={
+                "status": "error",
+                "timestamp": datetime.utcnow().isoformat() + 'Z',
+                "service": config.server_name,
+                "check": "readiness",
+                "error": str(e)
+            },
+            status_code=503
+        )
 
 
 # ============================================================================
@@ -307,6 +566,44 @@ async def search_library(
 
 
 # ============================================================================
+# Task 8: Delete Audio Tool
+# ============================================================================
+
+
+@mcp.tool()
+async def delete_audio(audioId: str) -> dict:
+    """
+    Delete a previously processed audio track.
+
+    This tool permanently removes an audio track from the database.
+    GCS files are left in place for lifecycle management.
+
+    Args:
+        audioId: UUID of the audio track to delete
+
+    Returns:
+        dict: Success response with deletion confirmation,
+              or error response if track not found or deletion fails
+
+    Example:
+        >>> result = await delete_audio(audioId="550e8400-e29b-41d4-a716-446655440000")
+        >>> print(result["deleted"])
+        True
+    """
+    from src.error_utils import handle_tool_error
+    from src.tools.query_tools import delete_audio as delete_func
+
+    try:
+        # Call the async function
+        return await delete_func({"audioId": audioId})
+    except Exception as e:
+        # Log and return error response
+        error_response = handle_tool_error(e, "delete_audio")
+        logger.error(f"Delete audio failed for ID '{audioId}': {error_response}")
+        return error_response
+
+
+# ============================================================================
 # Task 9: MCP Resources
 # ============================================================================
 
@@ -390,6 +687,181 @@ async def thumbnail_resource(audioId: str) -> str:
 
 
 # ============================================================================
+# Device Detection Utilities
+# ============================================================================
+
+def detect_device_type(request) -> str:
+    """
+    Detect device type from request for template optimization.
+
+    Priority:
+    1. Query parameter ?device=mobile|desktop (explicit override)
+    2. User-Agent header parsing
+    3. Default to 'desktop'
+
+    Args:
+        request: Starlette Request object
+
+    Returns:
+        str: 'mobile' or 'desktop'
+    """
+    # Check for explicit device override in query parameters
+    device_param = request.query_params.get('device', '').lower()
+    if device_param in ['mobile', 'desktop']:
+        logger.debug(f"Device detection: explicit override to '{device_param}'")
+        return device_param
+
+    # Parse User-Agent header for device detection
+    user_agent = request.headers.get('user-agent', '').lower()
+
+    # Mobile device patterns
+    mobile_patterns = [
+        'mobile', 'android', 'iphone', 'ipad', 'ipod',
+        'blackberry', 'windows phone', 'opera mini',
+        'iemobile', 'webos', 'palm'
+    ]
+
+    # Tablet-specific patterns (still considered mobile for our purposes)
+    tablet_patterns = [
+        'tablet', 'ipad', 'kindle', 'playbook', 'silk'
+    ]
+
+    # Check for mobile/tablet indicators
+    if any(pattern in user_agent for pattern in mobile_patterns + tablet_patterns):
+        logger.debug(f"Device detection: mobile (User-Agent: {user_agent[:50]}...)")
+        return 'mobile'
+
+    # Default to desktop
+    logger.debug(f"Device detection: desktop (User-Agent: {user_agent[:50]}...)")
+    return 'desktop'
+
+
+def detect_platform(request) -> str:
+    """
+    Detect embedding platform from request headers for platform-specific optimizations.
+
+    Priority:
+    1. Query parameter ?platform=coda|notion|etc (explicit override)
+    2. Referer header parsing
+    3. User-Agent header parsing
+    4. Default to 'generic'
+
+    Args:
+        request: Starlette Request object
+
+    Returns:
+        str: Platform name ('coda', 'notion', 'slack', 'generic', etc.)
+    """
+    # Check for explicit platform override in query parameters
+    platform_param = request.query_params.get('platform', '').lower()
+    if platform_param:
+        logger.debug(f"Platform detection: explicit override to '{platform_param}'")
+        return platform_param
+
+    # Check Referer header for platform detection
+    referer = request.headers.get('referer', '').lower()
+
+    # Platform-specific referer patterns
+    platform_patterns = {
+        'coda': ['coda.io', 'coda.com'],
+        'notion': ['notion.so'],
+        'slack': ['slack.com'],
+        'discord': ['discord.com', 'discordapp.com'],
+        'twitter': ['twitter.com', 't.co'],
+        'facebook': ['facebook.com', 'fb.com'],
+        'linkedin': ['linkedin.com'],
+        'wordpress': ['wordpress.com', '.wordpress.com'],
+        'medium': ['medium.com'],
+        'github': ['github.com'],
+        'gitlab': ['gitlab.com'],
+        'figma': ['figma.com'],
+        'canva': ['canva.com'],
+        'miro': ['miro.com'],
+        'trello': ['trello.com'],
+        'asana': ['asana.com'],
+        'linear': ['linear.app'],
+    }
+
+    for platform, patterns in platform_patterns.items():
+        if any(pattern in referer for pattern in patterns):
+            logger.debug(f"Platform detection: {platform} (Referer: {referer[:50]}...)")
+            return platform
+
+    # Check User-Agent header for platform-specific patterns
+    user_agent = request.headers.get('user-agent', '').lower()
+
+    # Platform-specific user agent patterns
+    ua_patterns = {
+        'slack': ['slack'],
+        'discord': ['discord'],
+        'twitter': ['twitter'],
+        'facebook': ['facebookexternalhit', 'facebot'],
+        'linkedin': ['linkedinbot'],
+        'whatsapp': ['whatsapp'],
+        'telegram': ['telegrambot'],
+        'skype': ['skypeuripreview'],
+        'coda': ['coda'],  # Coda might have specific UA patterns
+    }
+
+    for platform, patterns in ua_patterns.items():
+        if any(pattern in user_agent for pattern in patterns):
+            logger.debug(f"Platform detection: {platform} (User-Agent: {user_agent[:50]}...)")
+            return platform
+
+    # Default to generic
+    logger.debug(f"Platform detection: generic (Referer: {referer[:30]}..., User-Agent: {user_agent[:30]}...)")
+    return 'generic'
+
+
+async def get_waveform_context(audio_id: str) -> dict:
+    """
+    Get waveform context for audio track (used by waveform embed endpoints).
+
+    Retrieves waveform metadata and generates signed URL if available.
+
+    Args:
+        audio_id: UUID of the audio track
+
+    Returns:
+        dict: Waveform context with keys:
+            - waveform_url: Signed URL to waveform SVG (or None)
+            - waveform_available: Boolean indicating if waveform exists
+            - waveform_generated_at: ISO timestamp when waveform was generated (or None)
+    """
+    try:
+        # Import required functions
+        from database.operations import get_waveform_metadata
+        from src.storage.waveform_storage import get_waveform_signed_url
+
+        # Get waveform metadata
+        metadata = get_waveform_metadata(audio_id)
+
+        if metadata and metadata.get('waveform_gcs_path'):
+            try:
+                # Generate signed URL for waveform
+                waveform_url = get_waveform_signed_url(audio_id)
+                logger.debug(f"Waveform URL generated for audio_id: {audio_id}")
+                return {
+                    'waveform_url': waveform_url,
+                    'waveform_available': True,
+                    'waveform_generated_at': metadata.get('waveform_generated_at')
+                }
+            except Exception as e:
+                logger.warning(f"Failed to generate waveform signed URL for {audio_id}: {e}")
+                # Continue with waveform_available=False
+
+    except Exception as e:
+        logger.warning(f"Error retrieving waveform context for {audio_id}: {e}")
+
+    # Return empty context if waveform unavailable
+    return {
+        'waveform_url': None,
+        'waveform_available': False,
+        'waveform_generated_at': None
+    }
+
+
+# ============================================================================
 # Task 10: HTML5 Audio Player Embed Page
 # ============================================================================
 
@@ -427,6 +899,32 @@ async def embed_page(request):
     audioId = request.path_params["audioId"]
     logger.info(f"[EMBED_TEST] Embed endpoint called for audioId: {audioId}")
     logger.info(f"Embed page requested for audio ID: {audioId}")
+
+    # Detect platform for platform-specific optimizations
+    platform = detect_platform(request)
+    logger.info(f"Detected platform: {platform}")
+
+    # Check for template query parameter
+    # Support both 'template' and 'compact' parameters for backward compatibility
+    template = request.query_params.get('template')
+    if template is None:
+        # Check for 'compact=true' as alias for 'template=waveform'
+        compact = request.query_params.get('compact', 'false').lower() == 'true'
+        template = 'waveform' if compact else 'standard'
+    logger.info(f"Requested template: {template}, compact mode: {request.query_params.get('compact', 'false')}")
+
+    # Platform-specific template adjustments
+    if platform == 'coda':
+        # Coda works better with minimal waveform-only design
+        # Use minimal template for better embed compatibility
+        template = 'waveform-minimal'
+        logger.info("Coda detected: forcing minimal waveform template for better embed compatibility")
+    elif platform == 'notion':
+        # Notion works well with our current implementation
+        logger.info("Notion detected: using standard embed behavior")
+    elif platform == 'slack':
+        # Slack might need different handling
+        logger.info("Slack detected: using standard embed behavior")
 
     try:
         # Get metadata from database
@@ -564,22 +1062,89 @@ async def embed_page(request):
         }
         mock_request = Request(scope)
 
-        response = templates.TemplateResponse(
-            "embed.html",
-            {
-                "request": mock_request,
-                "audio_id": audioId,
-                "metadata": template_metadata,
-                "stream_url": stream_url,
-                "thumbnail_url": thumbnail_url,
-                "mime_type": mime_type,
-                "duration_formatted": duration_formatted,
-                "embed_base_url": config.embed_base_url,
-            },
-        )
+        if template == 'waveform-minimal':
+            # Get waveform context for minimal waveform template
+            # Note: get_waveform_context handles exceptions gracefully and returns default context
+            logger.info("Getting waveform context for minimal template rendering")
+            waveform_context = await get_waveform_context(audioId)
+            logger.info(f"Waveform context retrieved: available={waveform_context.get('waveform_available', False)}")
+            
+            # Always use minimal waveform template when requested, even if waveform data isn't available yet
+            # The template will handle missing waveform data gracefully
+            device_type = detect_device_type(request)
+            interactive_mode = device_type == 'desktop'
+
+            logger.info(f"Using minimal waveform template with device_type: {device_type}, interactive_mode: {interactive_mode}")
+
+            response = templates.TemplateResponse(
+                "embed-waveform-minimal.html",
+                {
+                    "request": mock_request,
+                    "audio_id": audioId,
+                    "metadata": template_metadata,
+                    "stream_url": stream_url,
+                    "thumbnail_url": thumbnail_url,
+                    "mime_type": mime_type,
+                    "duration_formatted": duration_formatted,
+                    "embed_base_url": config.embed_base_url,
+                    "device_type": device_type,
+                    "is_mobile": device_type == 'mobile',
+                    "is_desktop": device_type == 'desktop',
+                    "interactive_mode": interactive_mode,
+                    **waveform_context
+                },
+            )
+        elif template == 'waveform':
+            # Get waveform context for waveform template
+            # Note: get_waveform_context handles exceptions gracefully and returns default context
+            logger.info("Getting waveform context for template rendering")
+            waveform_context = await get_waveform_context(audioId)
+            logger.info(f"Waveform context retrieved: available={waveform_context.get('waveform_available', False)}")
+            
+            # Always use waveform template when requested, even if waveform data isn't available yet
+            # The template will handle missing waveform data gracefully
+            device_type = detect_device_type(request)
+            interactive_mode = device_type == 'desktop'
+
+            logger.info(f"Using waveform template with device_type: {device_type}, interactive_mode: {interactive_mode}")
+
+            response = templates.TemplateResponse(
+                "embed-waveform.html",
+                {
+                    "request": mock_request,
+                    "audio_id": audioId,
+                    "metadata": template_metadata,
+                    "stream_url": stream_url,
+                    "thumbnail_url": thumbnail_url,
+                    "mime_type": mime_type,
+                    "duration_formatted": duration_formatted,
+                    "embed_base_url": config.embed_base_url,
+                    "device_type": device_type,
+                    "is_mobile": device_type == 'mobile',
+                    "is_desktop": device_type == 'desktop',
+                    "interactive_mode": interactive_mode,
+                    **waveform_context
+                },
+            )
+        else:
+            # Use standard template
+            response = templates.TemplateResponse(
+                "embed.html",
+                {
+                    "request": mock_request,
+                    "audio_id": audioId,
+                    "metadata": template_metadata,
+                    "stream_url": stream_url,
+                    "thumbnail_url": thumbnail_url,
+                    "mime_type": mime_type,
+                    "duration_formatted": duration_formatted,
+                    "embed_base_url": config.embed_base_url,
+                },
+            )
 
         # Add security headers for iframe embedding
-        response.headers["X-Frame-Options"] = "ALLOWALL"
+        # Use Content-Security-Policy (modern standard) instead of X-Frame-Options
+        # CSP frame-ancestors * allows embedding from any origin
         response.headers["Content-Security-Policy"] = "frame-ancestors *"
 
         return response
@@ -589,6 +1154,576 @@ async def embed_page(request):
         return HTMLResponse(
             content=f"<h1>Error</h1><p>An unexpected error occurred: {str(e)}</p>", status_code=500
         )
+
+
+# ============================================================================
+# Waveform Player Embed Endpoints
+# ============================================================================
+
+@mcp.custom_route("/embed/{audioId}/waveform/mobile", methods=["GET"])
+async def embed_waveform_mobile(request):
+    """
+    Serve waveform player embed page optimized for mobile devices.
+
+    This endpoint provides a waveform-based audio player with:
+    - Waveform visualization (static display)
+    - Mobile-optimized UI and controls
+    - Touch-friendly interactions
+    - Standard progress bar for seeking
+
+    Args:
+        request: Starlette Request object with path parameters
+
+    Returns:
+        HTMLResponse: Rendered waveform player page for mobile
+    """
+    from starlette.requests import Request
+
+    from database import get_audio_metadata_by_id
+    from src.resources.cache import get_cache
+
+    # Extract audioId from path parameters
+    audioId = request.path_params["audioId"]
+    logger.info(f"Waveform mobile embed requested for audio ID: {audioId}")
+
+    try:
+        # Get metadata from database
+        metadata = get_audio_metadata_by_id(audioId)
+    except ValidationError as e:
+        logger.warning(f"Invalid audio ID format for waveform mobile embed: {audioId} - {e}")
+        return HTMLResponse(
+            content="<h1>Invalid Audio ID</h1><p>The audio ID format is invalid.</p>",
+            status_code=400,
+        )
+
+    if not metadata:
+        logger.warning(f"Audio track not found for waveform mobile embed: {audioId}")
+        return HTMLResponse(
+            content="<h1>Audio Not Found</h1><p>The requested audio track could not be found.</p>",
+            status_code=404,
+        )
+
+    # Get waveform context
+    waveform_context = await get_waveform_context(audioId)
+
+    # Get GCS paths
+    audio_path = metadata.get("audio_gcs_path")
+    thumbnail_path = metadata.get("thumbnail_gcs_path")
+
+    if not audio_path:
+        logger.error(f"No audio path for waveform mobile embed {audioId}")
+        return HTMLResponse(
+            content="<h1>Error</h1><p>Audio file not available.</p>", status_code=500
+        )
+
+    # Generate signed URLs using cache
+    cache = get_cache()
+
+    try:
+        stream_url = cache.get(audio_path, url_expiration_minutes=15)
+    except Exception as e:
+        logger.error(f"Failed to generate signed URL for audio in waveform mobile embed: {e}")
+        return HTMLResponse(
+            content="<h1>Error</h1><p>Failed to generate audio stream.</p>", status_code=500
+        )
+
+    # Generate thumbnail URL if available
+    thumbnail_url = None
+    if thumbnail_path:
+        try:
+            thumbnail_url = cache.get(thumbnail_path, url_expiration_minutes=15)
+        except Exception as e:
+            logger.warning(f"Failed to generate signed URL for thumbnail: {e}")
+
+    # Format metadata for template
+    template_metadata = {
+        "Product": {
+            "Title": metadata.get("title", "Untitled"),
+            "Artist": metadata.get("artist", "Unknown Artist"),
+            "Album": metadata.get("album"),
+            "Year": metadata.get("year"),
+        },
+        "Format": {
+            "Duration": metadata.get("duration", 0.0),
+            "Channels": metadata.get("channels", 2),
+            "SampleRate": metadata.get("sample_rate", 44100),
+            "Bitrate": metadata.get("bitrate", 0),
+            "Format": metadata.get("format", "MP3"),
+        },
+    }
+
+    # Format duration for display
+    duration_seconds = metadata.get("duration", 0)
+    minutes = int(duration_seconds // 60)
+    seconds = int(duration_seconds % 60)
+    duration_formatted = f"{minutes}:{seconds:02d}"
+
+    # Determine MIME type
+    audio_format = metadata.get("format", "MP3").upper()
+    mime_types = {
+        "MP3": "audio/mpeg",
+        "FLAC": "audio/flac",
+        "M4A": "audio/mp4",
+        "OGG": "audio/ogg",
+        "WAV": "audio/wav",
+        "AAC": "audio/aac",
+    }
+    mime_type = mime_types.get(audio_format, "audio/mpeg")
+
+    logger.info(f"Rendering waveform mobile embed for: {template_metadata['Product']['Title']}")
+
+    # Create mock request for template rendering
+    from starlette.datastructures import URL, Headers
+
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "headers": [],
+        "query_string": b"",
+    }
+    mock_request = Request(scope)
+
+    try:
+        response = templates.TemplateResponse(
+            "embed-waveform.html",
+            {
+                "request": mock_request,
+                "audio_id": audioId,
+                "metadata": template_metadata,
+                "stream_url": stream_url,
+                "thumbnail_url": thumbnail_url,
+                "mime_type": mime_type,
+                "duration_formatted": duration_formatted,
+                "embed_base_url": config.embed_base_url,
+                "device_type": "mobile",
+                "is_mobile": True,
+                "is_desktop": False,
+                "interactive_mode": False,  # Static mode for mobile
+                **waveform_context,
+            },
+        )
+
+        # Add security headers for iframe embedding
+        # Use Content-Security-Policy (modern standard) instead of X-Frame-Options
+        # CSP frame-ancestors * allows embedding from any origin
+        response.headers["Content-Security-Policy"] = "frame-ancestors *"
+
+        return response
+
+    except Exception as e:
+        logger.exception(f"Error rendering waveform mobile embed: {e}")
+        return HTMLResponse(
+            content=f"<h1>Error</h1><p>An unexpected error occurred: {str(e)}</p>", status_code=500
+        )
+
+
+@mcp.custom_route("/embed/{audioId}/waveform/desktop", methods=["GET"])
+async def embed_waveform_desktop(request):
+    """
+    Serve waveform player embed page optimized for desktop devices.
+
+    This endpoint provides a waveform-based audio player with:
+    - Interactive waveform visualization (click-to-seek)
+    - Desktop-optimized UI with hover effects
+    - Full keyboard and mouse controls
+    - Visual progress overlay on waveform
+
+    Args:
+        request: Starlette Request object with path parameters
+
+    Returns:
+        HTMLResponse: Rendered waveform player page for desktop
+    """
+    from starlette.requests import Request
+
+    from database import get_audio_metadata_by_id
+    from src.resources.cache import get_cache
+
+    # Extract audioId from path parameters
+    audioId = request.path_params["audioId"]
+    logger.info(f"Waveform desktop embed requested for audio ID: {audioId}")
+
+    try:
+        # Get metadata from database
+        metadata = get_audio_metadata_by_id(audioId)
+    except ValidationError as e:
+        logger.warning(f"Invalid audio ID format for waveform desktop embed: {audioId} - {e}")
+        return HTMLResponse(
+            content="<h1>Invalid Audio ID</h1><p>The audio ID format is invalid.</p>",
+            status_code=400,
+        )
+
+    if not metadata:
+        logger.warning(f"Audio track not found for waveform desktop embed: {audioId}")
+        return HTMLResponse(
+            content="<h1>Audio Not Found</h1><p>The requested audio track could not be found.</p>",
+            status_code=404,
+        )
+
+    # Get waveform context
+    waveform_context = await get_waveform_context(audioId)
+
+    # Get GCS paths
+    audio_path = metadata.get("audio_gcs_path")
+    thumbnail_path = metadata.get("thumbnail_gcs_path")
+
+    if not audio_path:
+        logger.error(f"No audio path for waveform desktop embed {audioId}")
+        return HTMLResponse(
+            content="<h1>Error</h1><p>Audio file not available.</p>", status_code=500
+        )
+
+    # Generate signed URLs using cache
+    cache = get_cache()
+
+    try:
+        stream_url = cache.get(audio_path, url_expiration_minutes=15)
+    except Exception as e:
+        logger.error(f"Failed to generate signed URL for audio in waveform desktop embed: {e}")
+        return HTMLResponse(
+            content="<h1>Error</h1><p>Failed to generate audio stream.</p>", status_code=500
+        )
+
+    # Generate thumbnail URL if available
+    thumbnail_url = None
+    if thumbnail_path:
+        try:
+            thumbnail_url = cache.get(thumbnail_path, url_expiration_minutes=15)
+        except Exception as e:
+            logger.warning(f"Failed to generate signed URL for thumbnail: {e}")
+
+    # Format metadata for template
+    template_metadata = {
+        "Product": {
+            "Title": metadata.get("title", "Untitled"),
+            "Artist": metadata.get("artist", "Unknown Artist"),
+            "Album": metadata.get("album"),
+            "Year": metadata.get("year"),
+        },
+        "Format": {
+            "Duration": metadata.get("duration", 0.0),
+            "Channels": metadata.get("channels", 2),
+            "SampleRate": metadata.get("sample_rate", 44100),
+            "Bitrate": metadata.get("bitrate", 0),
+            "Format": metadata.get("format", "MP3"),
+        },
+    }
+
+    # Format duration for display
+    duration_seconds = metadata.get("duration", 0)
+    minutes = int(duration_seconds // 60)
+    seconds = int(duration_seconds % 60)
+    duration_formatted = f"{minutes}:{seconds:02d}"
+
+    # Determine MIME type
+    audio_format = metadata.get("format", "MP3").upper()
+    mime_types = {
+        "MP3": "audio/mpeg",
+        "FLAC": "audio/flac",
+        "M4A": "audio/mp4",
+        "OGG": "audio/ogg",
+        "WAV": "audio/wav",
+        "AAC": "audio/aac",
+    }
+    mime_type = mime_types.get(audio_format, "audio/mpeg")
+
+    logger.info(f"Rendering waveform desktop embed for: {template_metadata['Product']['Title']}")
+
+    # Create mock request for template rendering
+    from starlette.datastructures import URL, Headers
+
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "headers": [],
+        "query_string": b"",
+    }
+    mock_request = Request(scope)
+
+    try:
+        response = templates.TemplateResponse(
+            "embed-waveform.html",
+            {
+                "request": mock_request,
+                "audio_id": audioId,
+                "metadata": template_metadata,
+                "stream_url": stream_url,
+                "thumbnail_url": thumbnail_url,
+                "mime_type": mime_type,
+                "duration_formatted": duration_formatted,
+                "embed_base_url": config.embed_base_url,
+                "device_type": "desktop",
+                "is_mobile": False,
+                "is_desktop": True,
+                "interactive_mode": True,  # Interactive mode for desktop
+                **waveform_context,
+            },
+        )
+
+        # Add security headers for iframe embedding
+        # Use Content-Security-Policy (modern standard) instead of X-Frame-Options
+        # CSP frame-ancestors * allows embedding from any origin
+        response.headers["Content-Security-Policy"] = "frame-ancestors *"
+
+        return response
+
+    except Exception as e:
+        logger.exception(f"Error rendering waveform desktop embed: {e}")
+        return HTMLResponse(
+            content=f"<h1>Error</h1><p>An unexpected error occurred: {str(e)}</p>", status_code=500
+        )
+
+
+@mcp.custom_route("/embed/{audioId}/waveform", methods=["GET"])
+async def embed_waveform_auto(request):
+    """
+    Serve waveform player embed page with automatic device detection.
+
+    This endpoint auto-detects the device type and serves the appropriate
+    waveform player (mobile or desktop optimized).
+
+    Args:
+        request: Starlette Request object with path parameters
+
+    Returns:
+        HTMLResponse: Rendered waveform player page (mobile or desktop)
+    """
+    # Detect device type
+    device_type = detect_device_type(request)
+
+    # Extract audioId
+    audioId = request.path_params["audioId"]
+    logger.info(f"Waveform auto embed requested for audio ID: {audioId} (detected device: {device_type})")
+
+    # Route to appropriate endpoint based on device type
+    if device_type == "mobile":
+        # Call mobile endpoint logic
+        return await embed_waveform_mobile(request)
+    else:
+        # Call desktop endpoint logic (default)
+        return await embed_waveform_desktop(request)
+
+
+# ============================================================================
+# MCP Tools for Embed Management
+# ============================================================================
+
+@mcp.tool()
+async def get_embed_url(audioId: str, template: str = "standard", device: Optional[str] = None) -> dict:
+    """
+    Generate embed URL for audio track with template selection.
+
+    Returns embed URL with template and device-specific endpoint selection.
+
+    Args:
+        audioId: UUID of the audio track
+        template: Template type ("standard" or "waveform")
+        device: Device type override ("mobile", "desktop", or None for auto-detection)
+
+    Returns:
+        dict: Embed information including URL, template type, and device detection
+
+    Example:
+        >>> result = await get_embed_url("550e8400-e29b-41d4-a716-446655440000", "waveform")
+        >>> print(result["embedUrl"])
+        "https://example.com/embed/550e8400-e29b-41d4-a716-446655440000/waveform"
+    """
+    try:
+        # Validate audioId exists
+        from database import get_audio_metadata_by_id
+        metadata = get_audio_metadata_by_id(audioId)
+        if not metadata:
+            return {
+                "success": False,
+                "error": "RESOURCE_NOT_FOUND",
+                "message": f"Audio track with ID '{audioId}' was not found",
+                "audioId": audioId
+            }
+
+        # Build base embed URL
+        base_url = f"{config.embed_base_url}/embed/{audioId}"
+
+        # Determine template endpoint
+        if template == "waveform":
+            embed_url = f"{base_url}/waveform"
+            # Add device-specific endpoint if specified
+            if device == "mobile":
+                embed_url = f"{base_url}/waveform/mobile"
+            elif device == "desktop":
+                embed_url = f"{base_url}/waveform/desktop"
+        else:
+            embed_url = base_url
+
+        # Check waveform availability (for waveform template)
+        waveform_available = False
+        if template == "waveform":
+            try:
+                waveform_context = await get_waveform_context(audioId)
+                waveform_available = waveform_context.get("waveform_available", False)
+            except Exception as e:
+                logger.warning(f"Error checking waveform availability: {e}")
+
+        return {
+            "success": True,
+            "audioId": audioId,
+            "embedUrl": embed_url,
+            "template": template,
+            "device": device or "auto",
+            "waveformAvailable": waveform_available,
+            "metadata": {
+                "title": metadata.get("title", "Untitled"),
+                "artist": metadata.get("artist", "Unknown Artist"),
+                "duration": metadata.get("duration", 0),
+                "format": metadata.get("format", "MP3")
+            }
+        }
+
+    except ValidationError as e:
+        return {
+            "success": False,
+            "error": "VALIDATION_ERROR",
+            "message": f"Invalid audio ID format: {str(e)}",
+            "audioId": audioId
+        }
+    except Exception as e:
+        logger.error(f"Error generating embed URL for {audioId}: {e}")
+        return {
+            "success": False,
+            "error": "INTERNAL_ERROR",
+            "message": "Failed to generate embed URL",
+            "audioId": audioId
+        }
+
+
+@mcp.tool()
+async def list_embed_templates() -> dict:
+    """
+    List available embed player templates and their capabilities.
+
+    Returns information about all available embed templates including
+    their features, device support, and endpoint information.
+
+    Returns:
+        dict: Template information with capabilities and endpoints
+
+    Example:
+        >>> templates = await list_embed_templates()
+        >>> print(templates["templates"][0]["name"])
+        "Standard Player"
+    """
+    try:
+        return {
+            "success": True,
+            "templates": [
+                {
+                    "id": "standard",
+                    "name": "Standard Player",
+                    "description": "Basic audio player with progress bar and standard controls",
+                    "endpoint": "/embed/{audioId}",
+                    "features": ["progress-bar", "volume-control", "keyboard-shortcuts"],
+                    "deviceSupport": ["mobile", "desktop"],
+                    "interactive": True
+                },
+                {
+                    "id": "waveform",
+                    "name": "Waveform Player",
+                    "description": "Interactive waveform visualization with click-to-seek",
+                    "endpoint": "/embed/{audioId}/waveform",
+                    "features": ["waveform-visualization", "click-to-seek", "progress-overlay", "volume-control", "keyboard-shortcuts"],
+                    "deviceSupport": ["mobile", "desktop"],
+                    "interactive": True,
+                    "deviceVariants": [
+                        {
+                            "device": "mobile",
+                            "endpoint": "/embed/{audioId}/waveform/mobile",
+                            "description": "Mobile-optimized waveform player (static display)",
+                            "interactive": False
+                        },
+                        {
+                            "device": "desktop",
+                            "endpoint": "/embed/{audioId}/waveform/desktop",
+                            "description": "Desktop-optimized waveform player (interactive)",
+                            "interactive": True
+                        }
+                    ]
+                }
+            ],
+            "baseUrl": config.embed_base_url,
+            "supportedFormats": ["MP3", "FLAC", "WAV", "M4A", "OGG", "AAC"]
+        }
+
+    except Exception as e:
+        logger.error(f"Error listing embed templates: {e}")
+        return {
+            "success": False,
+            "error": "INTERNAL_ERROR",
+            "message": "Failed to retrieve template information"
+        }
+
+
+@mcp.tool()
+async def check_waveform_availability(audioId: str) -> dict:
+    """
+    Check if waveform is available for an audio track.
+
+    Verifies waveform generation status and provides access information
+    if the waveform exists.
+
+    Args:
+        audioId: UUID of the audio track
+
+    Returns:
+        dict: Waveform availability and access information
+
+    Example:
+        >>> result = await check_waveform_availability("550e8400-e29b-41d4-a716-446655440000")
+        >>> if result["waveformAvailable"]:
+        ...     print(f"Waveform generated at: {result['generatedAt']}")
+    """
+    try:
+        # Get waveform context
+        waveform_context = await get_waveform_context(audioId)
+
+        # Validate audioId exists
+        from database import get_audio_metadata_by_id
+        metadata = get_audio_metadata_by_id(audioId)
+        if not metadata:
+            return {
+                "success": False,
+                "error": "RESOURCE_NOT_FOUND",
+                "message": f"Audio track with ID '{audioId}' was not found",
+                "audioId": audioId
+            }
+
+        return {
+            "success": True,
+            "audioId": audioId,
+            "waveformAvailable": waveform_context.get("waveform_available", False),
+            "waveformUrl": waveform_context.get("waveform_url"),
+            "generatedAt": waveform_context.get("waveform_generated_at"),
+            "metadata": {
+                "title": metadata.get("title", "Untitled"),
+                "artist": metadata.get("artist", "Unknown Artist"),
+                "duration": metadata.get("duration", 0),
+                "format": metadata.get("format", "MP3")
+            }
+        }
+
+    except ValidationError as e:
+        return {
+            "success": False,
+            "error": "VALIDATION_ERROR",
+            "message": f"Invalid audio ID format: {str(e)}",
+            "audioId": audioId
+        }
+    except Exception as e:
+        logger.error(f"Error checking waveform availability for {audioId}: {e}")
+        return {
+            "success": False,
+            "error": "INTERNAL_ERROR",
+            "message": "Failed to check waveform availability",
+            "audioId": audioId
+        }
 
 
 @mcp.custom_route("/oembed", methods=["GET"])
@@ -603,8 +1738,8 @@ async def oembed_endpoint(request):
         request: Starlette Request object with query parameters:
             - url (required): The embed URL to generate oEmbed data for
             - format (optional): Response format, 'json' or 'xml' (default: 'json')
-            - maxwidth (optional): Maximum width for embed (default: 400)
-            - maxheight (optional): Maximum height for embed (default: 160)
+            - maxwidth (optional): Maximum width for embed (default: 600)
+            - maxheight (optional): Maximum height for embed (default: 240)
 
     Returns:
         JSONResponse: oEmbed JSON response according to spec
@@ -625,10 +1760,25 @@ async def oembed_endpoint(request):
         # Extract query parameters
         url_param = request.query_params.get("url")
         format_param = request.query_params.get("format", "json")
-        # Default dimensions optimized for compact mode player layout
-        # Reduced padding/margins mean tighter fit - content is ~350px wide x ~140px tall
-        maxwidth = int(request.query_params.get("maxwidth", 400))
-        maxheight = int(request.query_params.get("maxheight", 160))
+
+        # Detect platform for platform-specific optimizations
+        platform = detect_platform(request)
+
+        # Platform-specific dimension adjustments
+        if platform == 'coda':
+            # Coda seems to prefer card previews - try even more compact dimensions
+            default_width, default_height = 480, 180
+            logger.info("Coda detected for oEmbed: using compact dimensions (480x180)")
+        elif platform == 'notion':
+            # Notion works well with slightly larger embeds
+            default_width, default_height = 520, 200
+            logger.info("Notion detected for oEmbed: using standard dimensions (520x200)")
+        else:
+            # Default dimensions optimized for embedding platforms
+            default_width, default_height = 500, 200
+
+        maxwidth = int(request.query_params.get("maxwidth", default_width))
+        maxheight = int(request.query_params.get("maxheight", default_height))
 
         # Validate URL parameter
         if not url_param:
@@ -640,7 +1790,7 @@ async def oembed_endpoint(request):
         logger.info(f"oEmbed request for URL: {url}")
 
         # Validate URL format
-        from config import config
+        from src.config import config
 
         expected_prefix = f"{config.embed_base_url}/embed/"
         if not url.startswith(expected_prefix):
@@ -650,8 +1800,15 @@ async def oembed_endpoint(request):
                 status_code=400,
             )
 
-        # Extract audio ID from URL
-        audio_id = url.replace(expected_prefix, "").strip()
+        # Extract audio ID from URL (handle both /embed/{id} and /embed/{id}/waveform formats)
+        url_suffix = url.replace(expected_prefix, "").strip()
+
+        # Remove /waveform suffix if present
+        if url_suffix.endswith('/waveform'):
+            audio_id = url_suffix[:-9]  # Remove '/waveform'
+        else:
+            audio_id = url_suffix
+
         if not audio_id:
             logger.warning("oEmbed request with empty audio ID")
             return JSONResponse({"error": "Invalid URL format. Missing audio ID."}, status_code=400)
@@ -680,7 +1837,11 @@ async def oembed_endpoint(request):
                 # Continue without thumbnail
 
         # Build embed URL (full URL to player page)
-        embed_url = f"{config.embed_base_url}/embed/{audio_id}"
+        # For Coda, use minimal waveform template; for others, use compact parameter
+        if platform == 'coda':
+            embed_url = f"{config.embed_base_url}/embed/{audio_id}?template=waveform-minimal&platform={platform}"
+        else:
+            embed_url = f"{config.embed_base_url}/embed/{audio_id}?compact=true&platform={platform}"
 
         # Format metadata
         title = metadata.get("title", "Untitled")
@@ -694,24 +1855,56 @@ async def oembed_endpoint(request):
 
         # Build oEmbed response according to spec
         # Include proper allow attributes for Notion iframe embedding
-        # Notion requires additional permissions for sandboxed iframes:
-        # - autoplay: Allows autoplay (though browsers may still require user interaction)
-        # - encrypted-media: Required for DRM-protected content
-        # - fullscreen: Allows fullscreen mode
-        # Note: allow-scripts and allow-same-origin are sandbox attributes, not allow attributes
-        # Notion applies its own sandbox, so we only need the allow permissions
-        iframe_html = (
-            f'<iframe src="{embed_url}?compact=true" '
-            f'width="{maxwidth}" height="{maxheight}" '
-            f'frameborder="0" '
-            f'allow="autoplay; encrypted-media; fullscreen" '
-            f'style="border: none; display: block;" '
-            f'scrolling="no"></iframe>'
-        )
-        
+        # allow="autoplay; encrypted-media; fullscreen" enables media playback in sandboxed iframes
+        try:
+            # Escape title for HTML attribute
+            title_escaped = title.replace('"', '&quot;').replace("'", "&#x27;")
+            iframe_html = (
+                f'<iframe src="{embed_url}" '
+                f'width="{maxwidth}" height="{maxheight}" '
+                f'frameborder="0" '
+                f'allow="autoplay; encrypted-media; fullscreen; accelerometer; clipboard-write; gyroscope; picture-in-picture" '
+                f'referrerpolicy="strict-origin-when-cross-origin" '
+                f'title="{title_escaped}" '
+                f'allowfullscreen '
+                f'style="border-radius: 12px; border: none;" '
+                f'scrolling="no"></iframe>'
+            )
+            logger.info(f"Generated iframe HTML for oEmbed: {iframe_html[:100]}...")
+        except Exception as e:
+            logger.error(f"Error generating iframe HTML: {e}")
+            # Fallback iframe HTML
+            iframe_html = (
+                f'<iframe src="{embed_url}" '
+                f'width="{maxwidth}" height="{maxheight}" '
+                f'frameborder="0" allow="autoplay; encrypted-media; fullscreen" '
+                f'style="border: none;"></iframe>'
+            )
+
+        # Platform-specific oEmbed type adjustments
+        if platform == 'coda':
+            # Coda seems to prefer card previews - try different approaches
+            oembed_type = "video"  # Stick with video type but ensure compact
+            logger.info("Coda detected: using video type with compact styling")
+        elif platform == 'notion':
+            oembed_type = "rich"  # Notion works well with rich embeds
+            logger.info("Notion detected: using rich embed type")
+        else:
+            oembed_type = "video"  # Default to video type
+
+        # Ensure iframe_html is never empty
+        if not iframe_html or len(iframe_html.strip()) == 0:
+            logger.error("iframe_html is empty, using fallback")
+            iframe_html = (
+                f'<iframe src="{embed_url}" '
+                f'width="{maxwidth}" height="{maxheight}" '
+                f'frameborder="0" allow="autoplay; encrypted-media; fullscreen" '
+                f'style="border: none;"></iframe>'
+            )
+
         oembed_response = {
             "version": "1.0",
-            "type": "rich",
+            "type": oembed_type,
             "provider_name": "Loist Music Library",
             "provider_url": config.embed_base_url,
             "title": title,
@@ -721,6 +1914,8 @@ async def oembed_endpoint(request):
             "height": maxheight,
             "cache_age": 3600,  # Cache for 1 hour
         }
+        
+        logger.info(f"oEmbed response html field length: {len(iframe_html)}")
 
         # Add thumbnail if available
         if thumbnail_url:
@@ -766,6 +1961,64 @@ async def oembed_discovery(request):
 
     logger.info("oEmbed discovery endpoint accessed")
     return JSONResponse(discovery_response)
+
+
+# ============================================================================
+# HTTP API Routes
+# ============================================================================
+
+
+@mcp.custom_route("/api/tracks/{audioId}", methods=["DELETE"])
+async def delete_track(request):
+    """
+    Delete a track via HTTP API.
+
+    This endpoint provides HTTP access to the delete_audio MCP tool.
+
+    Args:
+        request: Starlette Request object with path parameters
+
+    Returns:
+        JSONResponse: Success (204) or error response
+    """
+    from starlette.responses import JSONResponse
+    from src.tools.query_tools import delete_audio as delete_func
+
+    # Extract audioId from path parameters
+    audioId = request.path_params["audioId"]
+    logger.info(f"DELETE /api/tracks/{audioId} - Delete track request")
+
+    try:
+        # Call the delete function
+        result = await delete_func({"audioId": audioId})
+
+        # Check if it was successful
+        if result.get("success"):
+            logger.info(f"Successfully deleted track: {audioId}")
+            # Return 204 No Content for successful deletion
+            return JSONResponse({}, status_code=204)
+        else:
+            # Return error with appropriate status code
+            error_code = result.get("error", "UNKNOWN_ERROR")
+            if error_code == "RESOURCE_NOT_FOUND":
+                status_code = 404
+            elif error_code == "INVALID_QUERY":
+                status_code = 400
+            else:
+                status_code = 500
+
+            logger.warning(f"Delete failed for track {audioId}: {result.get('message', 'Unknown error')}")
+            return JSONResponse(result, status_code=status_code)
+
+    except Exception as e:
+        logger.exception(f"Unexpected error deleting track {audioId}: {e}")
+        error_response = {
+            "success": False,
+            "error": "INTERNAL_ERROR",
+            "message": "Internal server error during deletion",
+            "details": {"exception_type": type(e).__name__}
+        }
+        return JSONResponse(error_response, status_code=500)
 
 
 def create_mcp_tools():
