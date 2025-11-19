@@ -292,7 +292,8 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
                 url=str(source.url),
                 headers=source.headers,
                 max_size_mb=options.maxSizeMB,
-                timeout_seconds=options.timeout
+                timeout_seconds=options.timeout,
+                filename_override=getattr(source, 'filename', None)
             )
             
             logger.info(f"Downloaded audio to: {pipeline.temp_audio_path}")
@@ -336,12 +337,43 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
         logger.info("Extracting metadata and artwork")
         
         try:
+            # Handle filename override for validation and extraction
+            validation_path = pipeline.temp_audio_path
+            extraction_path = pipeline.temp_audio_path
+
+            if hasattr(source, 'filename') and source.filename:
+                # Rename temp file to have correct extension for validation and extraction
+                filename_suffix = Path(source.filename).suffix
+                correct_path = Path(pipeline.temp_audio_path).with_suffix(filename_suffix)
+                logger.debug(f"DEBUG: temp_audio_path={pipeline.temp_audio_path}, filename={source.filename}, suffix={filename_suffix}, correct_path={correct_path}")
+                try:
+                    if pipeline.temp_audio_path.exists() and not correct_path.exists():
+                        pipeline.temp_audio_path.rename(correct_path)
+                        logger.info(f"Renamed temp file: {pipeline.temp_audio_path} -> {correct_path}")
+                        # Update pipeline to use the renamed file
+                        pipeline.temp_audio_path = correct_path
+                    validation_path = pipeline.temp_audio_path
+                    extraction_path = pipeline.temp_audio_path
+                    logger.info(f"Using filename override: {source.filename}")
+                except Exception as e:
+                    logger.error(f"Failed to rename temp file: {e}")
+                    # Fall back to original path
+                    logger.warning("Falling back to original path for validation/extraction")
+
             # Validate audio format if enabled
             if options.validateFormat:
-                validate_audio_format(pipeline.temp_audio_path)
-            
+                # Skip validation if we have a trusted filename override
+                if hasattr(source, 'filename') and source.filename:
+                    provided_ext = Path(source.filename).suffix.lower()
+                    if provided_ext in ['.mp3', '.flac', '.wav', '.ogg', '.m4a', '.aac']:
+                        logger.info(f"Skipping format validation for trusted filename: {source.filename}")
+                    else:
+                        validate_audio_format(validation_path)
+                else:
+                    validate_audio_format(validation_path)
+
             # Extract metadata with fallback mechanisms
-            metadata_dict, was_repaired = extract_metadata_with_fallback(pipeline.temp_audio_path)
+            metadata_dict, was_repaired = extract_metadata_with_fallback(extraction_path)
             if was_repaired:
                 logger.info(f"Metadata was repaired for {pipeline.audio_id}")
             logger.debug(f"Extracted metadata: {metadata_dict}")
