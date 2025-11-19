@@ -14,7 +14,7 @@ import psycopg2.extras
 
 # Try to import config, fallback to environment
 try:
-    from src.config import config as app_config
+    from config import config as app_config
     HAS_APP_CONFIG = True
 except ImportError:
     HAS_APP_CONFIG = False
