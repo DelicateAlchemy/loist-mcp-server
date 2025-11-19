@@ -148,7 +148,22 @@ jobs:
     if: |
       github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'test' ||
       github.event_name == 'pull_request'
-    
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: test_loist_mvp
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U test_user -d test_loist_mvp"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -164,37 +179,34 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -e .
-          pip install pytest pytest-cov pytest-asyncio
+          pip install pytest pytest-cov pytest-asyncio psycopg2-binary
 
-      - name: Authenticate to Google Cloud
-        id: auth
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCLOUD_SERVICE_KEY }}
-
-      - name: Set up Google Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-        with:
-          version: 'latest'
-
-      - name: Install Cloud SQL Proxy
+      - name: Wait for PostgreSQL
         run: |
-          curl -o cloud_sql_proxy https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.8.0/cloud-sql-proxy.linux.amd64
-          chmod +x cloud_sql_proxy
-          sudo mv cloud_sql_proxy /usr/local/bin/
+          until pg_isready -h localhost -p 5432 -U test_user; do
+            echo "Waiting for PostgreSQL..."
+            sleep 2
+          done
+          echo "PostgreSQL is ready!"
 
-      - name: Start Cloud SQL Proxy
+      - name: Set up test database
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: test_loist_mvp
+          DB_USER: test_user
+          DB_PASSWORD: test_password
         run: |
-          cloud_sql_proxy --port=5432 ${{ env.PROJECT_ID }}:${{ env.REGION }}:${{ env.INSTANCE_NAME }} &
-          sleep 5
+          # Run migrations to set up test database
+          python database/migrate.py --action=up --database-url="postgresql://test_user:test_password@localhost:5432/test_loist_mvp"
 
       - name: Run database tests
         env:
           DB_HOST: localhost
           DB_PORT: 5432
-          DB_NAME: ${{ env.DATABASE_NAME }}
-          DB_USER: ${{ secrets.DB_USER }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_NAME: test_loist_mvp
+          DB_USER: test_user
+          DB_PASSWORD: test_password
         run: |
           pytest tests/test_database_pool.py tests/test_migrations.py -v --cov=database --cov-report=xml
 
