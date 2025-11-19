@@ -1130,8 +1130,12 @@ def _is_temp_filename(value: str) -> bool:
     if value_lower.startswith(('temp_', 'tmp_', 'cache_')):
         return True
 
-    # Very long random-looking strings (8+ chars, alphanumeric only)
-    if len(value) >= 8 and re.match(r'^[a-z0-9]+$', value_lower):
+    # Very long random-looking strings that look like temp files
+    # Only flag if 10+ chars AND contains digits AND looks computer-generated
+    if (len(value) >= 10 and
+        re.search(r'\d', value_lower) and  # Contains digits
+        re.match(r'^[a-z0-9]+$', value_lower) and  # Alphanumeric only
+        not re.search(r'[aeiou]{2}', value_lower)):  # No vowel clusters (real words have vowels)
         return True
 
     return False
