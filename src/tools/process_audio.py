@@ -379,12 +379,20 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
             logger.debug(f"Extracted metadata: {metadata_dict}")
 
             # Parse filename for missing metadata fields
-            # For URL downloads, extract filename from URL instead of temp file
+            # Priority order: source.filename > URL parsing > temp file
             logger.info(f"🎵 FILENAME PARSING: Starting filename parsing phase")
             logger.debug(f"SOURCE DEBUG: source={source}, type={type(source)}")
             filename_for_parsing = pipeline.temp_audio_path
             logger.info(f"🎵 FILENAME PARSING: Initial filename_for_parsing = {filename_for_parsing}")
-            if hasattr(source, 'url') and source.url:
+
+            # Priority 1: Use explicit filename override from source (highest priority)
+            if hasattr(source, 'filename') and source.filename:
+                logger.debug(f"SOURCE DEBUG: Found explicit filename in source: {source.filename}")
+                filename_for_parsing = Path(source.filename)
+                logger.info(f"🎵 FILENAME PARSING: Using source.filename: {source.filename}")
+
+            # Priority 2: Try to extract filename from URL (for regular URLs)
+            elif hasattr(source, 'url') and source.url:
                 logger.debug(f"SOURCE DEBUG: Found URL in source: {source.url}")
                 # Convert HttpUrl to string for processing
                 url_str = str(source.url)
@@ -409,8 +417,10 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
                     logger.debug(f"Using URL filename for parsing: {url_filename}")
                 else:
                     logger.debug("URL filename extraction failed")
+
+            # Priority 3: Fall back to temp file path (lowest priority)
             else:
-                logger.debug(f"No URL found in source: hasattr={hasattr(source, 'url')}, url_value={getattr(source, 'url', 'N/A')}")
+                logger.debug(f"No explicit filename or URL found in source, using temp file path")
 
             filename_metadata = parse_filename_metadata(filename_for_parsing, metadata_dict)
             if filename_metadata:
