@@ -151,8 +151,6 @@ def health_check() -> dict:
     from src.error_utils import handle_tool_error
     from src.exceptions import MusicLibraryError, ResourceNotFoundError
     from database import check_database_availability
-    from src.storage.gcs_client import check_gcs_health
-    from src.tasks.queue import check_cloud_tasks_health
 
     try:
         logger.debug("Health check requested")
