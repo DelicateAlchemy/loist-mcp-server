@@ -43,8 +43,26 @@ class BWFExtractor:
     SUPPORTED_FORMATS = {".wav", ".bwf"}
 
     # BWF field mappings for music metadata
-    # Maps ExifTool BWF field names to internal field names
+    # Maps ExifTool field names to internal field names
+    # Includes both standard metadata fields and BWF-specific fields
     BWF_FIELD_MAPPINGS = {
+        # Standard music metadata fields (found in BWF WAV files)
+        # PyExifTool prefixes WAV fields with RIFF:
+        'RIFF:Artist': 'artist',
+        'RIFF:Title': 'title',
+        'RIFF:Album': 'album',
+        'RIFF:Genre': 'genre',
+        'RIFF:Copyright': 'copyright',
+        'RIFF:DateCreated': 'year',  # Maps to year field
+
+        # Also include non-prefixed versions for compatibility
+        'Artist': 'artist',
+        'Title': 'title',
+        'Album': 'album',
+        'Genre': 'genre',
+        'Copyright': 'copyright',
+        'DateCreated': 'year',  # Maps to year field
+
         # Standard BWF fields
         'Originator': 'originator',
         'OriginatorReference': 'originator_reference',
@@ -63,11 +81,6 @@ class BWFExtractor:
         'FileUID': 'file_uid',
 
         # Music-specific BWF/iXML fields
-        'Artist': 'artist',
-        'Title': 'title',
-        'Copyright': 'copyright',
-        'DateCreated': 'year',  # Maps to year field
-        'Genre': 'genre',
         'Product': 'album',  # Maps to album field
 
         # User-defined fields in iXML
