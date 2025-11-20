@@ -48,9 +48,11 @@ Each environment has distinct naming conventions to avoid conflicts in MCP clien
 - **Environment**: GCloud infrastructure (Cloud SQL + GCS)
 - **Transport**: Configurable (stdio/http/sse)
 
-## Architecture
+## Google Cloud Platform
 
-### Google Cloud Infrastructure Overview
+📚 **[Complete Google Cloud Platform Overview](docs/google-cloud-platform-overview.md)** - Comprehensive guide to all GCP services and infrastructure.
+
+### Infrastructure Overview
 
 The system is built on Google Cloud Platform with a modern serverless architecture:
 
@@ -72,8 +74,8 @@ The system is built on Google Cloud Platform with a modern serverless architectu
 │  ┌─────────────┐    ┌──────────────┐                       │
 │  │   Cloud     │    │     IAM      │                       │
 │  │  Storage    │◀───┤  SignBlob    │◀──────────────────────┘
-│  │   (GCS)     │    │    API       │                        
-│  └─────────────┘    └──────────────┘                        
+│  │   (GCS)     │    │    API       │
+│  └─────────────┘    └──────────────┘
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -650,11 +652,13 @@ For production deployments with custom domains and automatic HTTPS:
 
 📚 **Custom Domain Setup Guide**: See [`docs/custom-domain-mapping-guide.md`](docs/custom-domain-mapping-guide.md) for comprehensive HTTPS and custom domain implementation.
 
-## Cloud Build CI/CD - GitHub Triggers Only
+## CI/CD Pipeline
 
-The project uses **Google Cloud Build exclusively** for all CI/CD operations. GitHub serves only as a trigger mechanism for Cloud Build pipelines.
+📚 **[Google Cloud Platform Overview](docs/google-cloud-platform-overview.md)** - Complete infrastructure and deployment guide.
 
-### Architecture
+The project uses **Google Cloud Build exclusively** for all CI/CD operations. GitHub serves only as a trigger mechanism.
+
+### Deployment Architecture
 
 ```
 GitHub (Triggers Only)
@@ -664,86 +668,35 @@ Google Cloud Build (Full CI/CD)
 Production/Staging Deployment
 ```
 
-### Cloud Build Pipelines
+### Pipelines
 
-#### Production Pipeline (`cloudbuild.yaml`)
-**Triggered by pushes to `main` branch**
+#### Production (`cloudbuild.yaml`)
+**Trigger**: Push to `main` branch
+- 7-stage pipeline: Tests → Validation → Build → Deploy
+- Strict quality gates (75% unit, 70% database coverage)
+- Blocking failures prevent deployment
 
-1. **Unit Tests** - Fast tests without external dependencies (75% coverage required)
-2. **Database Tests** - Integration tests using testcontainers (70% coverage required)
-3. **Migration Check** - Database migration validation
-4. **MCP Validation** - Protocol compliance testing
-5. **Static Analysis** - Code quality checks (black, isort, mypy, flake8, bandit)
-6. **Build & Deploy** - Container build and Cloud Run deployment
+#### Staging (`cloudbuild-staging.yaml`)
+**Trigger**: Push to `dev` branch
+- Same comprehensive pipeline with relaxed thresholds
+- Warning-only failures allow deployment
+- Pre-production validation environment
 
-#### Staging Pipeline (`cloudbuild-staging.yaml`)
-**Triggered by pushes to `dev` branch**
+### Key Features
 
-Same comprehensive pipeline as production but with:
-- Relaxed coverage thresholds (65% unit, 60% database)
-- Warning-only test failures (continues deployment)
-- Staging-specific environment variables and secrets
-
-### Test Strategy
-
-**Marker-based automatic filtering** using root `conftest.py`:
-
-```python
-# Database tests: pytest -m "requires_db" (with testcontainers)
-# Unit tests: pytest -m "not (requires_db or requires_gcs or slow)"
-# GCS tests: pytest -m "requires_gcs"
-```
-
-**Test Execution:**
-
-| Environment | Unit Tests | Database Tests | Failure Behavior |
-|-------------|------------|----------------|------------------|
-| Production  | ✅ Blocking | ✅ Blocking    | Fail build       |
-| Staging     | ⚠️ Warning  | ⚠️ Warning     | Continue deploy  |
-
-### Database Testing with TestContainers
-
-- **Isolated Testing**: Fresh PostgreSQL container per test run
-- **No External Dependencies**: Self-contained CI/CD environment
-- **Parallel Execution**: Tests run concurrently for speed
-- **Production Ready**: Validates real database interactions
-
-### Artifact Storage
-
-All test artifacts automatically stored in Google Cloud Storage:
-- `gs://$PROJECT_ID-build-artifacts/$COMMIT_SHA/`
-- Test results, coverage reports, MCP validation, migration status
-
-### GitHub Configuration
-
-**Minimal trigger workflow** (`.github/workflows/cloud-build-trigger.yml`):
-
-```yaml
-name: Cloud Build Trigger
-on:
-  push:
-    branches: [ main, dev ]
-jobs:
-  trigger-cloud-build:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Trigger Cloud Build
-      run: gcloud builds submit --config=cloudbuild.yaml
-```
-
-### Benefits
-
-- ✅ **Single Source of Truth**: All CI/CD logic in Cloud Build
-- ✅ **Cost Effective**: No duplicate GitHub Actions infrastructure
-- ✅ **Better Performance**: Optimized for Google Cloud
-- ✅ **Security**: Secrets in Google Secret Manager
-- ✅ **Scalability**: Handles large builds and complex testing
+- **Multi-stage Docker builds** with security scanning
+- **Database testing** with TestContainers isolation
+- **MCP protocol validation** for API compliance
+- **Static analysis** (black, isort, mypy, flake8, bandit)
+- **Artifact storage** in Google Cloud Storage
+- **Secret management** via Google Secret Manager
 
 ### Documentation
 
-- [Cloud Build CI/CD Setup](docs/cloud-build-ci-cd-setup.md) - Complete Cloud Build configuration guide
-- [Testing Practices Guide](docs/testing-practices-guide.md) - Comprehensive testing infrastructure
-- [Cloud Run Deployment](docs/cloud-run-deployment.md) - Production deployment details
+- [Cloud Build Setup Guide](docs/google-cloud-build-setup.md) - Initial configuration
+- [Cloud Build CI/CD Setup](docs/cloud-build-ci-cd-setup.md) - Pipeline architecture
+- [Cloud Run Deployment](docs/cloud-run-deployment.md) - Production deployment
+- [Testing Practices Guide](docs/testing-practices-guide.md) - Testing infrastructure
 
 📚 **Full Documentation:**
 - [Testing Practices Guide](docs/testing-practices-guide.md) - Comprehensive testing infrastructure and CI/CD
