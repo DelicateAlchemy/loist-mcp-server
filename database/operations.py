@@ -149,6 +149,11 @@ def save_audio_metadata(
         'file_size_bytes': metadata.get('file_size_bytes'),
         'audio_gcs_path': audio_gcs_path,
         'thumbnail_gcs_path': thumbnail_gcs_path,
+        # XMP fields
+        'composer': metadata.get('composer'),
+        'publisher': metadata.get('publisher'),
+        'record_label': metadata.get('record_label'),
+        'isrc': metadata.get('isrc'),
     }
     
     # Execute insert with transaction management
