@@ -21,6 +21,7 @@ from mutagen.flac import FLAC, Picture
 from mutagen.mp4 import MP4
 from mutagen.oggvorbis import OggVorbis
 from mutagen.wave import WAVE
+from mutagen.aiff import AIFF
 import tempfile
 import re
 
@@ -163,7 +164,7 @@ class MetadataExtractor:
     """
     
     # Supported audio formats
-    SUPPORTED_FORMATS = {".mp3", ".flac", ".m4a", ".aac", ".ogg", ".wav"}
+    SUPPORTED_FORMATS = {".mp3", ".flac", ".m4a", ".aac", ".ogg", ".wav", ".aif", ".aiff"}
     
     # Picture type priorities (APIC/Picture type field)
     # 3 = Front cover (preferred)
@@ -363,7 +364,75 @@ class MetadataExtractor:
             
         except Exception as e:
             raise MetadataExtractionError(f"Failed to extract MP4 tags: {e}")
-    
+
+    @staticmethod
+    def extract_aif_tags(file_path: Path | str) -> Dict[str, Any]:
+        """
+        Extract tags from AIF/AIFF files.
+
+        AIF files can contain ID3 tags, similar to MP3 files.
+
+        Args:
+            file_path: Path to AIF/AIFF file
+
+        Returns:
+            Dictionary of metadata
+        """
+        file_path = Path(file_path)
+
+        metadata = {
+            "artist": None,
+            "title": None,
+            "album": None,
+            "genre": None,
+            "year": None,
+        }
+
+        try:
+            audio = AIFF(str(file_path))
+
+            if not audio.tags:
+                logger.warning(f"No AIF tags found in {file_path}")
+                return metadata
+
+            # AIF files can contain ID3 tags
+            # Extract ID3 tag fields
+            if 'TPE1' in audio.tags:  # Artist
+                metadata['artist'] = str(audio.tags['TPE1'])
+
+            if 'TIT2' in audio.tags:  # Title
+                metadata['title'] = str(audio.tags['TIT2'])
+
+            if 'TALB' in audio.tags:  # Album
+                metadata['album'] = str(audio.tags['TALB'])
+
+            if 'TCON' in audio.tags:  # Genre
+                genre = str(audio.tags['TCON'])
+                # Extract genre name from ID3 genre format
+                if genre.startswith('(') and ')' in genre:
+                    # ID3 genre format like (0) or (17)
+                    try:
+                        genre_id = int(genre.strip('()'))
+                        # Could map to standard genre names, but for now keep as-is
+                        metadata['genre'] = genre
+                    except ValueError:
+                        metadata['genre'] = genre
+                else:
+                    metadata['genre'] = genre
+
+            if 'TDRC' in audio.tags:  # Recording date
+                try:
+                    date_str = str(audio.tags['TDRC'])
+                    metadata['year'] = int(date_str.split('-')[0])
+                except (ValueError, AttributeError):
+                    pass
+
+            logger.info(f"Extracted AIF tags from {file_path.name}")
+            return metadata
+
+        except Exception as e:
+            raise MetadataExtractionError(f"Failed to extract AIF tags: {e}")
+
     @staticmethod
     def extract(file_path: Path | str, validate_quality: bool = True, quality_threshold: float = 0.3) -> Dict[str, Any]:
         """
@@ -428,6 +497,11 @@ class MetadataExtractor:
             elif suffix in {'.m4a', '.aac'}:
                 tags = MetadataExtractor.extract_mp4_tags(file_path)
                 metadata.update(tags)
+            elif suffix in {'.aif', '.aiff'}:
+                # AIF files may have ID3 tags or other metadata
+                if hasattr(audio, 'tags') and audio.tags:
+                    tags = MetadataExtractor.extract_aif_tags(file_path)
+                    metadata.update(tags)
             elif suffix == '.wav':
                 # WAV files may have INFO chunks
                 if hasattr(audio, 'tags') and audio.tags:

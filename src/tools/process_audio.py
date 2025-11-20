@@ -369,7 +369,7 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
                 # Skip validation if we have a trusted filename override
                 if hasattr(source, 'filename') and source.filename:
                     provided_ext = Path(source.filename).suffix.lower()
-                    if provided_ext in ['.mp3', '.flac', '.wav', '.ogg', '.m4a', '.aac']:
+                    if provided_ext in ['.mp3', '.flac', '.wav', '.aif', '.aiff', '.ogg', '.m4a', '.aac']:
                         logger.info(f"Skipping format validation for trusted filename: {source.filename}")
                     else:
                         validate_audio_format(validation_path)
