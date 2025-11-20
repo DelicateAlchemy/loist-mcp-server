@@ -10,7 +10,7 @@ The tool executes the following stages in sequence:
 
 1. **Input Validation** - Validates input schema using Pydantic
 2. **HTTP Download** - Downloads audio from URL with SSRF protection
-3. **Metadata Extraction** - Extracts ID3 tags and technical specifications
+3. **Metadata Extraction** - Extracts ID3 tags, BWF metadata, and technical specifications
 4. **Storage Upload** - Uploads audio and artwork to Google Cloud Storage
 5. **Database Persistence** - Saves metadata to PostgreSQL database
 6. **Response Formatting** - Returns structured response with resource URIs

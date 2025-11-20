@@ -12,6 +12,7 @@ The server features a modern, scalable architecture with:
 
 - **Repository Pattern**: Clean data access abstraction with dependency injection
 - **Unified Exception Framework**: Comprehensive error handling with automatic recovery strategies
+- **Advanced Metadata Extraction**: ID3 tags, BWF metadata, XMP data, and intelligent filename parsing
 - **Performance Optimizations**: 75-80% faster database operations with batch processing
 - **Comprehensive Testing**: 85%+ test coverage with automated performance validation
 - **Clean FastMCP Integration**: Zero workarounds for exception serialization
