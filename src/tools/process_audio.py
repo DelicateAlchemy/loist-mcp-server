@@ -382,7 +382,7 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
                 logger.info(f"Metadata was repaired for {pipeline.audio_id}")
             logger.debug(f"Extracted metadata: {metadata_dict}")
 
-            # Attempt XMP enhancement for WAV/BWF files
+            # Attempt XMP enhancement for WAV/BWF/AIF files
             if should_attempt_xmp_extraction(extraction_path, metadata_dict):
                 logger.info(f"🎵 XMP EXTRACTION: Attempting XMP enhancement for {Path(extraction_path).name}")
                 try:

@@ -1,11 +1,13 @@
 """
 XMP metadata extraction using PyExifTool.
 
-Provides extraction of XMP metadata from audio files, with special focus on
-WAV and BWF (Broadcast Wave Format) files that may contain rich music metadata.
+Provides extraction of XMP metadata from audio files, with support for
+WAV, BWF (Broadcast Wave Format), and AIF/AIFF files that may contain rich music metadata.
 
 Supports custom XMP schemas and arbitrary fields while maintaining a flat
 structure for music-related metadata (composer, publisher, record_label, isrc).
+
+For AIF/AIFF files, XMP data can be embedded in custom chunks such as 'XMP ' or 'iXML'.
 """
 
 from __future__ import annotations
@@ -34,8 +36,11 @@ class XMPExtractor:
     """
     Extract XMP metadata from audio files using PyExifTool.
 
-    Focuses on WAV and BWF files which commonly contain rich XMP metadata
-    from professional music production tools (Adobe Audition, Pro Tools, etc.).
+    Supports WAV, BWF, and AIF/AIFF files which commonly contain rich XMP metadata
+    from professional music production tools (Adobe Audition, Pro Tools, Logic Pro, etc.).
+
+    For AIF/AIFF files, XMP data is embedded in custom chunks (e.g., 'XMP ', 'iXML')
+    which are detected and extracted by ExifTool.
     """
 
     # Supported formats for XMP extraction
@@ -71,10 +76,15 @@ class XMPExtractor:
         'XMP:BWF:OriginationDate': 'origination_date',
         'XMP:BWF:OriginationTime': 'origination_time',
 
-        # iXML fields (common in WAV files from audio interfaces)
+        # iXML fields (common in WAV and AIF files from audio interfaces and DAWs)
         'XMP:IXML:Scene': 'scene',
         'XMP:IXML:Take': 'take',
         'XMP:IXML:Note': 'note',
+        'XMP:IXML:Speed': 'speed',
+        'XMP:IXML:FileName': 'filename',
+        'XMP:IXML:Project': 'project',
+        'XMP:IXML:Track': 'track_name',
+        'XMP:IXML:Interleaved': 'interleaved',
     }
 
     @classmethod
