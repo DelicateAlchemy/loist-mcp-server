@@ -54,6 +54,8 @@ from src.metadata import (
     parse_filename_metadata,
     enhance_metadata_with_xmp,
     should_attempt_xmp_extraction,
+    enhance_metadata_with_bwf,
+    should_attempt_bwf_extraction,
     MetadataExtractionError,
     FormatValidationError,
 )
@@ -395,6 +397,22 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
                     logger.warning(f"🎵 XMP EXTRACTION: XMP enhancement failed: {e}")
             else:
                 logger.debug(f"🎵 XMP EXTRACTION: Skipping XMP enhancement (not needed or not supported)")
+
+            # Attempt BWF enhancement for WAV files (after XMP to allow fallback)
+            if should_attempt_bwf_extraction(extraction_path, metadata_dict):
+                logger.info(f"🎵 BWF EXTRACTION: Attempting BWF enhancement for {Path(extraction_path).name}")
+                try:
+                    enhanced_metadata = enhance_metadata_with_bwf(extraction_path, metadata_dict)
+                    if enhanced_metadata.get('_bwf_enhanced'):
+                        metadata_dict = enhanced_metadata
+                        bwf_fields = enhanced_metadata.get('_bwf_fields', [])
+                        logger.info(f"🎵 BWF EXTRACTION: Enhanced metadata with BWF fields: {bwf_fields}")
+                    else:
+                        logger.debug(f"🎵 BWF EXTRACTION: No BWF data found or enhancement not needed")
+                except Exception as e:
+                    logger.warning(f"🎵 BWF EXTRACTION: BWF enhancement failed: {e}")
+            else:
+                logger.debug(f"🎵 BWF EXTRACTION: Skipping BWF enhancement (not needed or not supported)")
 
             # Parse filename for missing metadata fields
             # Priority order: source.filename > URL parsing > temp file
