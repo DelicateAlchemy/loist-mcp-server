@@ -1,8 +1,8 @@
-# GitHub Secrets Quick Setup
+# GCP Service Account Setup Guide
 
 ## 🚀 Quick Start (5 minutes)
 
-Follow these steps to configure GitHub Secrets for database provisioning workflow.
+Follow these steps to create and configure GCP service accounts for automated deployments.
 
 ---
 
@@ -28,16 +28,26 @@ gcloud iam service-accounts keys create github-actions-key.json \
 
 ---
 
-## Step 2: Add Secrets to GitHub
+## Step 2: Store Service Account Key
 
-### GCLOUD_SERVICE_KEY
+### For Cloud Build / CI/CD Systems
 
-1. Open `github-actions-key.json` and copy entire contents
+Store the service account key as a secret in your CI/CD system:
+
+**GitHub Actions (if still used):**
+1. Open `service-account-key.json` and copy entire contents
 2. Go to: **GitHub Repo** → **Settings** → **Secrets and variables** → **Actions**
 3. Click **New repository secret**
 4. Name: `GCLOUD_SERVICE_KEY`
 5. Paste the JSON content
 6. Click **Add secret**
+
+**Google Cloud Secret Manager (recommended):**
+```bash
+# Create secret in Secret Manager
+echo -n "$(cat service-account-key.json)" | \
+gcloud secrets create service-account-key --data-file=-
+```
 
 ### DB_USER
 
@@ -62,16 +72,21 @@ cat .env.database | grep DB_PASSWORD
 
 ## Step 3: Verify Setup
 
-1. Go to **Actions** tab in GitHub
-2. Select **Database Provisioning** workflow
-3. Click **Run workflow**
-4. Choose action: `health-check`
-5. Click **Run workflow**
+Test the service account authentication:
+
+```bash
+# Test authentication with the key
+gcloud auth activate-service-account --key-file=service-account-key.json
+gcloud config set project loist-music-library
+
+# Test Cloud SQL access
+gcloud sql instances list
+```
 
 ### Expected Output ✅
 ```
-✅ Database connection successful!
-PostgreSQL version: PostgreSQL 15.x...
+NAME                     DATABASE_VERSION  LOCATION        TIER              PRIMARY_ADDRESS    STATUS
+loist-music-library-db   POSTGRES_15       us-central1      db-f1-micro       34.102.xxx.xxx     RUNNABLE
 ```
 
 ---
@@ -79,13 +94,15 @@ PostgreSQL version: PostgreSQL 15.x...
 ## Step 4: Clean Up Local Files
 
 ```bash
-# Delete the local key file (it's now in GitHub Secrets)
-rm github-actions-key.json
+# Delete the local key file (it's now stored securely)
+rm service-account-key.json
 
 # Verify it's gone
-ls -la github-actions-key.json
+ls -la service-account-key.json
 # Should show: No such file or directory
 ```
+
+**Security Note:** Never commit service account keys to version control. Always store them in Secret Manager or CI/CD secrets.
 
 ---
 
@@ -117,35 +134,26 @@ ls -la github-actions-key.json
 
 ---
 
-## 📚 Full Documentation
+## 📚 Related Documentation
 
-For detailed information, see: [GitHub Actions Setup Guide](./github-actions-setup.md)
-
----
-
-## 🎯 Available Workflow Actions
-
-| Action | Description | When to Use |
-|--------|-------------|-------------|
-| `provision` | Create Cloud SQL instance | Initial setup |
-| `migrate` | Run database migrations | After schema changes |
-| `test` | Run database tests | Before merging code |
-| `health-check` | Verify instance health | Troubleshooting |
+For CI/CD setup, see:
+- [Cloud Build Setup Guide](./google-cloud-build-setup.md)
+- [Cloud Build Triggers](./cloud-build-triggers.md)
+- [Secret Manager Guide](./secret-rotation-guide.md)
 
 ---
 
-## ⚡ One-Liner Verification
+## ⚡ Quick Verification Commands
 
 ```bash
-# Verify all secrets are set in GitHub (requires gh CLI)
-gh secret list
-```
+# Verify service account has required roles
+gcloud iam service-accounts get-iam-policy service-account@project.iam.gserviceaccount.com
 
-Expected output:
-```
-GCLOUD_SERVICE_KEY  Updated YYYY-MM-DD
-DB_USER            Updated YYYY-MM-DD
-DB_PASSWORD        Updated YYYY-MM-DD
+# Test Cloud SQL permissions
+gcloud sql instances describe instance-name --project=project-id
+
+# List all service accounts
+gcloud iam service-accounts list
 ```
 
 ---
