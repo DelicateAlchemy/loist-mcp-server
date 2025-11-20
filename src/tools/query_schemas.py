@@ -313,39 +313,7 @@ class SearchLibraryInput(BaseModel):
 
         return v
 
-    @field_validator('filter')
-    @classmethod
-    def validate_filter_format(cls, v):
-        """Basic validation of RSQL filter format"""
-        if not v:
-            return v
 
-        # Basic syntax check - should contain valid operators
-        valid_ops = ['==', '!=', '>=', '<=', '>', '<', '=in=', '=out=', '=like=']
-        parts = v.split(';')
-
-        for part in parts:
-            part = part.strip()
-            if not part:
-                continue
-
-            has_valid_op = any(op in part for op in valid_ops)
-            if not has_valid_op:
-                raise ValueError(f"Invalid filter format: '{part}'. Use RSQL operators like ==, >=, <=, etc.")
-
-        return v
-
-    @field_validator('fields')
-    @classmethod
-    def validate_fields_list(cls, v):
-        """Validate fields parameter"""
-        return validate_fields(v)
-
-    @field_validator('cursor')
-    @classmethod
-    def validate_cursor_format(cls, v):
-        """Validate cursor parameter"""
-        return validate_cursor(v)
 
     model_config = {
         "json_schema_extra": {
