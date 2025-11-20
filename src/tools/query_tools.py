@@ -35,6 +35,12 @@ from .schemas import (
 from database import (
     get_audio_metadata_by_id,
     search_audio_tracks_advanced,
+    filter_audio_tracks_xmp,
+    filter_audio_tracks_combined,
+    get_xmp_field_facets,
+    filter_audio_tracks_cursor_xmp,
+    encode_cursor,
+    decode_cursor,
 )
 from src.exceptions import (
     DatabaseOperationError,
@@ -262,57 +268,30 @@ async def search_library(input_data: Dict[str, Any]) -> Dict[str, Any]:
         offset = validated_input.offset
         sort_by = validated_input.sortBy
         sort_order = validated_input.sortOrder
-        
+
         logger.debug(f"Searching for: '{query}' with limit={limit}, offset={offset}")
-        
-        # Build filter parameters for database query
-        # Note: Currently only basic filters are supported by search_audio_tracks_advanced
-        filter_params = {}
-        
-        # Always filter to completed tracks only
-        filter_params["status_filter"] = "COMPLETED"
-        
+
+        # Extract XMP filters from the filters dict
+        xmp_filters = {}
         if filters:
-            # Year range filter
-            if filters.year:
-                if filters.year.min is not None:
-                    filter_params["year_min"] = filters.year.min
-                if filters.year.max is not None:
-                    filter_params["year_max"] = filters.year.max
-            
-            # Format filter (only takes first format if multiple provided)
-            if filters.format:
-                # database function expects single format string, not list
-                filter_params["format_filter"] = filters.format[0].value if isinstance(filters.format, list) else filters.format.value
-            
-            # Note: The following filters are not yet supported by search_audio_tracks_advanced:
-            # - genre (would need to be added to database function)
-            # - duration (would need to be added to database function)
-            # - artist (would need to be added to database function)
-            # - album (would need to be added to database function)
-            # These could be implemented as post-filtering on results if needed
-        
-        # Determine sort field mapping
-        sort_field_map = {
-            "relevance": "score",  # Default from search
-            "title": "title",
-            "artist": "artist",
-            "year": "year",
-            "duration": "duration",
-            "created_at": "created_at"
-        }
-        
-        db_sort_field = sort_field_map.get(sort_by.value, "score")
-        db_sort_order = sort_order.value  # "asc" or "desc"
-        
-        # Execute search query
+            xmp_filters = {
+                'composer_filter': filters.get('composer'),
+                'publisher_filter': filters.get('publisher'),
+                'record_label_filter': filters.get('record_label'),
+                'isrc_filter': filters.get('isrc'),
+                'year_min': filters.get('year', {}).get('min') if filters.get('year') else None,
+                'year_max': filters.get('year', {}).get('max') if filters.get('year') else None,
+                'format_filter': filters.get('format', [None])[0] if filters.get('format') else None,
+            }
+
+        # Use combined filtering function that supports both full-text search and XMP filters
         try:
-            search_response = search_audio_tracks_advanced(
+            search_response = filter_audio_tracks_combined(
                 query=query,
                 limit=limit + 1,  # Fetch one extra to check if more results exist
                 offset=offset,
                 min_rank=0.01,  # Minimum relevance threshold
-                **filter_params
+                **xmp_filters
             )
         except DatabaseOperationError as e:
             logger.error(f"Database error during search: {e}")
@@ -328,18 +307,18 @@ async def search_library(input_data: Dict[str, Any]) -> Dict[str, Any]:
                 message=f"Unexpected search error: {str(e)}",
                 details={"query": query, "exception_type": type(e).__name__}
             )
-        
+
         # Extract tracks from response
         search_results = search_response.get('tracks', [])
-        total_matches = search_response.get('total_matches', 0)
-        
+        total_matches = search_response.get('total_count', 0)
+
         # Check if more results exist (pagination)
         has_more = len(search_results) > limit
         if has_more:
             search_results = search_results[:limit]  # Remove the extra result
-        
+
         logger.info(f"Found {len(search_results)} results for '{query}' (total matches: {total_matches})")
-        
+
         # Format results
         formatted_results = []
         for result in search_results:
@@ -362,39 +341,69 @@ async def search_library(input_data: Dict[str, Any]) -> Dict[str, Any]:
                     "bitrate": result.get("bitrate", 0),
                     "format": result.get("format", ""),
                     "thumbnail_path": result.get("thumbnail_gcs_path"),  # Map thumbnail_gcs_path to thumbnail_path
-                    "thumbnail_gcs_path": result.get("thumbnail_gcs_path")  # Keep both for compatibility
+                    "thumbnail_gcs_path": result.get("thumbnail_gcs_path"),  # Keep both for compatibility
+                    "composer": result.get("composer"),
+                    "publisher": result.get("publisher"),
+                    "record_label": result.get("record_label"),
+                    "isrc": result.get("isrc")
                 }
-                
+
                 # Format metadata
                 formatted_metadata = format_metadata_response(db_metadata)
-                
+
                 # Get relevance score (database returns as "rank")
                 score = float(result.get("rank", 0.0))
-                
+
                 # Create search result
                 search_result = SearchResult(
                     audioId=result.get("id"),
                     metadata=formatted_metadata,
                     score=score
                 )
-                
+
                 formatted_results.append(search_result)
-                
+
             except Exception as e:
                 logger.warning(f"Error formatting search result: {e}")
                 continue  # Skip this result and continue with others
-        
-        # Use the actual total from the database query
-        total = total_matches
-        
+
+        # Get facets for XMP fields to support faceted search
+        try:
+            facets_data = get_xmp_field_facets(
+                composer_limit=20,
+                publisher_limit=20,
+                record_label_limit=20,
+                min_count=1
+            )
+
+            # Convert to Pydantic format
+            facets = SearchFacets(
+                composers=[
+                    FacetData(name=facet['name'], count=facet['count'])
+                    for facet in facets_data.get('composers', [])
+                ],
+                publishers=[
+                    FacetData(name=facet['name'], count=facet['count'])
+                    for facet in facets_data.get('publishers', [])
+                ],
+                record_labels=[
+                    FacetData(name=facet['name'], count=facet['count'])
+                    for facet in facets_data.get('record_labels', [])
+                ]
+            )
+        except Exception as e:
+            logger.warning(f"Failed to retrieve facets: {e}")
+            facets = None
+
         # Build response
         response = SearchLibraryOutput(
             success=True,
             results=formatted_results,
-            total=total,
+            total=total_matches,
             limit=limit,
             offset=offset,
-            hasMore=has_more
+            hasMore=has_more,
+            facets=facets
         )
         
         search_time = time.time() - start_time

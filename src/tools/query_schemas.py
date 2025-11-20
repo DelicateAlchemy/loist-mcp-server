@@ -41,6 +41,92 @@ class SortOrder(str, Enum):
     DESC = "desc"
 
 
+class FacetType(str, Enum):
+    """Types of facets available for search"""
+    COMPOSERS = "composers"
+    PUBLISHERS = "publishers"
+    RECORD_LABELS = "record_labels"
+
+
+# ============================================================================
+# XMP Filtering Schemas
+# ============================================================================
+
+class XMPFilters(BaseModel):
+    """
+    Filters for XMP metadata fields (composer, publisher, record_label, isrc).
+
+    All filters support partial matching except ISRC which requires exact match.
+    """
+    composer: Optional[str] = Field(
+        default=None,
+        description="Filter by composer (partial match)",
+        max_length=200
+    )
+    publisher: Optional[str] = Field(
+        default=None,
+        description="Filter by publisher (partial match)",
+        max_length=200
+    )
+    record_label: Optional[str] = Field(
+        default=None,
+        description="Filter by record label (partial match)",
+        max_length=200
+    )
+    isrc: Optional[str] = Field(
+        default=None,
+        description="Filter by ISRC code (exact match)",
+        pattern=r"^[A-Z]{2}-[A-Z0-9]{3}-\d{2}-\d{5}$",
+        max_length=12
+    )
+
+
+class FacetRequest(BaseModel):
+    """
+    Request for facet information to support faceted search UIs.
+    """
+    composer_limit: int = Field(
+        default=20,
+        ge=1,
+        le=100,
+        description="Maximum composer facets to return"
+    )
+    publisher_limit: int = Field(
+        default=20,
+        ge=1,
+        le=100,
+        description="Maximum publisher facets to return"
+    )
+    record_label_limit: int = Field(
+        default=20,
+        ge=1,
+        le=100,
+        description="Maximum record label facets to return"
+    )
+    min_count: int = Field(
+        default=1,
+        ge=1,
+        description="Minimum frequency for facet inclusion"
+    )
+
+
+class FacetData(BaseModel):
+    """
+    Facet information for search filters.
+    """
+    name: str = Field(description="Facet value name")
+    count: int = Field(description="Number of tracks with this value")
+
+
+class SearchFacets(BaseModel):
+    """
+    Complete facet response for search.
+    """
+    composers: List[FacetData] = Field(description="Composer facets")
+    publishers: List[FacetData] = Field(description="Publisher facets")
+    record_labels: List[FacetData] = Field(description="Record label facets")
+
+
 # ============================================================================
 # Input Schemas - get_audio_metadata
 # ============================================================================
@@ -161,34 +247,32 @@ class SearchLibraryInput(BaseModel):
     """
     Input schema for search_library tool.
 
-    Performs full-text search across audio library with RSQL filters and cursor pagination.
+    Performs full-text search across audio library with XMP metadata filters and cursor pagination.
 
     Example:
         {
             "query": "hey jude",
-            "filter": "genre==Rock;year>=1960,year<=1980",
-            "fields": "id,title,score,artist,album,genre,year",
+            "filters": {
+                "genre": ["Rock"],
+                "year": {"min": 1960, "max": 1980},
+                "composer": "JOHN LENNON",
+                "publisher": "EMI"
+            },
             "limit": 20,
-            "cursor": null,
+            "offset": 0,
             "sortBy": "relevance",
             "sortOrder": "desc"
         }
     """
     query: str = Field(
         ...,
-        description="Search query (searches across title, artist, album, genre)",
+        description="Search query (searches across title, artist, album, genre, composer, publisher)",
         min_length=1,
         max_length=500
     )
-    filter: Optional[str] = Field(
+    filters: Optional[Dict[str, Any]] = Field(
         default=None,
-        description="RSQL-style filter string (e.g., 'genre==Rock;year>=1960,year<=1980')",
-        max_length=1000
-    )
-    fields: Optional[str] = Field(
-        default="id,title,score,artist,album,genre,year",
-        description="Comma-separated fields to return (default: minimal set)",
-        max_length=500
+        description="Advanced filters including XMP metadata fields"
     )
     limit: int = Field(
         default=20,
@@ -196,10 +280,10 @@ class SearchLibraryInput(BaseModel):
         le=100,
         description="Maximum number of results to return (max: 100)"
     )
-    cursor: Optional[str] = Field(
-        default=None,
-        description="Opaque cursor for pagination (base64-encoded)",
-        max_length=200
+    offset: int = Field(
+        default=0,
+        ge=0,
+        description="Number of results to skip for pagination"
     )
     sortBy: SortField = Field(
         default=SortField.RELEVANCE,
@@ -356,19 +440,21 @@ class SearchLibraryOutput(BaseModel):
     """
     Success output for search_library tool.
 
-    Returns list of matching audio tracks with cursor pagination metadata.
+    Returns list of matching audio tracks with facets and pagination metadata.
     """
     success: Literal[True] = Field(description="Operation success indicator")
     results: List[SearchResult] = Field(
         description="List of matching audio tracks with relevance scores"
     )
+    total: int = Field(description="Total number of matching tracks")
     limit: int = Field(description="Number of results requested")
+    offset: int = Field(description="Number of results skipped")
     hasMore: bool = Field(
         description="Whether more results are available"
     )
-    nextCursor: Optional[str] = Field(
+    facets: Optional[SearchFacets] = Field(
         default=None,
-        description="Cursor for next page (null if no more results)"
+        description="Facet information for search filters"
     )
 
     model_config = {

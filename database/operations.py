@@ -1637,6 +1637,642 @@ def mark_as_processing(track_id: str) -> Dict[str, Any]:
 
 
 # ============================================================================
+# Multi-Field Filtering Operations
+# ============================================================================
+
+def filter_audio_tracks_xmp(
+    composer_filter: Optional[str] = None,
+    publisher_filter: Optional[str] = None,
+    record_label_filter: Optional[str] = None,
+    isrc_filter: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+    order_by: str = 'created_at',
+    order_direction: str = 'DESC'
+) -> Dict[str, Any]:
+    """
+    Efficiently filter audio tracks by XMP metadata fields.
+
+    Supports multi-field filtering with AND logic for professional music metadata.
+    Uses composite indexes for optimal performance.
+
+    Args:
+        composer_filter: Exact or partial match for composer field
+        publisher_filter: Exact or partial match for publisher field
+        record_label_filter: Exact or partial match for record label field
+        isrc_filter: Exact match for ISRC field (case-insensitive)
+        limit: Maximum results (1-200, default: 50)
+        offset: Pagination offset
+        order_by: Sort field ('created_at', 'title', 'artist', 'composer', 'year')
+        order_direction: 'ASC' or 'DESC'
+
+    Returns:
+        Dictionary with tracks and pagination info
+
+    Raises:
+        ValidationError: If parameters are invalid
+        DatabaseOperationError: If query fails
+
+    Example:
+        >>> result = filter_audio_tracks_xmp(
+        ...     composer_filter="ROB JAGER",
+        ...     publisher_filter="EXTREME MUSIC",
+        ...     limit=20
+        ... )
+        >>> print(f"Found {len(result['tracks'])} tracks")
+    """
+    # Validation
+    if limit < 1 or limit > 200:
+        raise ValidationError("Limit must be between 1 and 200")
+
+    if offset < 0:
+        raise ValidationError("Offset must be non-negative")
+
+    valid_order_fields = ['created_at', 'updated_at', 'title', 'artist', 'album', 'year', 'composer', 'publisher']
+    if order_by not in valid_order_fields:
+        raise ValidationError(f"Invalid order_by field. Must be one of: {valid_order_fields}")
+
+    if order_direction not in ['ASC', 'DESC']:
+        raise ValidationError("order_direction must be 'ASC' or 'DESC'")
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                # Build WHERE conditions
+                where_conditions = ["status = 'COMPLETED'"]  # Only completed tracks
+                params = []
+
+                # Add XMP field filters
+                if composer_filter:
+                    where_conditions.append("composer ILIKE %s")
+                    params.append(f"%{composer_filter}%")
+
+                if publisher_filter:
+                    where_conditions.append("publisher ILIKE %s")
+                    params.append(f"%{publisher_filter}%")
+
+                if record_label_filter:
+                    where_conditions.append("record_label ILIKE %s")
+                    params.append(f"%{record_label_filter}%")
+
+                if isrc_filter:
+                    where_conditions.append("UPPER(isrc) = UPPER(%s)")
+                    params.append(isrc_filter)
+
+                where_clause = " AND ".join(where_conditions)
+
+                # Get total count
+                count_query = f"SELECT COUNT(*) FROM audio_tracks WHERE {where_clause}"
+                cur.execute(count_query, params)
+                total_count = cur.fetchone()['count']
+
+                # Get filtered results
+                query = f"""
+                    SELECT
+                        id, status, artist, title, album, genre, year,
+                        duration_seconds, channels, sample_rate, bitrate,
+                        format, file_size_bytes, audio_gcs_path, thumbnail_gcs_path,
+                        composer, publisher, record_label, isrc,
+                        created_at, updated_at
+                    FROM audio_tracks
+                    WHERE {where_clause}
+                    ORDER BY {order_by} {order_direction}
+                    LIMIT %s OFFSET %s
+                """
+
+                cur.execute(query, params + [limit, offset])
+                results = cur.fetchall()
+
+                logger.debug(
+                    f"XMP filter query returned {len(results)} results "
+                    f"(total: {total_count}, filters: composer={composer_filter}, "
+                    f"publisher={publisher_filter}, label={record_label_filter}, isrc={isrc_filter})"
+                )
+
+                return {
+                    'tracks': [dict(row) for row in results],
+                    'total_count': total_count,
+                    'limit': limit,
+                    'offset': offset,
+                    'has_more': (offset + len(results)) < total_count,
+                    'filters_applied': {
+                        'composer': composer_filter,
+                        'publisher': publisher_filter,
+                        'record_label': record_label_filter,
+                        'isrc': isrc_filter
+                    }
+                }
+
+    except DatabaseError as e:
+        logger.error(f"Database error in XMP filtering: {e}")
+        raise DatabaseOperationError(f"XMP filtering failed: database error - {str(e)}")
+    except Exception as e:
+        logger.error(f"Unexpected error in XMP filtering: {e}")
+        raise DatabaseOperationError(f"XMP filtering failed: {str(e)}")
+
+
+def filter_audio_tracks_combined(
+    query: Optional[str] = None,
+    composer_filter: Optional[str] = None,
+    publisher_filter: Optional[str] = None,
+    record_label_filter: Optional[str] = None,
+    isrc_filter: Optional[str] = None,
+    year_min: Optional[int] = None,
+    year_max: Optional[int] = None,
+    format_filter: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+    min_rank: float = 0.0
+) -> Dict[str, Any]:
+    """
+    Combined full-text search and structured filtering for optimal music discovery.
+
+    Supports full-text search across all metadata combined with XMP field filters.
+    Uses both search vector and structured indexes for maximum performance.
+
+    Args:
+        query: Full-text search query (optional)
+        composer_filter: Filter by composer
+        publisher_filter: Filter by publisher
+        record_label_filter: Filter by record label
+        isrc_filter: Filter by ISRC
+        year_min/year_max: Year range filters
+        format_filter: Audio format filter
+        limit: Maximum results (1-100, default: 50)
+        offset: Pagination offset
+        min_rank: Minimum relevance score for search (0.0-1.0)
+
+    Returns:
+        Dictionary with filtered tracks, total count, and applied filters
+
+    Raises:
+        ValidationError: If parameters are invalid
+        DatabaseOperationError: If query fails
+
+    Example:
+        >>> result = filter_audio_tracks_combined(
+        ...     query="rock music",
+        ...     composer_filter="JOHN DOE",
+        ...     publisher_filter="MUSIC CORP",
+        ...     year_min=2000,
+        ...     limit=25
+        ... )
+        >>> print(f"Found {result['total_count']} matching tracks")
+    """
+    # Validation
+    if limit < 1 or limit > 100:
+        raise ValidationError("Limit must be between 1 and 100")
+
+    if offset < 0:
+        raise ValidationError("Offset must be non-negative")
+
+    if min_rank < 0.0 or min_rank > 1.0:
+        raise ValidationError("min_rank must be between 0.0 and 1.0")
+
+    if year_min is not None and (year_min < 1800 or year_min > 2100):
+        raise ValidationError("year_min must be between 1800 and 2100")
+
+    if year_max is not None and (year_max < 1800 or year_max > 2100):
+        raise ValidationError("year_max must be between 1800 and 2100")
+
+    if year_min and year_max and year_min > year_max:
+        raise ValidationError("year_min cannot be greater than year_max")
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                # Build WHERE conditions
+                where_conditions = ["status = 'COMPLETED'"]
+                params = []
+
+                # Full-text search condition
+                tsquery_string = None
+                if query and query.strip():
+                    query_sanitized = query.strip()
+                    if not any(op in query_sanitized for op in ['&', '|', '!', '<->']):
+                        words = query_sanitized.split()
+                        tsquery_string = ' & '.join(words)
+                    else:
+                        tsquery_string = query_sanitized
+
+                    where_conditions.append("search_vector @@ to_tsquery('english', %s)")
+                    params.append(tsquery_string)
+
+                    where_conditions.append("ts_rank(search_vector, to_tsquery('english', %s)) >= %s")
+                    params.extend([tsquery_string, min_rank])
+
+                # XMP field filters
+                if composer_filter:
+                    where_conditions.append("composer ILIKE %s")
+                    params.append(f"%{composer_filter}%")
+
+                if publisher_filter:
+                    where_conditions.append("publisher ILIKE %s")
+                    params.append(f"%{publisher_filter}%")
+
+                if record_label_filter:
+                    where_conditions.append("record_label ILIKE %s")
+                    params.append(f"%{record_label_filter}%")
+
+                if isrc_filter:
+                    where_conditions.append("UPPER(isrc) = UPPER(%s)")
+                    params.append(isrc_filter)
+
+                # Structured filters
+                if year_min is not None:
+                    where_conditions.append("year >= %s")
+                    params.append(year_min)
+
+                if year_max is not None:
+                    where_conditions.append("year <= %s")
+                    params.append(year_max)
+
+                if format_filter:
+                    where_conditions.append("UPPER(format) = UPPER(%s)")
+                    params.append(format_filter)
+
+                where_clause = " AND ".join(where_conditions)
+
+                # Get total count
+                count_query = f"SELECT COUNT(*) FROM audio_tracks WHERE {where_clause}"
+                cur.execute(count_query, params)
+                total_count = cur.fetchone()['count']
+
+                # Get filtered results with ranking if search was used
+                if tsquery_string:
+                    query_sql = f"""
+                        SELECT
+                            id, status, artist, title, album, genre, year,
+                            duration_seconds, channels, sample_rate, bitrate,
+                            format, file_size_bytes, audio_gcs_path, thumbnail_gcs_path,
+                            composer, publisher, record_label, isrc,
+                            created_at, updated_at,
+                            ts_rank(search_vector, to_tsquery('english', %s)) as rank
+                        FROM audio_tracks
+                        WHERE {where_clause}
+                        ORDER BY rank DESC, created_at DESC
+                        LIMIT %s OFFSET %s
+                    """
+                    search_params = [tsquery_string] + params + [limit, offset]
+                else:
+                    query_sql = f"""
+                        SELECT
+                            id, status, artist, title, album, genre, year,
+                            duration_seconds, channels, sample_rate, bitrate,
+                            format, file_size_bytes, audio_gcs_path, thumbnail_gcs_path,
+                            composer, publisher, record_label, isrc,
+                            created_at, updated_at,
+                            NULL as rank
+                        FROM audio_tracks
+                        WHERE {where_clause}
+                        ORDER BY created_at DESC
+                        LIMIT %s OFFSET %s
+                    """
+                    search_params = params + [limit, offset]
+
+                cur.execute(query_sql, search_params)
+                results = cur.fetchall()
+
+                logger.debug(
+                    f"Combined filter query returned {len(results)} results "
+                    f"(total: {total_count}, query='{query}', filters applied)"
+                )
+
+                return {
+                    'tracks': [dict(row) for row in results],
+                    'total_count': total_count,
+                    'limit': limit,
+                    'offset': offset,
+                    'has_more': (offset + len(results)) < total_count,
+                    'query': query,
+                    'filters_applied': {
+                        'composer': composer_filter,
+                        'publisher': publisher_filter,
+                        'record_label': record_label_filter,
+                        'isrc': isrc_filter,
+                        'year_min': year_min,
+                        'year_max': year_max,
+                        'format': format_filter,
+                        'min_rank': min_rank
+                    }
+                }
+
+    except DatabaseError as e:
+        logger.error(f"Database error in combined filtering: {e}")
+        raise DatabaseOperationError(f"Combined filtering failed: database error - {str(e)}")
+    except Exception as e:
+        logger.error(f"Unexpected error in combined filtering: {e}")
+        raise DatabaseOperationError(f"Combined filtering failed: {str(e)}")
+
+
+def get_xmp_field_facets(
+    composer_limit: int = 20,
+    publisher_limit: int = 20,
+    record_label_limit: int = 20,
+    min_count: int = 1
+) -> Dict[str, List[Dict[str, Any]]]:
+    """
+    Get facet counts for XMP metadata fields to support faceted search.
+
+    Returns the most common values for composer, publisher, and record_label
+    fields with their frequencies, useful for building filter UIs.
+
+    Args:
+        composer_limit: Max composer facets to return
+        publisher_limit: Max publisher facets to return
+        record_label_limit: Max record label facets to return
+        min_count: Minimum frequency for inclusion
+
+    Returns:
+        Dictionary with facet lists for each XMP field
+
+    Raises:
+        DatabaseOperationError: If query fails
+
+    Example:
+        >>> facets = get_xmp_field_facets(composer_limit=10, min_count=2)
+        >>> for composer in facets['composers']:
+        ...     print(f"{composer['name']}: {composer['count']} tracks")
+    """
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                # Get composer facets
+                composer_query = """
+                    SELECT composer as name, COUNT(*) as count
+                    FROM audio_tracks
+                    WHERE status = 'COMPLETED' AND composer IS NOT NULL
+                    GROUP BY composer
+                    HAVING COUNT(*) >= %s
+                    ORDER BY count DESC, name ASC
+                    LIMIT %s
+                """
+
+                # Get publisher facets
+                publisher_query = """
+                    SELECT publisher as name, COUNT(*) as count
+                    FROM audio_tracks
+                    WHERE status = 'COMPLETED' AND publisher IS NOT NULL
+                    GROUP BY publisher
+                    HAVING COUNT(*) >= %s
+                    ORDER BY count DESC, name ASC
+                    LIMIT %s
+                """
+
+                # Get record label facets
+                record_label_query = """
+                    SELECT record_label as name, COUNT(*) as count
+                    FROM audio_tracks
+                    WHERE status = 'COMPLETED' AND record_label IS NOT NULL
+                    GROUP BY record_label
+                    HAVING COUNT(*) >= %s
+                    ORDER BY count DESC, name ASC
+                    LIMIT %s
+                """
+
+                # Execute all facet queries
+                facets = {}
+
+                cur.execute(composer_query, (min_count, composer_limit))
+                facets['composers'] = [dict(row) for row in cur.fetchall()]
+
+                cur.execute(publisher_query, (min_count, publisher_limit))
+                facets['publishers'] = [dict(row) for row in cur.fetchall()]
+
+                cur.execute(record_label_query, (min_count, record_label_limit))
+                facets['record_labels'] = [dict(row) for row in cur.fetchall()]
+
+                logger.debug(
+                    f"Retrieved XMP facets: {len(facets['composers'])} composers, "
+                    f"{len(facets['publishers'])} publishers, "
+                    f"{len(facets['record_labels'])} record labels"
+                )
+
+                return facets
+
+    except DatabaseError as e:
+        logger.error(f"Database error retrieving XMP facets: {e}")
+        raise DatabaseOperationError(f"XMP facets retrieval failed: database error - {str(e)}")
+    except Exception as e:
+        logger.error(f"Unexpected error retrieving XMP facets: {e}")
+        raise DatabaseOperationError(f"XMP facets retrieval failed: {str(e)}")
+
+
+def filter_audio_tracks_cursor_xmp(
+    composer_filter: Optional[str] = None,
+    publisher_filter: Optional[str] = None,
+    record_label_filter: Optional[str] = None,
+    isrc_filter: Optional[str] = None,
+    year_min: Optional[int] = None,
+    year_max: Optional[int] = None,
+    format_filter: Optional[str] = None,
+    limit: int = 50,
+    cursor_data: Optional[Tuple[str, str]] = None
+) -> Dict[str, Any]:
+    """
+    Cursor-based pagination for XMP field filtering with stable ordering.
+
+    Uses keyset pagination for consistent performance and stable results
+    when filtering by XMP metadata fields. Cursor encodes (created_at, id)
+    for reliable pagination.
+
+    Args:
+        composer_filter: Filter by composer (partial match)
+        publisher_filter: Filter by publisher (partial match)
+        record_label_filter: Filter by record label (partial match)
+        isrc_filter: Filter by ISRC (exact match)
+        year_min/year_max: Year range filters
+        format_filter: Audio format filter
+        limit: Maximum results (1-100, default: 50)
+        cursor_data: Tuple of (created_at, id) from previous page, or None for first page
+
+    Returns:
+        Dictionary with tracks and pagination info
+
+    Raises:
+        ValidationError: If parameters are invalid
+        DatabaseOperationError: If query fails
+
+    Example:
+        >>> # First page
+        >>> result = filter_audio_tracks_cursor_xmp(
+        ...     composer_filter="ROB JAGER",
+        ...     limit=20
+        ... )
+        >>>
+        >>> # Next page using cursor
+        >>> next_result = filter_audio_tracks_cursor_xmp(
+        ...     composer_filter="ROB JAGER",
+        ...     limit=20,
+        ...     cursor_data=(result['tracks'][-1]['created_at'], result['tracks'][-1]['id'])
+        ... )
+    """
+    # Validation
+    if limit < 1 or limit > 100:
+        raise ValidationError("Limit must be between 1 and 100")
+
+    if year_min is not None and (year_min < 1800 or year_min > 2100):
+        raise ValidationError("year_min must be between 1800 and 2100")
+
+    if year_max is not None and (year_max < 1800 or year_max > 2100):
+        raise ValidationError("year_max must be between 1800 and 2100")
+
+    if year_min and year_max and year_min > year_max:
+        raise ValidationError("year_min cannot be greater than year_max")
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                # Build WHERE conditions
+                where_conditions = ["status = 'COMPLETED'"]
+                params = []
+
+                # Add XMP field filters
+                if composer_filter:
+                    where_conditions.append("composer ILIKE %s")
+                    params.append(f"%{composer_filter}%")
+
+                if publisher_filter:
+                    where_conditions.append("publisher ILIKE %s")
+                    params.append(f"%{publisher_filter}%")
+
+                if record_label_filter:
+                    where_conditions.append("record_label ILIKE %s")
+                    params.append(f"%{record_label_filter}%")
+
+                if isrc_filter:
+                    where_conditions.append("UPPER(isrc) = UPPER(%s)")
+                    params.append(isrc_filter)
+
+                # Add structured filters
+                if year_min is not None:
+                    where_conditions.append("year >= %s")
+                    params.append(year_min)
+
+                if year_max is not None:
+                    where_conditions.append("year <= %s")
+                    params.append(year_max)
+
+                if format_filter:
+                    where_conditions.append("UPPER(format) = UPPER(%s)")
+                    params.append(format_filter)
+
+                # Add cursor conditions for keyset pagination
+                if cursor_data:
+                    cursor_created_at, cursor_id = cursor_data
+                    where_conditions.append("(created_at < %s OR (created_at = %s AND id < %s))")
+                    params.extend([cursor_created_at, cursor_created_at, cursor_id])
+
+                where_clause = " AND ".join(where_conditions)
+
+                # Get results with stable ordering
+                query = f"""
+                    SELECT
+                        id, status, artist, title, album, genre, year,
+                        duration_seconds, channels, sample_rate, bitrate,
+                        format, file_size_bytes, audio_gcs_path, thumbnail_gcs_path,
+                        composer, publisher, record_label, isrc,
+                        created_at, updated_at
+                    FROM audio_tracks
+                    WHERE {where_clause}
+                    ORDER BY created_at DESC, id DESC
+                    LIMIT %s
+                """
+
+                cur.execute(query, params + [limit])
+                results = cur.fetchall()
+
+                logger.debug(
+                    f"Cursor XMP filter returned {len(results)} results "
+                    f"(filters: composer={composer_filter}, publisher={publisher_filter}, "
+                    f"cursor={'present' if cursor_data else 'none'})"
+                )
+
+                # Determine if there are more results
+                has_more = len(results) == limit
+                next_cursor = None
+                if has_more and results:
+                    last_result = results[-1]
+                    next_cursor = (str(last_result['created_at']), last_result['id'])
+
+                return {
+                    'tracks': [dict(row) for row in results],
+                    'limit': limit,
+                    'has_more': has_more,
+                    'next_cursor': next_cursor,
+                    'cursor_data': cursor_data,
+                    'filters_applied': {
+                        'composer': composer_filter,
+                        'publisher': publisher_filter,
+                        'record_label': record_label_filter,
+                        'isrc': isrc_filter,
+                        'year_min': year_min,
+                        'year_max': year_max,
+                        'format': format_filter
+                    }
+                }
+
+    except DatabaseError as e:
+        logger.error(f"Database error in cursor XMP filtering: {e}")
+        raise DatabaseOperationError(f"Cursor XMP filtering failed: database error - {str(e)}")
+    except Exception as e:
+        logger.error(f"Unexpected error in cursor XMP filtering: {e}")
+        raise DatabaseOperationError(f"Cursor XMP filtering failed: {str(e)}")
+
+
+def encode_cursor(created_at: str, track_id: str) -> str:
+    """
+    Encode cursor data into a base64 string for URL-safe pagination.
+
+    Args:
+        created_at: ISO timestamp string
+        track_id: UUID string
+
+    Returns:
+        Base64 encoded cursor string
+
+    Raises:
+        ValidationError: If inputs are invalid
+    """
+    import base64
+    import json
+
+    try:
+        cursor_data = {
+            'created_at': created_at,
+            'id': track_id
+        }
+        json_str = json.dumps(cursor_data, separators=(',', ':'))
+        return base64.urlsafe_b64encode(json_str.encode()).decode()
+    except Exception as e:
+        raise ValidationError(f"Failed to encode cursor: {str(e)}")
+
+
+def decode_cursor(cursor: str) -> Tuple[str, str]:
+    """
+    Decode cursor string back to (created_at, track_id) tuple.
+
+    Args:
+        cursor: Base64 encoded cursor string
+
+    Returns:
+        Tuple of (created_at, track_id)
+
+    Raises:
+        ValidationError: If cursor is invalid
+    """
+    import base64
+    import json
+
+    try:
+        json_str = base64.urlsafe_b64decode(cursor.encode()).decode()
+        cursor_data = json.loads(json_str)
+        return (cursor_data['created_at'], cursor_data['id'])
+    except Exception as e:
+        raise ValidationError(f"Failed to decode cursor: {str(e)}")
+
+
+# ============================================================================
 # Waveform Metadata Operations
 # ============================================================================
 
