@@ -160,17 +160,20 @@ def save_audio_metadata(
                     INSERT INTO audio_tracks (
                         id, status, artist, title, album, genre, year,
                         duration_seconds, channels, sample_rate, bitrate,
-                        format, file_size_bytes, audio_gcs_path, thumbnail_gcs_path
+                        format, file_size_bytes, audio_gcs_path, thumbnail_gcs_path,
+                        composer, publisher, record_label, isrc
                     ) VALUES (
                         %(id)s, %(status)s, %(artist)s, %(title)s, %(album)s,
                         %(genre)s, %(year)s, %(duration_seconds)s, %(channels)s,
                         %(sample_rate)s, %(bitrate)s, %(format)s, %(file_size_bytes)s,
-                        %(audio_gcs_path)s, %(thumbnail_gcs_path)s
+                        %(audio_gcs_path)s, %(thumbnail_gcs_path)s,
+                        %(composer)s, %(publisher)s, %(record_label)s, %(isrc)s
                     )
-                    RETURNING 
+                    RETURNING
                         id, status, artist, title, album, genre, year,
                         duration_seconds, channels, sample_rate, bitrate,
                         format, file_size_bytes, audio_gcs_path, thumbnail_gcs_path,
+                        composer, publisher, record_label, isrc,
                         created_at, updated_at
                 """
                 
@@ -402,7 +405,8 @@ def save_audio_metadata_batch(
                     INSERT INTO audio_tracks (
                         id, status, artist, title, album, genre, year,
                         duration_seconds, channels, sample_rate, bitrate,
-                        format, file_size_bytes, audio_gcs_path, thumbnail_gcs_path
+                        format, file_size_bytes, audio_gcs_path, thumbnail_gcs_path,
+                        composer, publisher, record_label, isrc
                     ) VALUES
                 """
 
@@ -412,14 +416,15 @@ def save_audio_metadata_batch(
 
                 for record in validated_records:
                     values_clauses.append("""
-                        (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """)
                     params.extend([
                         record['id'], record['status'], record['artist'], record['title'],
                         record['album'], record['genre'], record['year'], record['duration_seconds'],
                         record['channels'], record['sample_rate'], record['bitrate'],
                         record['format'], record['file_size_bytes'], record['audio_gcs_path'],
-                        record['thumbnail_gcs_path']
+                        record['thumbnail_gcs_path'], record['composer'], record['publisher'],
+                        record['record_label'], record['isrc']
                     ])
 
                 insert_query += ", ".join(values_clauses)
