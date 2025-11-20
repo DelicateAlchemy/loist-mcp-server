@@ -20,6 +20,14 @@ from .extractor import (
     MetadataExtractionError,
     MetadataQualityError,
 )
+from .xmp_extractor import (
+    XMPExtractor,
+    XMPExtractionError,
+    extract_xmp_metadata,
+    enhance_metadata_with_xmp,
+    is_xmp_available,
+    should_attempt_xmp_extraction,
+)
 
 from .format_validator import (
     FormatValidator,
@@ -41,5 +49,11 @@ __all__ = [
     "FormatValidator",
     "FormatValidationError",
     "validate_audio_format",
+    "XMPExtractor",
+    "XMPExtractionError",
+    "extract_xmp_metadata",
+    "enhance_metadata_with_xmp",
+    "is_xmp_available",
+    "should_attempt_xmp_extraction",
 ]
 
