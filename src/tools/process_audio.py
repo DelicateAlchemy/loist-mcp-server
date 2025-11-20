@@ -52,6 +52,8 @@ from src.metadata import (
     extract_artwork,
     validate_audio_format,
     parse_filename_metadata,
+    enhance_metadata_with_xmp,
+    should_attempt_xmp_extraction,
     MetadataExtractionError,
     FormatValidationError,
 )
@@ -378,6 +380,22 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
                 logger.info(f"Metadata was repaired for {pipeline.audio_id}")
             logger.debug(f"Extracted metadata: {metadata_dict}")
 
+            # Attempt XMP enhancement for WAV/BWF files
+            if should_attempt_xmp_extraction(extraction_path, metadata_dict):
+                logger.info(f"🎵 XMP EXTRACTION: Attempting XMP enhancement for {Path(extraction_path).name}")
+                try:
+                    enhanced_metadata = enhance_metadata_with_xmp(extraction_path, metadata_dict)
+                    if enhanced_metadata.get('_xmp_enhanced'):
+                        metadata_dict = enhanced_metadata
+                        xmp_fields = enhanced_metadata.get('_xmp_fields', [])
+                        logger.info(f"🎵 XMP EXTRACTION: Enhanced metadata with XMP fields: {xmp_fields}")
+                    else:
+                        logger.debug(f"🎵 XMP EXTRACTION: No XMP data found or enhancement not needed")
+                except Exception as e:
+                    logger.warning(f"🎵 XMP EXTRACTION: XMP enhancement failed: {e}")
+            else:
+                logger.debug(f"🎵 XMP EXTRACTION: Skipping XMP enhancement (not needed or not supported)")
+
             # Parse filename for missing metadata fields
             # Priority order: source.filename > URL parsing > temp file
             logger.info(f"🎵 FILENAME PARSING: Starting filename parsing phase")
@@ -503,6 +521,11 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
                 "sample_rate": metadata_dict.get("sample_rate", 44100),
                 "bitrate": metadata_dict.get("bitrate", 0),
                 "format": metadata_dict.get("format", ""),
+                # XMP metadata fields (flat structure as requested)
+                "composer": metadata_dict.get("composer"),
+                "publisher": metadata_dict.get("publisher"),
+                "record_label": metadata_dict.get("record_label"),
+                "isrc": metadata_dict.get("isrc"),
             }
             
             # Save to database using transaction
