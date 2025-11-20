@@ -300,6 +300,7 @@ class BWFExtractor:
         Enhance existing metadata with BWF data.
 
         BWF data takes priority over existing metadata for fields that are present.
+        Implements smart copyright mapping to publisher/record_label fields.
 
         Args:
             file_path: Path to the audio file
@@ -315,6 +316,14 @@ class BWFExtractor:
         bwf_data = cls.extract_bwf_metadata(file_path)
 
         if bwf_data:
+            # Handle smart copyright mapping
+            copyright_value = bwf_data.get('copyright')
+            if copyright_value:
+                cls._map_copyright_to_rights_holder(enhanced_metadata, copyright_value, existing_metadata)
+
+            # Remove copyright from bwf_data since we've mapped it
+            bwf_data = {k: v for k, v in bwf_data.items() if k != 'copyright'}
+
             # BWF data takes priority - overwrite existing fields
             enhanced_metadata.update(bwf_data)
 
@@ -329,6 +338,40 @@ class BWFExtractor:
             enhanced_metadata['_bwf_enhanced'] = False
 
         return enhanced_metadata
+
+    @classmethod
+    def _map_copyright_to_rights_holder(cls, enhanced_metadata: Dict[str, Any], copyright_value: str, original_metadata: Dict[str, Any]):
+        """
+        Map copyright information to the most appropriate rights holder field.
+
+        Logic:
+        1. If copyright equals artist name → map to publisher (edge case)
+        2. If no publisher exists → map copyright to record_label
+        3. If record_label already exists → map copyright to publisher
+
+        Args:
+            enhanced_metadata: The metadata dict being enhanced
+            copyright_value: The copyright string to map
+            original_metadata: Original metadata before enhancement
+        """
+        # Edge case: copyright matches artist name
+        artist_name = original_metadata.get('artist') or enhanced_metadata.get('artist')
+        if artist_name and copyright_value.lower().strip() == artist_name.lower().strip():
+            enhanced_metadata['publisher'] = copyright_value
+            logger.debug(f"Mapped copyright to publisher (artist match): {copyright_value}")
+            return
+
+        # Check if publisher already exists (from any source)
+        existing_publisher = original_metadata.get('publisher') or enhanced_metadata.get('publisher')
+        if not existing_publisher:
+            # No publisher - map copyright to record_label
+            enhanced_metadata['record_label'] = copyright_value
+            logger.debug(f"Mapped copyright to record_label (no publisher): {copyright_value}")
+        else:
+            # Publisher exists - map copyright to publisher
+            # This handles the case where record_label already exists
+            enhanced_metadata['publisher'] = copyright_value
+            logger.debug(f"Mapped copyright to publisher (record_label exists): {copyright_value}")
 
 
 # Convenience functions for external use
