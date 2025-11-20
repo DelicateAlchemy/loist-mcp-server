@@ -33,6 +33,7 @@ WORKDIR /app
 RUN apt-get update && \
     apt-get install --no-install-recommends -y \
     ca-certificates \
+    libimage-exiftool-perl \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user for security
