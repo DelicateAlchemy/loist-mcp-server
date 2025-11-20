@@ -58,21 +58,20 @@ chmod +x scripts/run-metadata-tests.sh
 ./scripts/run-metadata-tests.sh --no-coverage
 ```
 
-### GitHub Actions
+### Google Cloud Build
 
-Tests run automatically on:
-- Push to `main` or `dev` branches
-- Pull requests
-- Manual workflow dispatch
-
-**Workflow:** `.github/workflows/test-metadata-generation.yml`
+Tests run automatically as part of the deployment pipeline:
+- Push to `main` branch triggers production deployment (`cloudbuild.yaml`)
+- Push to `dev` branch triggers staging deployment (`cloudbuild-staging.yaml`)
 
 **Features:**
-- Tests on Python 3.11 and 3.12
+- Tests on Python 3.11
 - Coverage reporting with Codecov
 - HTML test reports
 - JUnit XML for CI integration
-- Artifact uploads for test results
+- Test artifacts stored in Google Cloud Storage
+- Comprehensive MCP protocol validation
+- Static analysis and security scanning
 
 ## Test Configuration
 
@@ -113,7 +112,7 @@ addopts =
 - **JUnit XML:** `reports/junit.xml`
 
 ### CI Results
-- **GitHub Actions:** Check the Actions tab
+- **Cloud Build:** Check Google Cloud Console → Cloud Build → History
 - **Codecov:** Coverage reports in PR comments
 - **Artifacts:** Test reports downloadable from Actions
 
