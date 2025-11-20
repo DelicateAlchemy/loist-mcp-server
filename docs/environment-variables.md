@@ -265,7 +265,7 @@ For production deployments:
 
 ## Validation
 
-The application validates configuration on startup and provides detailed error messages for missing or invalid settings. Use the `/health` endpoint or `health_check` tool to verify configuration after deployment.
+The application validates configuration on startup and provides detailed error messages for missing or invalid settings. Use the `health_check` MCP tool or `/health/live` and `/health/ready` HTTP endpoints to verify configuration after deployment.
 
 ## Configuration Loading Priority
 

@@ -217,7 +217,7 @@ Staging uses structured JSON logging with:
 
 ### Health Checks
 
-- **Endpoint**: `/health` (HTTP GET)
+- **Endpoints**: `/health/live` and `/health/ready` (HTTP GET)
 - **Interval**: 30 seconds
 - **Timeout**: 10 seconds
 - **Unhealthy Threshold**: 3 consecutive failures

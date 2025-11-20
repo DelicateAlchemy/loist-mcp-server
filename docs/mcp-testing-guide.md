@@ -213,8 +213,8 @@ export AUTH_ENABLED=false
 # Start server
 python src/server.py
 
-# Test health check (should work without token)
-curl http://localhost:8080/mcp/health_check
+# Test health check (MCP tool - use MCP client)
+# Use MCP client to call health_check() tool without authentication
 ```
 
 #### 2. Test with Authentication Enabled
@@ -226,14 +226,12 @@ export BEARER_TOKEN=test-token-123
 # Start server
 python src/server.py
 
-# Test without token (should fail)
-curl http://localhost:8080/mcp/health_check
+# Test MCP tool without authentication (if auth disabled)
+# Use MCP client to call health_check() tool
 
-# Test with valid token (should work)
-curl -H "Authorization: Bearer test-token-123" http://localhost:8080/mcp/health_check
-
-# Test with invalid token (should fail)
-curl -H "Authorization: Bearer wrong-token" http://localhost:8080/mcp/health_check
+# Test MCP tool with authentication (if auth enabled)
+# Use MCP client with proper authentication headers to call health_check() tool
+# Authentication is handled by the MCP client, not HTTP headers
 ```
 
 #### 3. Test MCP Client Integration
@@ -354,8 +352,8 @@ python src/server.py
 
 **With Authentication Disabled:**
 ```bash
-# Test health check
-curl http://localhost:8080/mcp/health_check
+# Test health check (MCP tool)
+# Use MCP client to call health_check() tool
 
 # Expected response:
 # {"status": "healthy", "service": "Music Library MCP", ...}
@@ -363,11 +361,11 @@ curl http://localhost:8080/mcp/health_check
 
 **With Authentication Enabled:**
 ```bash
-# Test without token (should fail)
-curl http://localhost:8080/mcp/health_check
+# Test MCP tool without authentication (if auth disabled)
+# Use MCP client to call health_check() tool
 
-# Test with token (should work)
-curl -H "Authorization: Bearer test-token-123" http://localhost:8080/mcp/health_check
+# Test MCP tool with authentication (if auth enabled)
+# Use MCP client with proper authentication to call health_check() tool
 ```
 
 ### Testing MCP Tools
@@ -449,11 +447,12 @@ docker-compose run --rm mcp-server python src/server.py
 
 #### 2. Test Docker Setup
 ```bash
-# Test health check
-curl http://localhost:8080/health_check
+# Test HTTP health endpoints
+curl http://localhost:8080/health/live
+curl http://localhost:8080/health/ready
 
-# Test MCP health check
-curl http://localhost:8080/mcp/health_check
+# Test MCP health check tool
+# Use MCP client to call health_check() tool
 
 # Test embed page (if you have audio)
 curl http://localhost:8080/embed/test-audio-id
@@ -612,11 +611,12 @@ python src/server.py
 ### Health Check Endpoints
 Test server health at different levels:
 ```bash
-# MCP health check
-curl http://localhost:8080/mcp/health_check
+# MCP health check tool (via MCP client)
+# Use MCP client to call health_check() tool
 
-# Basic HTTP health check
-curl http://localhost:8080/health_check
+# HTTP health check endpoints
+curl http://localhost:8080/health/live
+curl http://localhost:8080/health/ready
 
 # Check server logs
 docker-compose logs mcp-server

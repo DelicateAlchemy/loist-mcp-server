@@ -14,12 +14,12 @@ Your Cloud SQL costs are high due to **excessive health check queries** from Clo
 
 ### 1. Multiple Health Check Endpoints Querying Database
 
-Your application has **4 different health check endpoints** that all query the database:
+Your application has health check endpoints with varying database query patterns:
 
-1. **`/health/ready`** - Readiness check (queries DB via `check_database_availability()`)
+1. **`/health/ready`** - Readiness check (checks configuration, cached DB check)
 2. **`/health/database`** - Database-specific health check (queries DB + pool stats)
 3. **`health_check` MCP tool** - Full health check (queries DB)
-4. **`/health/live`** - Liveness check (may query DB)
+4. **`/health/live`** - Liveness check (no DB queries - configuration only)
 
 **Location**: `src/server.py` lines 200-370
 

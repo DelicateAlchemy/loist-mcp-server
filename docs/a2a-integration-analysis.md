@@ -65,7 +65,7 @@ Our music library MCP server provides the following core tools:
   },
   "endpoints": {
     "mcp": "https://api.loist.music/mcp",
-    "health": "https://api.loist.music/health",
+    "health": "https://api.loist.music/health/live",
     "embed": "https://embed.loist.music"
   },
   "authentication": {
@@ -747,7 +747,7 @@ gcloud run deploy music-mcp \
   },
   "endpoints": {
     "mcp": "https://api.loist.music/mcp",
-    "health": "https://api.loist.music/health",
+    "health": "https://api.loist.music/health/live",
     "openapi": "https://api.loist.music/openapi.json"
   },
   "schemas": {
