@@ -136,6 +136,7 @@ class XMPExtractor:
         et = None
         try:
             et = exiftool.ExifTool()
+            et.run()  # Start the ExifTool process
             yield et
         finally:
             if et:
@@ -168,12 +169,14 @@ class XMPExtractor:
 
         try:
             with cls.get_exiftool_instance() as et:
-                # Extract metadata with XMP focus
-                metadata = et.get_metadata(str(file_path))
+                # Extract metadata with XMP focus using execute_json
+                metadata_list = et.execute_json('-xmp:all', str(file_path))
 
-                if not metadata:
+                if not metadata_list or len(metadata_list) == 0:
                     logger.debug(f"No metadata found in {file_path.name}")
                     return None
+
+                metadata = metadata_list[0]  # Get first result
 
                 # Extract XMP fields
                 xmp_data = cls._extract_xmp_fields(metadata)
