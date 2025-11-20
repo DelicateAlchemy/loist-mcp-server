@@ -300,7 +300,8 @@ class BWFExtractor:
         Enhance existing metadata with BWF data.
 
         BWF data takes priority over existing metadata for fields that are present.
-        Implements smart copyright mapping to publisher/record_label fields.
+        Implements smart copyright mapping to publisher/record_label fields with moderate tolerance
+        for edge cases (case/whitespace normalization, exact string matching).
 
         Args:
             file_path: Path to the audio file
@@ -344,8 +345,14 @@ class BWFExtractor:
         """
         Map copyright information to the most appropriate rights holder field.
 
+        Edge Case Tolerance: Moderate - exact string matching after normalization
+        - ✅ Case insensitive: "WEST ONE" matches "west one"
+        - ✅ Whitespace normalized: "  Artist  " matches "Artist"
+        - ❌ No partial matching: "Artist Ltd" ≠ "Artist"
+        - ❌ No fuzzy matching: "Artist (ASCAP)" ≠ "Artist"
+
         Logic:
-        1. If copyright equals artist name → map to publisher (edge case)
+        1. If copyright equals artist name (after normalization) → map to publisher (edge case)
         2. If no publisher exists → map copyright to record_label
         3. If record_label already exists → map copyright to publisher
 
@@ -354,7 +361,8 @@ class BWFExtractor:
             copyright_value: The copyright string to map
             original_metadata: Original metadata before enhancement
         """
-        # Edge case: copyright matches artist name
+        # Edge case: copyright matches artist name (moderate tolerance)
+        # Handles case differences and whitespace, but requires exact string match
         artist_name = original_metadata.get('artist') or enhanced_metadata.get('artist')
         if artist_name and copyright_value.lower().strip() == artist_name.lower().strip():
             enhanced_metadata['publisher'] = copyright_value
