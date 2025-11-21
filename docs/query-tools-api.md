@@ -143,10 +143,9 @@ Search across all processed audio tracks using full-text search with optional ad
 ```typescript
 {
   query: string,              // Required: search query (1-500 chars)
-  filter?: string,            // Optional: RSQL filter string (e.g., "genre==Rock;year>=1960,year<=1980")
-  fields?: string,            // Optional: comma-separated fields to return (default: "id,title,score,artist,album,genre,year")
+  filters?: object,           // Optional: advanced filters object (see below)
   limit?: number,             // Results per page (1-100, default: 20)
-  cursor?: string,            // Optional: cursor for pagination (base64-encoded)
+  offset?: number,            // Results to skip (0+, default: 0)
   sortBy?: string,            // Sort field (default: "relevance")
   sortOrder?: string          // Sort order (asc/desc, default: "desc")
 }
@@ -159,10 +158,16 @@ Search across all processed audio tracks using full-text search with optional ad
   - Sanitized to remove control characters
   - Stripped of leading/trailing whitespace
 
-- **filter**: RSQL syntax validation
-  - Supports operators: `==`, `!=`, `>=`, `<=`, `>`, `<`, `=in=`, `=out=`, `=like=`
-  - AND logic with `;` separator, OR logic with `,` separator
-  - Examples: `"genre==Rock;year>=1960,year<=1980"`, `"artist=like=*beatles*"`
+- **filters**: Advanced filtering object
+  - **genre**: Array of genre strings (e.g., `["Rock", "Jazz"]`)
+  - **year**: Object with `min`/`max` year range (e.g., `{"min": 1960, "max": 1980}`)
+  - **duration**: Object with `min`/`max` duration in seconds (e.g., `{"min": 180, "max": 360}`)
+  - **format**: Array of audio formats (e.g., `["MP3", "FLAC"]`)
+  - **composer**: String for composer filtering (partial match)
+  - **publisher**: String for publisher filtering (partial match)
+  - **record_label**: String for record label filtering (partial match)
+  - **isrc**: String for ISRC code (exact match)
+  - **time**: Time-based filtering object (see below)
 
 - **fields**: Comma-separated field list validation
   - Allowed fields: `id`, `title`, `score`, `artist`, `album`, `genre`, `year`, `duration`, `channels`, `sampleRate`, `bitrate`, `format`, `embedLink`
@@ -173,8 +178,52 @@ Search across all processed audio tracks using full-text search with optional ad
   - Example: `"eyJzY29yZSI6MC45NSwiY3JlYXRlZF9hdCI6IjIwMjQtMTEtMTJUMTI6MzQ6NTYuMDAwWiIsImlkIjoiNTUwZTg0MDAtZTJiYi00MWQ0LWE3MTYtNDQ2NjU1NDQwMDAwIn0="`
 
 - **limit**: 1-100 (prevents excessive result sets)
+- **offset**: 0+ (number of results to skip for pagination)
 - **sortBy**: One of: `relevance`, `title`, `artist`, `year`, `duration`, `created_at`
 - **sortOrder**: `asc` or `desc`
+
+### Time-Based Filtering
+
+The `filters.time` object supports filtering tracks by their creation date:
+
+```typescript
+{
+  "time": {
+    "period": "this_week",           // Optional: relative time period
+    "dateFrom": "2025-11-01",        // Optional: start date (ISO format)
+    "dateTo": "2025-11-30",          // Optional: end date (ISO format)
+    "timezone": "America/New_York"   // Optional: timezone (default: "UTC")
+  }
+}
+```
+
+#### Time Period Options
+- `today`: Tracks created today
+- `yesterday`: Tracks created yesterday
+- `this_week`: Tracks created this week (Monday to Sunday)
+- `last_week`: Tracks created last week
+- `this_month`: Tracks created this month
+- `last_month`: Tracks created last month
+- `this_year`: Tracks created this year
+- `last_year`: Tracks created last year
+
+#### Custom Date Ranges
+- Dates must be in ISO format: `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS`
+- `dateFrom` and `dateTo` can be used together or separately
+- Timezone affects how relative periods and dates are interpreted
+- All dates are converted to UTC for database comparison
+
+#### Examples
+```typescript
+// Tracks from this week
+{"time": {"period": "this_week", "timezone": "UTC"}}
+
+// Tracks from November 2025
+{"time": {"dateFrom": "2025-11-01", "dateTo": "2025-11-30"}}
+
+// Recent tracks in New York timezone
+{"time": {"period": "today", "timezone": "America/New_York"}}
+```
 
 ### RSQL Filter Syntax
 
@@ -361,18 +410,64 @@ if result["success"]:
 #### Advanced Search with Filters
 
 ```python
-# Search with multiple filters
+# Search with multiple filters including time period
 result = await search_library({
     "query": "rock music",
     "filters": {
         "genre": ["Rock", "Classic Rock"],
         "year": {"min": 1960, "max": 1980},
         "duration": {"min": 180, "max": 360},
+        "time": {
+            "period": "this_week",
+            "timezone": "America/New_York"
+        }
         "format": ["MP3", "FLAC"]
     },
     "limit": 50,
     "offset": 0,
     "sortBy": "year",
+    "sortOrder": "desc"
+})
+```
+
+#### Time-Based Filtering Examples
+
+```python
+# Search tracks created this week
+result = await search_library({
+    "query": "jazz",
+    "filters": {
+        "time": {
+            "period": "this_week",
+            "timezone": "UTC"
+        }
+    },
+    "limit": 20
+})
+
+# Search tracks from a specific date range
+result = await search_library({
+    "query": "classical",
+    "filters": {
+        "time": {
+            "dateFrom": "2025-11-01",
+            "dateTo": "2025-11-30",
+            "timezone": "Europe/London"
+        }
+    },
+    "limit": 50
+})
+
+# Search recent tracks with genre filter
+result = await search_library({
+    "query": "electronic",
+    "filters": {
+        "genre": ["Electronic", "Techno"],
+        "time": {
+            "period": "today"
+        }
+    },
+    "sortBy": "created_at",
     "sortOrder": "desc"
 })
 ```

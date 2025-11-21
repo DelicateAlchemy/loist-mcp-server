@@ -603,6 +603,142 @@ async def test_delete_audio_response_schema():
     assert success_response.deleted is True
 
 
+# Time Filtering Tests
+@pytest.mark.asyncio
+@patch('src.tools.query_tools.filter_audio_tracks_combined')
+async def test_search_library_time_period_this_week(mock_search):
+    """Test search with time period filter (this week)"""
+    mock_search.return_value = {
+        'tracks': [
+            {
+                'id': '550e8400-e29b-41d4-a716-446655440000',
+                'title': 'Test Track',
+                'artist': 'Test Artist',
+                'album': 'Test Album',
+                'genre': 'Rock',
+                'year': 2025,
+                'duration_seconds': 180.0,
+                'channels': 2,
+                'sample_rate': 44100,
+                'bitrate': 320000,
+                'format': 'MP3',
+                'thumbnail_gcs_path': None,
+                'composer': None,
+                'publisher': None,
+                'record_label': None,
+                'isrc': None,
+                'rank': 0.8
+            }
+        ],
+        'total_count': 1
+    }
+
+    result = await search_library({
+        "query": "test",
+        "filters": {
+            "time": {
+                "period": "this_week",
+                "timezone": "UTC"
+            }
+        },
+        "limit": 20
+    })
+
+    assert result["success"] is True
+    assert len(result["results"]) == 1
+    assert result["results"][0]["audioId"] == "550e8400-e29b-41d4-a716-446655440000"
+
+    # Verify that the time filter parameters were passed to the database function
+    mock_search.assert_called_once()
+    call_args = mock_search.call_args
+    assert call_args.kwargs['time_period'] == 'this_week'
+    assert call_args.kwargs['timezone'] == 'UTC'
+
+
+@pytest.mark.asyncio
+@patch('src.tools.query_tools.filter_audio_tracks_combined')
+async def test_search_library_custom_date_range(mock_search):
+    """Test search with custom date range filter"""
+    mock_search.return_value = {
+        'tracks': [
+            {
+                'id': '550e8400-e29b-41d4-a716-446655440001',
+                'title': 'Another Track',
+                'artist': 'Another Artist',
+                'album': 'Another Album',
+                'genre': 'Jazz',
+                'year': 2025,
+                'duration_seconds': 240.0,
+                'channels': 2,
+                'sample_rate': 44100,
+                'bitrate': 256000,
+                'format': 'FLAC',
+                'thumbnail_gcs_path': None,
+                'composer': None,
+                'publisher': None,
+                'record_label': None,
+                'isrc': None,
+                'rank': 0.9
+            }
+        ],
+        'total_count': 1
+    }
+
+    result = await search_library({
+        "query": "jazz",
+        "filters": {
+            "time": {
+                "dateFrom": "2025-11-01",
+                "dateTo": "2025-11-30",
+                "timezone": "America/New_York"
+            }
+        },
+        "limit": 10
+    })
+
+    assert result["success"] is True
+    assert len(result["results"]) == 1
+
+    # Verify that the custom date filter parameters were passed
+    mock_search.assert_called_once()
+    call_args = mock_search.call_args
+    assert call_args.kwargs['date_from'] == '2025-11-01'
+    assert call_args.kwargs['date_to'] == '2025-11-30'
+    assert call_args.kwargs['timezone'] == 'America/New_York'
+
+
+@pytest.mark.asyncio
+@patch('src.tools.query_tools.filter_audio_tracks_combined')
+async def test_search_library_time_period_validation_error(mock_search):
+    """Test search with invalid time period"""
+    # Test invalid time period
+    with pytest.raises(Exception):  # Should raise validation error
+        await search_library({
+            "query": "test",
+            "filters": {
+                "time": {
+                    "period": "invalid_period"
+                }
+            }
+        })
+
+
+@pytest.mark.asyncio
+@patch('src.tools.query_tools.filter_audio_tracks_combined')
+async def test_search_library_invalid_timezone(mock_search):
+    """Test search with invalid timezone"""
+    with pytest.raises(Exception):  # Should raise validation error
+        await search_library({
+            "query": "test",
+            "filters": {
+                "time": {
+                    "period": "today",
+                    "timezone": "Invalid/Timezone"
+                }
+            }
+        })
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
 
