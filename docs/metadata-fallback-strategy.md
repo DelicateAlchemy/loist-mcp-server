@@ -9,10 +9,12 @@ The `process_audio_complete` operation failed with a 403 Forbidden error due to 
 
 #### Metadata Extraction Flow
 1. **Download Phase**: Audio file downloads successfully
-2. **Metadata Extraction Phase**: 
-   - Calls `extract_metadata()` from `src/metadata/extractor.py`
+2. **Metadata Extraction Phase**:
+   - Calls `extract_metadata_with_fallback()` from `src/metadata/extractor.py`
    - Uses Mutagen to extract ID3 tags, Vorbis comments, or MP4 tags
-   - Falls back to filename as title if no title found (line 458-461)
+   - Attempts XMP metadata enhancement for WAV and AIF/AIFF files
+   - Falls back to intelligent filename parsing if metadata incomplete
+   - Uses filename as title only as final fallback
 3. **Quality Validation Phase**:
    - If `validate_quality=True` (default), assesses metadata quality
    - Essential fields: `artist`, `title`, `album`
@@ -28,10 +30,14 @@ The `process_audio_complete` operation failed with a 403 Forbidden error due to 
 
 #### Current Fallback Mechanisms
 - ✅ **Filename as Title**: If no title found, uses `file_path.stem` as title
-- ✅ **extract_with_fallback()**: Exists but **NOT USED** in `process_audio.py`
-- ❌ **No filename parsing**: Doesn't attempt to extract artist/title from filename patterns
-- ❌ **No external API lookup**: No MusicBrainz, Last.fm, or other metadata services
-- ❌ **No audio fingerprinting**: No acoustic fingerprint matching
+- ✅ **Filename Parsing**: Extracts artist/title from filename patterns ("Artist - Title.mp3")
+- ✅ **XMP Metadata Enhancement**: For WAV, AIF/AIFF files with incomplete metadata
+  - XMP chunks in AIF files (custom 'XMP ', 'iXML' chunks)
+  - BWF metadata in WAV files
+  - iXML session data from DAWs (Logic Pro, Pro Tools, etc.)
+- ✅ **extract_with_fallback()**: Now USED in `process_audio.py` with XMP enhancement
+- ❌ **External API lookup**: No MusicBrainz, Last.fm, or other metadata services (MVP scope)
+- ❌ **Audio fingerprinting**: No acoustic fingerprint matching (MVP scope)
 
 ### Problem Statement
 
