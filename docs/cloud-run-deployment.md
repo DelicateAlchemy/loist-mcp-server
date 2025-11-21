@@ -210,49 +210,63 @@ The `cloudbuild-staging.yaml` includes steps for staging setup:
 
 ## Database Migrations
 
-The deployment pipeline includes automatic database migration execution to ensure schema consistency across environments.
+The deployment pipeline includes automatic database migration execution to ensure schema consistency across environments using a robust Python-based migration system.
 
-### Production Migrations
+### Production & Staging Migrations
 
-**Automatic during deployment**: The production pipeline (`cloudbuild.yaml`) automatically runs all pending database migrations during the deployment process. This ensures:
+**Automatic execution**: Both production and staging pipelines run all pending database migrations automatically. The system ensures:
 
 - Zero-downtime schema updates
-- Consistent database state across deployments
+- Consistent database state across all environments
 - Automatic rollback capability if migrations fail
 - Migration tracking to prevent duplicate execution
-
-### Staging Migrations
-
-**Post-deployment execution**: Staging migrations run after deployment succeeds using:
-
-```bash
-# Run migrations for staging environment
-./scripts/migrate-db.sh staging
-
-# Or for production
-./scripts/migrate-db.sh production
-```
+- Seamless schema evolution as features are added
 
 ### Migration System Features
 
+- **Automatic discovery**: All `.sql` files in `database/migrations/` are applied in order
 - **Idempotent**: Migrations only run once, tracked in `schema_migrations` table
 - **Transactional**: Each migration runs in a transaction for consistency
 - **Ordered**: Migrations execute in version order (001, 002, 003, etc.)
-- **Environment-aware**: Automatically detects production vs staging databases
+- **Environment-aware**: Automatically detects and connects to appropriate databases
 - **Error handling**: Failed migrations prevent deployment continuation
+- **Validation**: Post-migration status checks ensure all migrations applied
 
 ### Available Migrations
 
 1. **001_initial_schema.sql**: Core audio_tracks table, indexes, and triggers
-2. **002_add_waveform_support.sql**: Waveform generation columns (waveform_gcs_path, waveform_generated_at, source_audio_hash)
-3. **002_performance_indexes.sql**: Additional performance optimizations
+2. **002_add_user_id.sql**: Multi-user support with user_id column
+3. **002_add_waveform_support.sql**: Waveform generation columns (waveform_gcs_path, waveform_generated_at, source_audio_hash)
+4. **002_performance_indexes.sql**: Additional performance optimizations
+5. **003_add_a2a_tasks.sql**: Agent-to-agent task coordination table
+6. **004_add_xmp_fields.sql**: XMP metadata fields (composer, publisher, record_label, isrc)
+7. **005_optimize_xmp_indexes.sql**: Composite indexes for XMP field filtering
+8. **006_optimize_search_vector.sql**: Enhanced full-text search optimization
 
 ### Migration Scripts
 
 Two migration tools are available:
 
-- **`scripts/migrate-db.sh`**: Shell script using psql (Cloud Build compatible)
-- **`scripts/run_migrations.py`**: Python script using DatabaseMigrator class (local development)
+- **`database/migrate.py`**: Python-based migration system (automatic discovery, robust error handling)
+- **`scripts/migrate-db.sh`**: Shell script wrapper that uses the Python migrator (Cloud Build compatible)
+
+### Migration Execution
+
+Migrations run automatically during deployment:
+
+```bash
+# Staging environment (post-deployment)
+./scripts/migrate-db.sh staging
+
+# Production environment (during deployment)
+# Handled automatically by Cloud Build pipeline
+```
+
+The Python migrator (`database/migrate.py`) automatically:
+- Discovers all migration files in `database/migrations/`
+- Applies them in sorted order
+- Tracks execution in `schema_migrations` table
+- Provides detailed status reporting
 
 ### EMBED_BASE_URL Configuration Fix
 

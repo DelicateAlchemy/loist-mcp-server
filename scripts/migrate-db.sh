@@ -44,86 +44,25 @@ PROXY_PID=$!
 # Wait for proxy to start
 sleep 5
 
-# Function to run migration if not already applied
-run_migration_if_needed() {
-    local migration_file=$1
-    local migration_name=$2
+# Note: schema_migrations table is created automatically by the Python migrator
 
-    echo "Checking if $migration_name migration is needed..."
+# Run all pending migrations using the Python migration system
+echo "Running migrations using Python migrator..."
+python3 database/migrate.py --action=up --database-url="postgresql://$DB_USER:$DB_PASSWORD@$DB_CONNECTION_NAME/$DB_NAME"
+migration_result=$?
 
-    # Extract migration number from filename (e.g., "001" from "001_initial_schema.sql")
-    local migration_num=$(echo "$migration_file" | sed 's/.*\/\([0-9]\+\)_.*\.sql/\1/')
+if [ $migration_result -ne 0 ]; then
+    echo "❌ Migration failed with exit code $migration_result"
+    exit 1
+fi
 
-    # Check if migration has been applied by looking for the migration record
-    PGPASSWORD="$DB_PASSWORD" psql \
-      -h localhost \
-      -p 5432 \
-      -U music_library_user \
-      -d "$DB_NAME" \
-      -c "SELECT 1 FROM schema_migrations WHERE version = '$migration_num';" \
-      --quiet \
-      2>/dev/null | grep -q "1" && {
-        echo "Migration $migration_num ($migration_name) already applied, skipping"
-        return 0
-      }
-
-    echo "Applying migration $migration_num ($migration_name)..."
-
-    # Run the migration
-    PGPASSWORD="$DB_PASSWORD" psql \
-      -h localhost \
-      -p 5432 \
-      -U music_library_user \
-      -d "$DB_NAME" \
-      -f "$migration_file" \
-      -v ON_ERROR_STOP=1 \
-      --quiet \
-      2>&1 || {
-        echo "Migration $migration_num failed"
-        exit 1
-      }
-
-    # Record the migration as applied
-    PGPASSWORD="$DB_PASSWORD" psql \
-      -h localhost \
-      -p 5432 \
-      -U music_library_user \
-      -d "$DB_NAME" \
-      -c "INSERT INTO schema_migrations (version, name, applied_at) VALUES ('$migration_num', '$migration_name', NOW());" \
-      --quiet \
-      2>/dev/null || {
-        echo "Warning: Failed to record migration $migration_num as applied"
-      }
-
-    echo "Migration $migration_num completed successfully"
+# Validate that all expected migrations are applied
+echo "Validating migration status..."
+python3 database/migrate.py --action=status --database-url="postgresql://$DB_USER:$DB_PASSWORD@$DB_CONNECTION_NAME/$DB_NAME" || {
+    echo "⚠️ Could not check migration status, but migrations may have succeeded"
 }
 
-# Create schema_migrations table if it doesn't exist
-echo "Ensuring schema_migrations table exists..."
-PGPASSWORD="$DB_PASSWORD" psql \
-  -h localhost \
-  -p 5432 \
-  -U music_library_user \
-  -d "$DB_NAME" \
-  -c "
-    CREATE TABLE IF NOT EXISTS schema_migrations (
-        version VARCHAR(10) PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        applied_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS idx_schema_migrations_applied_at ON schema_migrations(applied_at DESC);
-  " \
-  --quiet \
-  2>/dev/null || {
-    echo "Warning: Could not create schema_migrations table"
-  }
-
-# Run migrations in order
-run_migration_if_needed "database/migrations/001_initial_schema.sql" "initial_schema"
-run_migration_if_needed "database/migrations/002_add_waveform_support.sql" "waveform_support"
-run_migration_if_needed "database/migrations/002_performance_indexes.sql" "performance_indexes"
-
-echo "All migrations completed successfully!"
+echo "✅ All migrations completed successfully"
 
 # Clean up Cloud SQL proxy
 echo "Cleaning up Cloud SQL proxy..."

@@ -78,7 +78,7 @@ WHERE search_vector IS NOT NULL;  -- Only update rows that have been processed
 
 -- Ensure the search vector has a GIN index for fast full-text queries
 -- (This should already exist from migration 001, but verify it's optimized)
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_audio_tracks_search_vector
+CREATE INDEX IF NOT EXISTS idx_audio_tracks_search_vector
 ON audio_tracks USING GIN (search_vector);
 
 COMMIT;
