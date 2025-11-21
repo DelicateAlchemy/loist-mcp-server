@@ -481,6 +481,14 @@ SERVER_PORT=8080
 - ✅ Comprehensive logging with performance monitoring
 - ✅ Health checks and system monitoring
 
+#### Search & Filtering
+- ✅ **Advanced Full-Text Search**: PostgreSQL tsvector with weighted ranking
+- ✅ **Time Period Filtering**: Relative periods (this_week, last_week, today, etc.)
+- ✅ **Custom Date Ranges**: ISO format date filtering with timezone support
+- ✅ **Multi-Faceted Filtering**: XMP metadata (composer, publisher, record label)
+- ✅ **Pagination & Sorting**: Cursor-based pagination with stable ordering
+- ✅ **Timezone-Aware Processing**: User timezone support in process_audio_complete
+
 #### Security & Configuration
 - ✅ Bearer token authentication (SimpleBearerAuth)
 - ✅ CORS configuration for iframe embedding
@@ -503,6 +511,69 @@ SERVER_PORT=8080
 - ✅ Type hints and documentation standards
 - ✅ Development/production configuration profiles
 - ✅ Clean module organization with clear boundaries
+
+### Time Period Filtering & Timezone Support
+
+The server now supports advanced time-based filtering for finding tracks by creation date:
+
+#### Relative Time Periods
+Search for tracks created within specific time periods:
+
+```javascript
+// Find tracks from this week
+await search_library({
+  "query": "rock music",
+  "filters": {
+    "time": {"period": "this_week"}
+  }
+});
+
+// Find tracks from last week
+await search_library({
+  "query": "jazz",
+  "filters": {
+    "time": {"period": "last_week"}
+  }
+});
+```
+
+#### Available Time Periods
+- `today` - Tracks created today
+- `yesterday` - Tracks created yesterday
+- `this_week` - Tracks created this week (Monday to Sunday)
+- `last_week` - Tracks created last week
+- `this_month` - Tracks created this month
+- `last_month` - Tracks created last month
+- `this_year` - Tracks created this year
+- `last_year` - Tracks created last year
+
+#### Custom Date Ranges
+For precise date filtering with timezone support:
+
+```javascript
+await search_library({
+  "query": "electronic",
+  "filters": {
+    "time": {
+      "dateFrom": "2025-11-01",
+      "dateTo": "2025-11-30",
+      "timezone": "America/New_York"
+    }
+  }
+});
+```
+
+#### User Timezone Support
+The `process_audio_complete` tool now accepts a timezone parameter:
+
+```javascript
+await process_audio_complete({
+  "source": {"type": "http_url", "url": "https://example.com/song.mp3"},
+  "options": {
+    "timezone": "America/New_York"  // IANA timezone name
+  }
+});
+```
 
 ### Planned Features
 
