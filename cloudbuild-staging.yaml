@@ -264,16 +264,9 @@ steps:
     env:
       - 'CLOUDSDK_CORE_PROJECT=loist-music-library'
 
-  # Step 6: Run database migrations for staging
-  - name: 'gcr.io/cloud-builders/gcloud'
-    id: 'run-staging-migrations'
-    entrypoint: 'bash'
-    args: ['scripts/migrate-db.sh', 'staging']
-    env:
-      - 'CLOUDSDK_CORE_PROJECT=loist-music-library'
-    waitFor: ['create-staging-db']
+  # Step 6: Note - Migrations will run automatically on Cloud Run startup
 
-  # Step 7: Deploy to staging Cloud Run (uses built-in health checks)
+  # Step 7: Deploy to staging Cloud Run (migrations run on startup)
   - name: 'gcr.io/cloud-builders/gcloud'
     id: 'deploy-staging'
     args:
@@ -291,9 +284,9 @@ steps:
       - '--max-instances=3'
       - '--min-instances=0'
       - '--port=8080'
-      # Explicit command override to ensure correct startup (fallback if Dockerfile CMD is misinterpreted)
-      - '--command=/usr/local/bin/python'
-      - '--args=/app/src/server.py'
+      # Run migrations on startup, then start the server
+      - '--command=/bin/bash'
+      - '--args=-c,cd /app && echo "Running database migrations..." && python3 database/migrate.py --action=up && echo "Starting server..." && python3 src/server.py'
       # Set all environment variables in a single --set-env-vars flag (replaces all existing env vars)
       # Note: GOOGLE_APPLICATION_CREDENTIALS is intentionally omitted to use ADC
       - '--set-env-vars=SERVER_TRANSPORT=http,LOG_LEVEL=DEBUG,AUTH_ENABLED=false,ENABLE_CORS=true,CORS_ORIGINS=*,ENABLE_HEALTHCHECK=true,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GCS_PROJECT_ID=$PROJECT_ID,SERVER_NAME=Music Library MCP - Staging,EMBED_BASE_URL=https://staging.loist.io,DB_NAME=loist_mvp_staging,DB_USER=music_library_user,DB_PORT=5432'
@@ -306,7 +299,7 @@ steps:
       # Remove GOOGLE_APPLICATION_CREDENTIALS secret if it exists (separate from env vars)
       - '--remove-secrets=GOOGLE_APPLICATION_CREDENTIALS'
       - '--quiet'
-    waitFor: ['run-staging-migrations']
+    waitFor: ['create-staging-db']
 
 # Automatically tag and push images
 images:
