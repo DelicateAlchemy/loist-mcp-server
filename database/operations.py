@@ -8,7 +8,8 @@ transaction management, and comprehensive error handling.
 import logging
 import uuid
 from typing import Optional, Dict, Any, List, Tuple
-from datetime import datetime
+from datetime import datetime, timedelta
+import pytz
 import psycopg2.extras
 from psycopg2 import DatabaseError, IntegrityError
 
@@ -468,6 +469,107 @@ def save_audio_metadata_batch(
             'track_ids': [],
             'errors': errors or [str(e)]
         }
+
+
+# ============================================================================
+# Time Filtering Helpers
+# ============================================================================
+
+def get_time_period_range(time_period: str, timezone: str = "UTC") -> tuple[datetime, datetime]:
+    """
+    Convert a time period string to a date range tuple (start_date, end_date).
+
+    Args:
+        time_period: Time period string ('today', 'yesterday', 'this_week', etc.)
+        timezone: IANA timezone name for date interpretation
+
+    Returns:
+        Tuple of (start_datetime, end_datetime) in UTC
+
+    Raises:
+        ValueError: If time_period is invalid or timezone is not recognized
+    """
+    try:
+        tz = pytz.timezone(timezone)
+    except pytz.exceptions.UnknownTimeZoneError:
+        raise ValueError(f"Unknown timezone: {timezone}")
+
+    # Get current time in the specified timezone
+    now = datetime.now(tz)
+
+    if time_period == "today":
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        end = start + timedelta(days=1)
+    elif time_period == "yesterday":
+        end = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        start = end - timedelta(days=1)
+    elif time_period == "this_week":
+        # Monday of current week
+        start = now - timedelta(days=now.weekday())
+        start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+        end = start + timedelta(days=7)
+    elif time_period == "last_week":
+        # Monday of last week
+        last_week_start = now - timedelta(days=now.weekday() + 7)
+        start = last_week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+        end = start + timedelta(days=7)
+    elif time_period == "this_month":
+        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        if start.month == 12:
+            end = start.replace(year=start.year + 1, month=1)
+        else:
+            end = start.replace(month=start.month + 1)
+    elif time_period == "last_month":
+        if now.month == 1:
+            start = now.replace(year=now.year - 1, month=12, day=1, hour=0, minute=0, second=0, microsecond=0)
+            end = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        else:
+            start = now.replace(month=now.month - 1, day=1, hour=0, minute=0, second=0, microsecond=0)
+            end = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    elif time_period == "this_year":
+        start = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+        end = start.replace(year=start.year + 1)
+    elif time_period == "last_year":
+        start = now.replace(year=now.year - 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+        end = now.replace(year=now.year, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+    else:
+        raise ValueError(f"Unknown time period: {time_period}")
+
+    # Convert to UTC for database storage
+    start_utc = start.astimezone(pytz.UTC)
+    end_utc = end.astimezone(pytz.UTC)
+
+    return start_utc, end_utc
+
+
+def parse_custom_date(date_str: str, timezone: str = "UTC") -> datetime:
+    """
+    Parse a custom date string into a datetime object.
+
+    Args:
+        date_str: Date string in ISO format (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)
+        timezone: IANA timezone name
+
+    Returns:
+        Datetime object in UTC
+
+    Raises:
+        ValueError: If date format is invalid
+    """
+    try:
+        tz = pytz.timezone(timezone)
+    except pytz.exceptions.UnknownTimeZoneError:
+        raise ValueError(f"Unknown timezone: {timezone}")
+
+    try:
+        # Try parsing with time
+        dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+        if dt.tzinfo is None:
+            # Assume it's in the specified timezone
+            dt = tz.localize(dt)
+        return dt.astimezone(pytz.UTC)
+    except ValueError:
+        raise ValueError(f"Invalid date format: {date_str}. Use ISO format: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS")
 
 
 # ============================================================================
@@ -1782,12 +1884,16 @@ def filter_audio_tracks_combined(
     format_filter: Optional[str] = None,
     limit: int = 50,
     offset: int = 0,
-    min_rank: float = 0.0
+    min_rank: float = 0.0,
+    time_period: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    timezone: str = "UTC"
 ) -> Dict[str, Any]:
     """
     Combined full-text search and structured filtering for optimal music discovery.
 
-    Supports full-text search across all metadata combined with XMP field filters.
+    Supports full-text search across all metadata combined with XMP field filters and time-based filtering.
     Uses both search vector and structured indexes for maximum performance.
 
     Args:
@@ -1801,6 +1907,10 @@ def filter_audio_tracks_combined(
         limit: Maximum results (1-100, default: 50)
         offset: Pagination offset
         min_rank: Minimum relevance score for search (0.0-1.0)
+        time_period: Relative time period filter ('today', 'yesterday', 'this_week', etc.)
+        date_from: Custom start date (ISO format: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)
+        date_to: Custom end date (ISO format: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)
+        timezone: Timezone for date interpretation (IANA timezone name, default: UTC)
 
     Returns:
         Dictionary with filtered tracks, total count, and applied filters
@@ -1813,8 +1923,8 @@ def filter_audio_tracks_combined(
         >>> result = filter_audio_tracks_combined(
         ...     query="rock music",
         ...     composer_filter="JOHN DOE",
-        ...     publisher_filter="MUSIC CORP",
-        ...     year_min=2000,
+        ...     time_period="this_week",
+        ...     timezone="America/New_York",
         ...     limit=25
         ... )
         >>> print(f"Found {result['total_count']} matching tracks")
@@ -1837,6 +1947,31 @@ def filter_audio_tracks_combined(
 
     if year_min and year_max and year_min > year_max:
         raise ValidationError("year_min cannot be greater than year_max")
+
+    # Time filtering validation
+    created_at_min = None
+    created_at_max = None
+
+    if time_period:
+        try:
+            created_at_min, created_at_max = get_time_period_range(time_period, timezone)
+        except ValueError as e:
+            raise ValidationError(str(e))
+
+    if date_from:
+        try:
+            created_at_min = parse_custom_date(date_from, timezone)
+        except ValueError as e:
+            raise ValidationError(str(e))
+
+    if date_to:
+        try:
+            created_at_max = parse_custom_date(date_to, timezone)
+        except ValueError as e:
+            raise ValidationError(str(e))
+
+    if created_at_min and created_at_max and created_at_min > created_at_max:
+        raise ValidationError("date_from cannot be greater than date_to")
 
     try:
         with get_connection() as conn:
@@ -1886,6 +2021,15 @@ def filter_audio_tracks_combined(
                 if year_max is not None:
                     where_conditions.append("year <= %s")
                     params.append(year_max)
+
+                # Time-based filters
+                if created_at_min is not None:
+                    where_conditions.append("created_at >= %s")
+                    params.append(created_at_min)
+
+                if created_at_max is not None:
+                    where_conditions.append("created_at < %s")
+                    params.append(created_at_max)
 
                 if format_filter:
                     where_conditions.append("UPPER(format) = UPPER(%s)")

@@ -41,6 +41,18 @@ class SortOrder(str, Enum):
     DESC = "desc"
 
 
+class TimePeriod(str, Enum):
+    """Time period options for filtering by creation date"""
+    TODAY = "today"
+    YESTERDAY = "yesterday"
+    THIS_WEEK = "this_week"
+    LAST_WEEK = "last_week"
+    THIS_MONTH = "this_month"
+    LAST_MONTH = "last_month"
+    THIS_YEAR = "this_year"
+    LAST_YEAR = "last_year"
+
+
 class FacetType(str, Enum):
     """Types of facets available for search"""
     COMPOSERS = "composers"
@@ -51,6 +63,48 @@ class FacetType(str, Enum):
 # ============================================================================
 # XMP Filtering Schemas
 # ============================================================================
+
+class TimeFilters(BaseModel):
+    """
+    Time-based filters for creation date filtering.
+
+    Supports both relative time periods and custom date ranges.
+    """
+    period: Optional[TimePeriod] = Field(
+        default=None,
+        description="Relative time period (today, yesterday, this_week, etc.)"
+    )
+    dateFrom: Optional[str] = Field(
+        default=None,
+        description="Custom start date (ISO format: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)",
+        pattern=r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2})?$"
+    )
+    dateTo: Optional[str] = Field(
+        default=None,
+        description="Custom end date (ISO format: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)",
+        pattern=r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2})?$"
+    )
+    timezone: Optional[str] = Field(
+        default="UTC",
+        description="Timezone for date interpretation (IANA timezone name, e.g., 'America/New_York', 'Europe/London')",
+        pattern=r"^[A-Za-z][A-Za-z0-9/_+-]+$"
+    )
+
+    @model_validator(mode='after')
+    def validate_time_filters(self) -> 'TimeFilters':
+        """Validate that either period or date range is specified, but not both"""
+        has_period = self.period is not None
+        has_date_range = self.dateFrom is not None or self.dateTo is not None
+
+        if has_period and has_date_range:
+            raise ValueError("Cannot specify both 'period' and custom date range ('dateFrom'/'dateTo')")
+
+        if not has_period and not has_date_range:
+            # This is okay - no time filtering
+            pass
+
+        return self
+
 
 class XMPFilters(BaseModel):
     """
@@ -272,7 +326,7 @@ class SearchLibraryInput(BaseModel):
     )
     filters: Optional[Dict[str, Any]] = Field(
         default=None,
-        description="Advanced filters including XMP metadata fields"
+        description="Advanced filters including XMP metadata fields and time filters"
     )
     limit: int = Field(
         default=20,
@@ -328,12 +382,26 @@ class SearchLibraryInput(BaseModel):
                     "filters": {
                         "genre": ["Rock", "Classic Rock"],
                         "year": {"min": 1960, "max": 1980},
-                        "duration": {"min": 180, "max": 360}
+                        "time": {
+                            "period": "this_week",
+                            "timezone": "America/New_York"
+                        }
                     },
                     "limit": 50,
                     "offset": 0,
                     "sortBy": "year",
                     "sortOrder": "desc"
+                },
+                {
+                    "query": "jazz",
+                    "filters": {
+                        "time": {
+                            "dateFrom": "2025-11-01",
+                            "dateTo": "2025-11-30",
+                            "timezone": "Europe/London"
+                        }
+                    },
+                    "limit": 20
                 }
             ]
         }

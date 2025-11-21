@@ -23,6 +23,7 @@ from .query_schemas import (
     SearchResult,
     QueryException,
     QueryErrorCode,
+    TimeFilters,
 )
 from .schemas import (
     ProductMetadata,
@@ -271,7 +272,7 @@ async def search_library(input_data: Dict[str, Any]) -> Dict[str, Any]:
 
         logger.debug(f"Searching for: '{query}' with limit={limit}, offset={offset}")
 
-        # Extract XMP filters from the filters dict
+        # Extract XMP filters and time filters from the filters dict
         xmp_filters = {}
         if filters:
             xmp_filters = {
@@ -282,6 +283,11 @@ async def search_library(input_data: Dict[str, Any]) -> Dict[str, Any]:
                 'year_min': filters.get('year', {}).get('min') if filters.get('year') else None,
                 'year_max': filters.get('year', {}).get('max') if filters.get('year') else None,
                 'format_filter': filters.get('format', [None])[0] if filters.get('format') else None,
+                # Time-based filters
+                'time_period': filters.get('time', {}).get('period') if filters.get('time') else None,
+                'date_from': filters.get('time', {}).get('dateFrom') if filters.get('time') else None,
+                'date_to': filters.get('time', {}).get('dateTo') if filters.get('time') else None,
+                'timezone': filters.get('time', {}).get('timezone', 'UTC') if filters.get('time') else 'UTC',
             }
 
         # Use combined filtering function that supports both full-text search and XMP filters

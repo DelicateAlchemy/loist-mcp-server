@@ -51,6 +51,7 @@ python-multipart==0.0.20
 psycopg2-binary==2.9.10
 pyexiftool==0.5.6
 pyyaml==6.0.3
+pytz==2024.1
 referencing==0.36.2
 requests==2.32.5
 rfc3339-validator==0.1.4
