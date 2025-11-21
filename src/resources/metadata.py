@@ -10,6 +10,9 @@ from typing import Dict, Any
 import re
 import json
 
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).parent.parent.parent))
 from database import get_audio_metadata_by_id
 from src.exceptions import ResourceNotFoundError, ValidationError
 
@@ -40,7 +43,7 @@ async def get_metadata_resource(uri: str) -> Dict[str, Any]:
     try:
         # Parse URI to extract audioId
         # Format: music-library://audio/{audioId}/metadata
-        match = re.match(r"music-library://audio/([0-9a-fA-F-]+)/metadata", uri)
+        match = re.match(r"music-library://audio/([0-9a-f-]+)/metadata", uri)
         
         if not match:
             logger.error(f"Invalid metadata URI format: {uri}")
@@ -78,7 +81,7 @@ async def get_metadata_resource(uri: str) -> Dict[str, Any]:
                 "Bitrate": metadata.get("bitrate", 0),
                 "Format": metadata.get("format", "")
             },
-            "urlEmbedLink": f"http://localhost:8080/embed/{audio_id}",
+            "urlEmbedLink": f"https://loist.io/embed/{audio_id}",
             "resources": {
                 "audio": f"music-library://audio/{audio_id}/stream",
                 "thumbnail": f"music-library://audio/{audio_id}/thumbnail" if metadata.get("thumbnail_path") else None,
@@ -107,3 +110,4 @@ async def get_metadata_resource(uri: str) -> Dict[str, Any]:
     except Exception as e:
         logger.exception(f"Unexpected error in metadata resource: {e}")
         raise
+

@@ -379,4 +379,66 @@ Environment variables are used **only** for sensitive API keys related to AI pro
 
 ---
 
+## Cloud Build Integration
+
+Taskmaster integrates with Google Cloud Build pipelines for automated deployment. The project includes `cloudbuild.yaml` and `cloudbuild-staging.yaml` configurations that work seamlessly with the task-driven development workflow.
+
+### Production Deployment (`cloudbuild.yaml`)
+
+**Triggered on `main` branch merges:**
+
+- **Multi-stage Docker builds** with Alpine builder → Distroless runtime
+- **Automated vulnerability scanning** using Google Container Analysis
+- **Comprehensive environment variables** (50+ variables configured)
+- **Secret management** via Google Secret Manager for sensitive data
+- **Health checks** and deployment verification
+- **Traffic management** with automatic rollbacks on failure
+
+### Staging Deployment (`cloudbuild-staging.yaml`)
+
+**Triggered on `dev` branch merges:**
+
+- **Faster builds** with reduced resource allocation
+- **Staging-specific configurations** (different secrets, smaller instances)
+- **Integration testing** environment for QA validation
+- **Parallel deployment** capability alongside production
+
+### Task Workflow Integration
+
+**Deployment tasks follow the same principles:**
+
+1. **Create deployment task**: `task-master add-task --prompt="Set up Cloud Run deployment pipeline" --research`
+2. **Break down into subtasks**: Docker optimization, security hardening, environment configuration, etc.
+3. **One subtask per commit**: Each deployment component gets its own commit
+4. **Branch structure**: Deployment tasks use `task-{id}` branches like any other task
+5. **Documentation**: Update deployment docs as part of task implementation
+
+### Environment Variable Validation
+
+**Cloud Build validates configuration consistency:**
+
+- Cross-checks environment variables between `Dockerfile`, `cloudbuild.yaml`, and application code
+- Ensures all required secrets are properly configured
+- Validates service account permissions and IAM roles
+- Tests health check endpoints post-deployment
+
+### Deployment Verification Scripts
+
+**Included validation scripts:**
+
+- `scripts/test-container-build.sh`: Validates Docker image functionality and optimizations
+- `scripts/validate-env-config.sh`: Ensures environment variable consistency across deployment methods
+- `scripts/create-artifact-registry.sh`: Automates Artifact Registry setup
+
+### Integration with Git Workflow
+
+**Deployment follows Git branching rules:**
+
+- **Production deployments**: Only via `main` branch merges (no direct commits)
+- **Staging deployments**: Via `dev` branch merges
+- **Rollback capability**: Cloud Build supports automatic and manual rollbacks
+- **Branch cleanup**: Delete task branches after successful deployment merges
+
+---
+
 For details on how these commands fit into the development process, see the [Development Workflow Guide](mdc:.cursor/rules/dev_workflow.mdc).

@@ -1,0 +1,57 @@
+[flake8]
+# Maximum line length
+max-line-length = 100
+
+# Maximum complexity score
+max-complexity = 12
+
+# Ignore specific error codes
+ignore =
+    # E203: whitespace before ':' (conflicts with black)
+    E203,
+    # W503: line break before binary operator (conflicts with black)
+    W503,
+    # E501: line too long (handled by black)
+    E501,
+    # F401: module imported but unused (can be too strict for some cases)
+    F401,
+    # F811: redefinition of unused variable (can be too strict)
+    F811
+
+# Exclude directories
+exclude =
+    .git,
+    __pycache__,
+    .pytest_cache,
+    .venv,
+    venv,
+    env,
+    build,
+    dist,
+    *.egg-info,
+    .tox,
+    .coverage,
+    htmlcov,
+    reports,
+    storage,
+    .mypy_cache
+
+# Per-file ignores
+per-file-ignores =
+    # Tests can have longer lines and different conventions
+    tests/*:E501,S101
+    # Legacy code may have issues
+    database/migrations/*:E501,F401
+    # Configuration files
+    scripts/*:E501
+    # Server bootstrap code (path manipulation before imports)
+    src/server.py:E402
+
+# Extend select to include additional checks
+select = E,W,F,C
+
+# Count errors
+count = True
+
+# Show source code for each error
+show-source = True

@@ -21,6 +21,7 @@ from mutagen.flac import FLAC, Picture
 from mutagen.mp4 import MP4
 from mutagen.oggvorbis import OggVorbis
 from mutagen.wave import WAVE
+from mutagen.aiff import AIFF
 import tempfile
 import re
 
@@ -163,7 +164,7 @@ class MetadataExtractor:
     """
     
     # Supported audio formats
-    SUPPORTED_FORMATS = {".mp3", ".flac", ".m4a", ".aac", ".ogg", ".wav"}
+    SUPPORTED_FORMATS = {".mp3", ".flac", ".m4a", ".aac", ".ogg", ".wav", ".aif", ".aiff"}
     
     # Picture type priorities (APIC/Picture type field)
     # 3 = Front cover (preferred)
@@ -363,7 +364,75 @@ class MetadataExtractor:
             
         except Exception as e:
             raise MetadataExtractionError(f"Failed to extract MP4 tags: {e}")
-    
+
+    @staticmethod
+    def extract_aif_tags(file_path: Path | str) -> Dict[str, Any]:
+        """
+        Extract tags from AIF/AIFF files.
+
+        AIF files can contain ID3 tags, similar to MP3 files.
+
+        Args:
+            file_path: Path to AIF/AIFF file
+
+        Returns:
+            Dictionary of metadata
+        """
+        file_path = Path(file_path)
+
+        metadata = {
+            "artist": None,
+            "title": None,
+            "album": None,
+            "genre": None,
+            "year": None,
+        }
+
+        try:
+            audio = AIFF(str(file_path))
+
+            if not audio.tags:
+                logger.warning(f"No AIF tags found in {file_path}")
+                return metadata
+
+            # AIF files can contain ID3 tags
+            # Extract ID3 tag fields
+            if 'TPE1' in audio.tags:  # Artist
+                metadata['artist'] = str(audio.tags['TPE1'])
+
+            if 'TIT2' in audio.tags:  # Title
+                metadata['title'] = str(audio.tags['TIT2'])
+
+            if 'TALB' in audio.tags:  # Album
+                metadata['album'] = str(audio.tags['TALB'])
+
+            if 'TCON' in audio.tags:  # Genre
+                genre = str(audio.tags['TCON'])
+                # Extract genre name from ID3 genre format
+                if genre.startswith('(') and ')' in genre:
+                    # ID3 genre format like (0) or (17)
+                    try:
+                        genre_id = int(genre.strip('()'))
+                        # Could map to standard genre names, but for now keep as-is
+                        metadata['genre'] = genre
+                    except ValueError:
+                        metadata['genre'] = genre
+                else:
+                    metadata['genre'] = genre
+
+            if 'TDRC' in audio.tags:  # Recording date
+                try:
+                    date_str = str(audio.tags['TDRC'])
+                    metadata['year'] = int(date_str.split('-')[0])
+                except (ValueError, AttributeError):
+                    pass
+
+            logger.info(f"Extracted AIF tags from {file_path.name}")
+            return metadata
+
+        except Exception as e:
+            raise MetadataExtractionError(f"Failed to extract AIF tags: {e}")
+
     @staticmethod
     def extract(file_path: Path | str, validate_quality: bool = True, quality_threshold: float = 0.3) -> Dict[str, Any]:
         """
@@ -428,6 +497,11 @@ class MetadataExtractor:
             elif suffix in {'.m4a', '.aac'}:
                 tags = MetadataExtractor.extract_mp4_tags(file_path)
                 metadata.update(tags)
+            elif suffix in {'.aif', '.aiff'}:
+                # AIF files may have ID3 tags or other metadata
+                if hasattr(audio, 'tags') and audio.tags:
+                    tags = MetadataExtractor.extract_aif_tags(file_path)
+                    metadata.update(tags)
             elif suffix == '.wav':
                 # WAV files may have INFO chunks
                 if hasattr(audio, 'tags') and audio.tags:
@@ -1039,3 +1113,257 @@ def extract_artwork(
     """
     return MetadataExtractor.extract_artwork(file_path, destination, prefer_front_cover)
 
+
+
+def parse_filename_metadata(file_path: Path | str, existing_metadata: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Parse metadata from filename patterns.
+
+    Handles common filename patterns and preprocesses to handle inconsistent formats:
+    - Removes leading track numbers (01., 1-, etc.)
+    - Handles year patterns (YYYY, (YYYY))
+    - Multiple parsing attempts for complex patterns
+    - Can override temp filenames (tmpXXXXXX patterns) with proper metadata
+
+    Common patterns after preprocessing:
+    - "Artist - Title.mp3"
+    - "Artist - Title (Album).mp3"
+    - "Artist - Album - Title.mp3"
+    - "Title.mp3" (no artist)
+    - "Track01.mp3" (minimal info)
+
+    Args:
+        file_path: Path to audio file
+        existing_metadata: Already extracted metadata (won't overwrite except temp filenames)
+
+    Returns:
+        Dictionary with parsed metadata (fills missing fields, can override temp filenames)
+    """
+    file_path = Path(file_path)
+    filename = file_path.stem  # Without extension
+    parsed = {}
+
+    # Preprocessing: Clean up common prefixes and patterns
+    cleaned_filename = _preprocess_filename(filename)
+
+    # Try multiple parsing strategies in order of specificity (most specific first)
+    strategies = [
+        _parse_artist_album_title_pattern,  # 3 parts: Artist - Album - Title
+        _parse_artist_title_pattern,        # 2 parts: Artist - Title
+        _parse_title_only_pattern           # 1 part: Title only
+    ]
+
+    for strategy in strategies:
+        result = strategy(cleaned_filename)
+        if result:
+            parsed.update(result)
+            break  # Take first successful parse
+
+    # Fill in missing fields or override temp filenames
+    result = {}
+    for key, value in parsed.items():
+        existing_value = existing_metadata.get(key)
+
+        # Allow override if existing value is a temp filename pattern
+        should_override = (
+            not existing_value or  # No existing value
+            _is_temp_filename(existing_value)  # Existing value is a temp filename
+        )
+
+        if should_override and value:
+            result[key] = value
+
+    if result:
+        logger.debug(f"Parsed metadata from filename '{filename}': {result}")
+
+    return result
+
+
+def _is_temp_filename(value: str) -> bool:
+    """
+    Check if a string looks like a temporary filename that should be overridden.
+
+    Patterns that indicate temp filenames:
+    - tmp followed by digits (tmp123456, tmpabcdef)
+    - Random alphanumeric strings (8+ chars, no spaces, mixed case)
+    - Common temp prefixes (temp_, tmp_, cache_)
+    """
+    if not isinstance(value, str):
+        return False
+
+    value_lower = value.lower()
+
+    # Check for common temp patterns
+    import re
+
+    # tmp followed by digits/letters
+    if re.match(r'^tmp[a-z0-9]{6,}$', value_lower):
+        return True
+
+    # temp_ or tmp_ prefix
+    if value_lower.startswith(('temp_', 'tmp_', 'cache_')):
+        return True
+
+    # Very long random-looking strings that look like temp files
+    # Only flag if 10+ chars AND contains digits AND looks computer-generated
+    if (len(value) >= 10 and
+        re.search(r'\d', value_lower) and  # Contains digits
+        re.match(r'^[a-z0-9]+$', value_lower) and  # Alphanumeric only
+        not re.search(r'[aeiou]{2}', value_lower)):  # No vowel clusters (real words have vowels)
+        return True
+
+    return False
+
+
+def _preprocess_filename(filename: str) -> str:
+    """
+    Preprocess filename to remove common prefixes and normalize patterns.
+    
+    Handles:
+    - Leading track numbers: "01. ", "1-", "(01) "
+    - Year patterns: " (2020)", " - 2020"
+    - Extra spaces and separators
+    """
+    # Remove leading track numbers (with various separators)
+    patterns = [
+        r'^\d+\.\s*',  # "01. "
+        r'^\d+-\s*',   # "01-"
+        r'^\(\d+\)\s*', # "(01) "
+        r'^\[\d+\]\s*', # "[01] "
+        r'^\d+\s*-\s*', # "01 - "
+    ]
+    
+    cleaned = filename
+    for pattern in patterns:
+        cleaned = re.sub(pattern, '', cleaned, flags=re.IGNORECASE)
+    
+    # Remove trailing year patterns (but keep them for potential album year)
+    # This is tricky - we'll handle years in the parsing logic instead
+    # cleaned = re.sub(r'\s*\(\d{4}\)$', '', cleaned)  # Remove (2020) at end
+    # cleaned = re.sub(r'\s*-\s*\d{4}$', '', cleaned)  # Remove - 2020 at end
+    
+    return cleaned.strip()
+
+
+def _parse_artist_title_pattern(filename: str) -> Optional[Dict[str, str]]:
+    """
+    Parse patterns like "Artist - Title" or "Artist - Title (Album)".
+
+    Special handling for year patterns: if the second part looks like a year,
+    treat the first part as title and the second as year instead of artist-title.
+    """
+    # Pattern: "Artist - Title (Album)" - handle album in parentheses first
+    match = re.match(r'^(.+?)\s*-\s*(.+?)\s*\(([^)]+)\)$', filename)
+    if match:
+        artist = match.group(1).strip()
+        title = match.group(2).strip()
+        album = match.group(3).strip()
+
+        # Check if album looks like a year (4 digits)
+        if re.match(r'^\d{4}$', album):
+            return {
+                'artist': artist,
+                'title': title,
+                'year': album
+            }
+        else:
+            return {
+                'artist': artist,
+                'title': title,
+                'album': album
+            }
+
+    # Pattern: "Artist/Title - Year" - check for year pattern first
+    match = re.match(r'^(.+?)\s*-\s*(\d{4})$', filename)
+    if match:
+        potential_title = match.group(1).strip()
+        year = match.group(2).strip()
+
+        # If the first part is reasonable length and not just numbers, treat as title + year
+        if len(potential_title) >= 2 and not re.match(r'^\d+$', potential_title):
+            return {
+                'title': potential_title,
+                'year': year
+            }
+
+    # Pattern: "Artist - Title" (fallback for non-year patterns)
+    match = re.match(r'^(.+?)\s*-\s*(.+)$', filename)
+    if match:
+        artist = match.group(1).strip()
+        title = match.group(2).strip()
+
+        # Skip if title is just a track number or very short
+        if re.match(r'^\d{1,3}$', title) or len(title) < 2:
+            return None
+
+        # Additional check: if title looks like a year, don't treat as artist-title
+        if re.match(r'^\d{4}$', title):
+            return None
+
+        return {
+            'artist': artist,
+            'title': title
+        }
+
+    return None
+
+
+def _parse_artist_album_title_pattern(filename: str) -> Optional[Dict[str, str]]:
+    """
+    Parse patterns like "Artist - Album - Title".
+    """
+    match = re.match(r'^(.+?)\s*-\s*(.+?)\s*-\s*(.+)$', filename)
+    if match:
+        artist = match.group(1).strip()
+        album = match.group(2).strip()
+        title = match.group(3).strip()
+        
+        # Check if album looks like a year (4 digits)
+        if re.match(r'^\d{4}$', album):
+            return {
+                'artist': artist,
+                'title': title,
+                'year': album
+            }
+        else:
+            return {
+                'artist': artist,
+                'album': album,
+                'title': title
+            }
+    
+    return None
+
+
+def _parse_title_only_pattern(filename: str) -> Optional[Dict[str, str]]:
+    """
+    Parse patterns that are just titles, possibly with years.
+    """
+    # Check if it's a reasonable title (not just numbers/symbols)
+    if len(filename) < 2 or re.match(r'^[\d\s\-\(\)\[\]]+$', filename):
+        return None
+    
+    # Pattern: "Title (Year)"
+    match = re.match(r'^(.+?)\s*\((\d{4})\)$', filename)
+    if match:
+        title = match.group(1).strip()
+        year = match.group(2).strip()
+        return {
+            'title': title,
+            'year': year
+        }
+    
+    # Pattern: "Title - Year"
+    match = re.match(r'^(.+?)\s*-\s*(\d{4})$', filename)
+    if match:
+        title = match.group(1).strip()
+        year = match.group(2).strip()
+        return {
+            'title': title,
+            'year': year
+        }
+    
+    # Just title
+    return {
+        'title': filename
+    }

@@ -22,6 +22,7 @@ import tempfile
 from pathlib import Path
 from typing import Optional, Dict, Any
 from contextlib import contextmanager
+from urllib.parse import urlparse
 
 from .schemas import (
     ProcessAudioInput,
@@ -47,9 +48,14 @@ from src.downloader import (
     SSRFProtectionError,
 )
 from src.metadata import (
-    extract_metadata,
+    extract_metadata_with_fallback,
     extract_artwork,
     validate_audio_format,
+    parse_filename_metadata,
+    enhance_metadata_with_xmp,
+    should_attempt_xmp_extraction,
+    enhance_metadata_with_bwf,
+    should_attempt_bwf_extraction,
     MetadataExtractionError,
     FormatValidationError,
 )
@@ -69,7 +75,6 @@ from src.exceptions import (
     StorageError,
     DatabaseOperationError,
     ValidationError,
-    ResourceNotFoundError,
 )
 
 logger = logging.getLogger(__name__)
@@ -104,6 +109,72 @@ def managed_temp_files(*temp_paths):
                     logger.debug(f"Cleaned up temporary file: {path}")
                 except Exception as e:
                     logger.warning(f"Failed to cleanup temp file {path}: {e}")
+
+
+def _extract_filename_from_url(url: str) -> Optional[str]:
+    """
+    Extract filename from URL path.
+
+    Examples:
+        https://example.com/audio/thebeatles-imonlysleeping.mp3 -> thebeatles-imonlysleeping.mp3
+        https://tmpfiles.org/dl/123/file.mp3 -> file.mp3
+    """
+    try:
+        parsed = urlparse(url)
+        path = parsed.path
+        if path:
+            # Get the last component of the path
+            filename = path.split('/')[-1]
+            # Basic validation - should have an extension
+            if '.' in filename and len(filename) > 4:
+                return filename
+    except Exception:
+        pass
+    return None
+
+
+def _validate_metadata_quality_after_enhancement(metadata: Dict[str, Any]) -> None:
+    """
+    Validate metadata quality after filename parsing enhancement.
+
+    Uses adaptive thresholds based on available metadata:
+    - Artist + Title available: threshold 0.2 (20%)
+    - Only Title available: threshold 0.1 (10%)
+    - Always allow if we have at least a title from filename
+
+    Args:
+        metadata: Enhanced metadata dictionary
+
+    Raises:
+        MetadataExtractionError: If metadata quality is insufficient
+    """
+    from src.metadata.extractor import MetadataQualityAssessment
+
+    # If we have a title (from filename parsing if needed), be very lenient
+    if metadata.get('title'):
+        # We have at least a title - allow processing with minimal requirements
+        quality_assessment = MetadataQualityAssessment(metadata, Path("/tmp/dummy.mp3"))  # Path not used in assessment
+        quality_report = quality_assessment.get_quality_report()
+
+        logger.info(
+            f"Final metadata quality assessment: "
+            f"Score={quality_report['quality_score']}, "
+            f"Level={quality_report['quality_level']}, "
+            f"Completeness={quality_report['metadata_completeness']}%"
+        )
+
+        # Very lenient threshold for files with titles
+        if quality_report['quality_score'] < 0.1:  # 10% threshold
+            logger.warning(
+                f"Low quality metadata but proceeding: Score={quality_report['quality_score']}, "
+                f"Issues={quality_report['issues']}"
+            )
+        # Don't raise an error - allow processing
+        return
+
+    # No title at all - this is problematic, but should have been caught earlier
+    logger.error(f"No title found in metadata after all enhancement attempts: {metadata}")
+    raise MetadataExtractionError("No title could be determined from file metadata or filename")
 
 
 class ProcessingPipeline:
@@ -208,44 +279,31 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
         pipeline.audio_id = str(uuid.uuid4())
         logger.info(f"Generated audio ID: {pipeline.audio_id}")
         
-        # Note: Removed premature database record creation to avoid constraint violations
-        # The record will be created later with all required fields after GCS upload
-        # This fixes the "Premature Status Updates" architectural issue
-        logger.debug(f"Processing audio with ID: {pipeline.audio_id}")
-        
         # ====================================================================
         # Stage 2: HTTP Download (Subtask 7.2)
         # ====================================================================
         logger.info(f"Downloading audio from: {source.url}")
-        logger.debug(f"Download options: max_size_mb={options.maxSizeMB}, timeout={options.timeout}")
         
         try:
             # Validate URL scheme (http/https only)
-            logger.debug("Validating URL scheme...")
             validate_url(str(source.url))
-            logger.debug("URL scheme validation passed")
             
             # SSRF protection check
-            logger.debug("Performing SSRF protection check...")
             validate_ssrf(str(source.url))
-            logger.debug("SSRF protection check passed")
             
             # Download to temporary file
-            logger.debug(f"Starting download with max_size_mb={options.maxSizeMB}, timeout_seconds={options.timeout}")
             pipeline.temp_audio_path = download_from_url(
                 url=str(source.url),
                 headers=source.headers,
                 max_size_mb=options.maxSizeMB,
-                timeout_seconds=options.timeout
+                timeout_seconds=options.timeout,
+                filename_override=getattr(source, 'filename', None)
             )
             
             logger.info(f"Downloaded audio to: {pipeline.temp_audio_path}")
-            logger.debug(f"Download successful, file size: {Path(pipeline.temp_audio_path).stat().st_size if pipeline.temp_audio_path else 'N/A'} bytes")
             
         except URLValidationError as e:
-            import traceback
             logger.error(f"URL validation failed: {e}")
-            logger.error(f"Traceback:\n{traceback.format_exc()}")
             raise ProcessAudioException(
                 error_code=ErrorCode.VALIDATION_ERROR,
                 message=f"Invalid URL: {str(e)}"
@@ -271,36 +329,10 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
                 details={"timeout_seconds": options.timeout}
             )
         except DownloadError as e:
-            import traceback
             logger.error(f"Download failed: {e}")
-            logger.error(f"DownloadError type: {type(e).__name__}")
-            logger.error(f"DownloadError traceback:\n{traceback.format_exc()}")
             raise ProcessAudioException(
                 error_code=ErrorCode.FETCH_FAILED,
-                message=f"Failed to download audio: {str(e)}",
-                details={"download_error_type": type(e).__name__, "traceback": traceback.format_exc()}
-            )
-        except Exception as download_exc:
-            # Catch any other unexpected exceptions during download
-            import traceback
-            logger.error(f"Unexpected exception during download phase: {download_exc}")
-            logger.error(f"Exception type: {type(download_exc).__name__}")
-            logger.error(f"Exception module: {type(download_exc).__module__ if hasattr(type(download_exc), '__module__') else 'N/A'}")
-            logger.error(f"Full traceback:\n{traceback.format_exc()}")
-            
-            # Check if this is the NameError about ResourceNotFoundError
-            if isinstance(download_exc, NameError) and "ResourceNotFoundError" in str(download_exc):
-                logger.error("⚠️ NameError about ResourceNotFoundError detected in DOWNLOAD phase!")
-                logger.error(f"  This suggests ResourceNotFoundError is referenced during download operations")
-            
-            raise ProcessAudioException(
-                error_code=ErrorCode.FETCH_FAILED,
-                message=f"Unexpected error during download: {str(download_exc)}",
-                details={
-                    "exception_type": type(download_exc).__name__,
-                    "exception_message": str(download_exc),
-                    "occurred_in": "download_phase"
-                }
+                message=f"Failed to download audio: {str(e)}"
             )
         
         # ====================================================================
@@ -309,14 +341,131 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
         logger.info("Extracting metadata and artwork")
         
         try:
+            # Handle filename override for validation and extraction
+            validation_path = pipeline.temp_audio_path
+            extraction_path = pipeline.temp_audio_path
+
+            if hasattr(source, 'filename') and source.filename:
+                # Rename temp file to have correct extension for validation and extraction
+                filename_suffix = Path(source.filename).suffix
+                correct_path = Path(pipeline.temp_audio_path).with_suffix(filename_suffix)
+                logger.debug(f"DEBUG: temp_audio_path={pipeline.temp_audio_path}, filename={source.filename}, suffix={filename_suffix}, correct_path={correct_path}")
+                try:
+                    if pipeline.temp_audio_path.exists() and not correct_path.exists():
+                        pipeline.temp_audio_path.rename(correct_path)
+                        logger.info(f"Renamed temp file: {pipeline.temp_audio_path} -> {correct_path}")
+                        # Update pipeline to use the renamed file
+                        pipeline.temp_audio_path = correct_path
+                    validation_path = pipeline.temp_audio_path
+                    extraction_path = pipeline.temp_audio_path
+                    logger.info(f"Using filename override: {source.filename}")
+                except Exception as e:
+                    logger.error(f"Failed to rename temp file: {e}")
+                    # Fall back to original path
+                    logger.warning("Falling back to original path for validation/extraction")
+
             # Validate audio format if enabled
             if options.validateFormat:
-                validate_audio_format(pipeline.temp_audio_path)
-            
-            # Extract metadata
-            metadata_dict = extract_metadata(pipeline.temp_audio_path)
+                # Skip validation if we have a trusted filename override
+                if hasattr(source, 'filename') and source.filename:
+                    provided_ext = Path(source.filename).suffix.lower()
+                    if provided_ext in ['.mp3', '.flac', '.wav', '.aif', '.aiff', '.ogg', '.m4a', '.aac']:
+                        logger.info(f"Skipping format validation for trusted filename: {source.filename}")
+                    else:
+                        validate_audio_format(validation_path)
+                else:
+                    validate_audio_format(validation_path)
+
+            # Extract metadata with fallback mechanisms
+            metadata_dict, was_repaired = extract_metadata_with_fallback(extraction_path)
+            if was_repaired:
+                logger.info(f"Metadata was repaired for {pipeline.audio_id}")
             logger.debug(f"Extracted metadata: {metadata_dict}")
-            
+
+            # Attempt XMP enhancement for WAV/BWF/AIF files
+            if should_attempt_xmp_extraction(extraction_path, metadata_dict):
+                logger.info(f"🎵 XMP EXTRACTION: Attempting XMP enhancement for {Path(extraction_path).name}")
+                try:
+                    enhanced_metadata = enhance_metadata_with_xmp(extraction_path, metadata_dict)
+                    if enhanced_metadata.get('_xmp_enhanced'):
+                        metadata_dict = enhanced_metadata
+                        xmp_fields = enhanced_metadata.get('_xmp_fields', [])
+                        logger.info(f"🎵 XMP EXTRACTION: Enhanced metadata with XMP fields: {xmp_fields}")
+                    else:
+                        logger.debug(f"🎵 XMP EXTRACTION: No XMP data found or enhancement not needed")
+                except Exception as e:
+                    logger.warning(f"🎵 XMP EXTRACTION: XMP enhancement failed: {e}")
+            else:
+                logger.debug(f"🎵 XMP EXTRACTION: Skipping XMP enhancement (not needed or not supported)")
+
+            # Attempt BWF enhancement for WAV files (after XMP to allow fallback)
+            if should_attempt_bwf_extraction(extraction_path, metadata_dict):
+                logger.info(f"🎵 BWF EXTRACTION: Attempting BWF enhancement for {Path(extraction_path).name}")
+                try:
+                    enhanced_metadata = enhance_metadata_with_bwf(extraction_path, metadata_dict)
+                    if enhanced_metadata.get('_bwf_enhanced'):
+                        metadata_dict = enhanced_metadata
+                        bwf_fields = enhanced_metadata.get('_bwf_fields', [])
+                        logger.info(f"🎵 BWF EXTRACTION: Enhanced metadata with BWF fields: {bwf_fields}")
+                    else:
+                        logger.debug(f"🎵 BWF EXTRACTION: No BWF data found or enhancement not needed")
+                except Exception as e:
+                    logger.warning(f"🎵 BWF EXTRACTION: BWF enhancement failed: {e}")
+            else:
+                logger.debug(f"🎵 BWF EXTRACTION: Skipping BWF enhancement (not needed or not supported)")
+
+            # Parse filename for missing metadata fields
+            # Priority order: source.filename > URL parsing > temp file
+            logger.info(f"🎵 FILENAME PARSING: Starting filename parsing phase")
+            logger.debug(f"SOURCE DEBUG: source={source}, type={type(source)}")
+            filename_for_parsing = pipeline.temp_audio_path
+            logger.info(f"🎵 FILENAME PARSING: Initial filename_for_parsing = {filename_for_parsing}")
+
+            # Priority 1: Use explicit filename override from source (highest priority)
+            if hasattr(source, 'filename') and source.filename:
+                logger.debug(f"SOURCE DEBUG: Found explicit filename in source: {source.filename}")
+                filename_for_parsing = Path(source.filename)
+                logger.info(f"🎵 FILENAME PARSING: Using source.filename: {source.filename}")
+
+            # Priority 2: Try to extract filename from URL (for regular URLs)
+            elif hasattr(source, 'url') and source.url:
+                logger.debug(f"SOURCE DEBUG: Found URL in source: {source.url}")
+                # Convert HttpUrl to string for processing
+                url_str = str(source.url)
+                url_filename = _extract_filename_from_url(url_str)
+                logger.debug(f"SOURCE DEBUG: Extracted filename: {url_filename}")
+                if url_filename:
+                    # Create a temporary Path object with the URL filename for parsing
+                    # This preserves the original filename semantics for the parser
+                    class URLPath(os.PathLike):
+                        def __init__(self, url_filename):
+                            self._stem = Path(url_filename).stem
+                            self._url_filename = url_filename
+
+                        @property
+                        def stem(self):
+                            return self._stem
+
+                        def __fspath__(self):
+                            return self._url_filename
+
+                    filename_for_parsing = URLPath(url_filename)
+                    logger.debug(f"Using URL filename for parsing: {url_filename}")
+                else:
+                    logger.debug("URL filename extraction failed")
+
+            # Priority 3: Fall back to temp file path (lowest priority)
+            else:
+                logger.debug(f"No explicit filename or URL found in source, using temp file path")
+
+            filename_metadata = parse_filename_metadata(filename_for_parsing, metadata_dict)
+            if filename_metadata:
+                metadata_dict.update(filename_metadata)
+                logger.info(f"Enhanced metadata from filename: {filename_metadata}")
+
+            # Adaptive quality validation after filename parsing
+            _validate_metadata_quality_after_enhancement(metadata_dict)
+
             # Extract artwork (optional - may be None)
             pipeline.temp_artwork_path = extract_artwork(pipeline.temp_audio_path)
             if pipeline.temp_artwork_path:
@@ -347,21 +496,21 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
             filename = source.filename or f"{pipeline.audio_id}.{metadata_dict.get('format', 'mp3').lower()}"
             
             # Upload audio file
-            audio_blob = upload_audio_file(
+            blob = upload_audio_file(
                 source_path=pipeline.temp_audio_path,
-                destination_blob_name=f"audio/{pipeline.audio_id}/{filename}"
+                destination_blob_name=f"audio/{pipeline.audio_id}/{filename}",
+                metadata={"content_type": source.mimeType or f"audio/{metadata_dict.get('format', 'mp3').lower()}"}
             )
-            # Construct full GCS path (gs://bucket/path) for database storage
-            pipeline.gcs_audio_path = f"gs://{audio_blob.bucket.name}/{audio_blob.name}"
+            pipeline.gcs_audio_path = f"gs://{blob.bucket.name}/{blob.name}"
             logger.info(f"Uploaded audio to GCS: {pipeline.gcs_audio_path}")
             
             # Upload artwork if present
             if pipeline.temp_artwork_path:
                 artwork_blob = upload_audio_file(
                     source_path=pipeline.temp_artwork_path,
-                    destination_blob_name=f"audio/{pipeline.audio_id}/artwork.jpg"
+                    destination_blob_name=f"audio/{pipeline.audio_id}/artwork.jpg",
+                    metadata={"content_type": "image/jpeg"}
                 )
-                # Construct full GCS path (gs://bucket/path) for database storage
                 pipeline.gcs_artwork_path = f"gs://{artwork_blob.bucket.name}/{artwork_blob.name}"
                 logger.info(f"Uploaded artwork to GCS: {pipeline.gcs_artwork_path}")
             
@@ -378,28 +527,37 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
         logger.info("Saving metadata to database")
         
         try:
-            # Prepare database metadata (separate from GCS paths)
+            # Prepare database record
             db_metadata = {
                 "artist": metadata_dict.get("artist", ""),
                 "title": metadata_dict.get("title", "Untitled"),
                 "album": metadata_dict.get("album", ""),
                 "genre": metadata_dict.get("genre"),
                 "year": metadata_dict.get("year"),
-                "duration_seconds": metadata_dict.get("duration", 0),
+                "duration": metadata_dict.get("duration", 0),
                 "channels": metadata_dict.get("channels", 2),
                 "sample_rate": metadata_dict.get("sample_rate", 44100),
                 "bitrate": metadata_dict.get("bitrate", 0),
                 "format": metadata_dict.get("format", ""),
+                # XMP metadata fields (flat structure as requested)
+                "composer": metadata_dict.get("composer"),
+                "publisher": metadata_dict.get("publisher"),
+                "record_label": metadata_dict.get("record_label"),
+                "isrc": metadata_dict.get("isrc"),
             }
             
-            # Save to database using correct function signature
+            # Save to database using transaction
             saved_record = save_audio_metadata(
                 metadata=db_metadata,
-                audio_gcs_path=pipeline.gcs_audio_path,
-                thumbnail_gcs_path=pipeline.gcs_artwork_path,
+                audio_gcs_path=str(pipeline.gcs_audio_path),
+                thumbnail_gcs_path=str(pipeline.gcs_artwork_path) if pipeline.gcs_artwork_path else None,
                 track_id=pipeline.audio_id
             )
             pipeline.db_committed = True
+            
+            # Mark as processing first, then completed
+            mark_as_processing(pipeline.audio_id)
+            logger.debug(f"Marked {pipeline.audio_id} as PROCESSING")
             
             # Mark as completed
             mark_as_completed(pipeline.audio_id)
@@ -418,18 +576,26 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
         logger.info("Formatting response")
         
         # Generate embed URL
-        from config import config
-        embed_url = f"{config.embed_base_url}/embed/{pipeline.audio_id}"
+        embed_url = f"https://loist.io/embed/{pipeline.audio_id}"
         
         # Build response using Pydantic models for validation
+        logger.info(f"[RESPONSE_DEBUG] Final metadata_dict: {metadata_dict}")
+
+        # Ensure required fields are not None
+        final_artist = metadata_dict.get("artist") or ""
+        final_album = metadata_dict.get("album") or ""
+        final_title = metadata_dict.get("title") or "Untitled"
+
+        logger.info(f"[RESPONSE_DEBUG] Final values - Artist: '{final_artist}', Album: '{final_album}', Title: '{final_title}'")
+
         response = ProcessAudioOutput(
             success=True,
             audioId=pipeline.audio_id,
             metadata=AudioMetadata(
                 Product=ProductMetadata(
-                    Artist=metadata_dict.get("artist", ""),
-                    Title=metadata_dict.get("title", "Untitled"),
-                    Album=metadata_dict.get("album", ""),
+                    Artist=final_artist,
+                    Title=final_title,
+                    Album=final_album,
                     MBID=None,  # MVP: null
                     Genre=[metadata_dict.get("genre")] if metadata_dict.get("genre") else [],
                     Year=metadata_dict.get("year")
@@ -463,11 +629,7 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
         # ====================================================================
         # Error Handling (Subtask 7.6)
         # ====================================================================
-        import traceback
         logger.error(f"Processing failed: {e.message}")
-        logger.error(f"Error code: {e.error_code}")
-        logger.error(f"Error details: {e.details}")
-        logger.error(f"Traceback:\n{traceback.format_exc()}")
         
         # Mark as failed in database if we have an ID
         if pipeline.audio_id:
@@ -478,8 +640,7 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
                 )
                 logger.debug(f"Marked {pipeline.audio_id} as FAILED")
             except Exception as db_error:
-                logger.error(f"Failed to update status to FAILED: {db_error}")
-                logger.error(f"Database exception traceback:\n{traceback.format_exc()}")
+                logger.warning(f"Failed to update status to FAILED: {db_error}")
         
         # Cleanup temporary files (error path)
         pipeline.cleanup()
@@ -490,36 +651,7 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
         
     except Exception as e:
         # Catch-all for unexpected errors
-        # Log comprehensive exception details for debugging
-        import traceback
-        exc_type = type(e).__name__
-        exc_message = str(e)
-        exc_traceback = traceback.format_exc()
-        
-        logger.error(f"Unexpected error during processing:")
-        logger.error(f"  Exception Type: {exc_type}")
-        logger.error(f"  Exception Message: {exc_message}")
-        logger.error(f"  Exception Args: {e.args if hasattr(e, 'args') else 'N/A'}")
-        logger.error(f"  Exception Module: {type(e).__module__ if hasattr(type(e), '__module__') else 'N/A'}")
-        logger.error(f"  Full Traceback:\n{exc_traceback}")
-        
-        # Enhanced debugging for NameError issues
-        if exc_type == "NameError" and "ResourceNotFoundError" in exc_message:
-            logger.error("⚠️ DETECTED: NameError referencing ResourceNotFoundError!")
-            logger.error(f"  This suggests ResourceNotFoundError is not in scope where it's being referenced")
-            logger.error(f"  Exception occurred in: {exc_traceback.split('File')[-1].split(',')[0] if 'File' in exc_traceback else 'Unknown location'}")
-            
-            # Check if this is related to FastMCP serialization
-            if "fastmcp" in exc_traceback.lower() or "json" in exc_traceback.lower():
-                logger.error("  ⚠️ This appears to be a FastMCP serialization issue!")
-                logger.error("  FastMCP may be trying to serialize exception class information in a different context")
-            
-            # Check module namespace
-            import sys
-            current_module = sys.modules.get(__name__, None)
-            if current_module:
-                logger.error(f"  ResourceNotFoundError in module namespace: {hasattr(current_module, 'ResourceNotFoundError')}")
-                logger.error(f"  Available exception classes: {[name for name in dir(current_module) if 'Error' in name]}")
+        logger.exception(f"Unexpected error during processing: {e}")
         
         # Mark as failed if we have an ID
         if pipeline.audio_id:
@@ -528,23 +660,18 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
                     track_id=pipeline.audio_id,
                     error_message=f"Unexpected error: {str(e)}"
                 )
-            except Exception as db_exc:
-                logger.error(f"Failed to mark as failed in database: {db_exc}")
-                logger.error(f"Database exception traceback:\n{traceback.format_exc()}")
+            except Exception:
+                pass  # Best effort
         
         # Cleanup
         pipeline.cleanup()
         
-        # Return generic error with enhanced details
+        # Return generic error
         error_response = ProcessAudioError(
             success=False,
             error=ErrorCode.FETCH_FAILED,
             message=f"Unexpected error: {str(e)}",
-            details={
-                "exception_type": exc_type,
-                "exception_message": exc_message,
-                "traceback_preview": exc_traceback.split('\n')[-5:] if exc_traceback else None,
-            }
+            details={"exception_type": type(e).__name__}
         )
         return error_response.model_dump()
 

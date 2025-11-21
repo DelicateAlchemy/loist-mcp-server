@@ -1,76 +1,90 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
+# ============================================================================
+# Loist MCP Server - Docker Build Context Exclusions
+# ============================================================================
 
-# Virtual environments
-.venv/
+# Version Control
+.git
+.gitignore
+.github/
+
+# Sensitive Files and Credentials
+.env*
+service-account-key.json
+github-actions-key.json
+*.key
+*.pem
+*.crt
+secrets/
+*.secret
+
+# Development and Testing
 venv/
-ENV/
-env/
-
-# Tests
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+reports/
 tests/
 test_*.py
+test_*.sh
 *_test.py
+*_tests.py
+testing/
+TESTING*.md
 
-# Documentation
+# Documentation (not needed in production container)
 docs/
 *.md
-!README.md
+!README.md  # Keep main README for container metadata
 
-# Task management
-tasks/
-scripts/
-.taskmaster/
-.taskmasterconfig
+# Build Artifacts and Cache
+.cache/
+.mypy_cache/
+.ruff_cache/
+node_modules/
+*.log
+logs/
+tmp/
+temp/
 
-# IDE
-.idea/
+# IDE and Editor Files
 .vscode/
-.cursor/
+.idea/
 *.swp
 *.swo
 *~
 
-# Git
-.git/
-.gitignore
-.gitattributes
-
-# Logs
-*.log
-logs/
-
-# OS
+# OS Specific Files
 .DS_Store
 Thumbs.db
+desktop.ini
 
-# Environment
-.env
-.env.*
-!.env.example
+# CI/CD and Deployment Scripts (not needed in runtime)
+scripts/
+!scripts/docker/  # Keep docker scripts if needed
+docker-compose*.yml
+Dockerfile*
+cloudbuild*.yaml
 
-# Temporary files
-tmp/
-temp/
+# Local Development Files
+storage/  # Local storage mount point
+.database/  # Local database files
+run_server.py  # Development runner
+
+# Task Management (not needed in production)
+tasks/
+task-*.txt
+task-*.bak
+
+# Performance and Analysis Files
+performance_baseline.json
+iam-validation-report-*.txt
+
+# Temporary and Generated Files
 *.tmp
-
-# Project specific
-.roo/
-.roomodes
-.windsurfrules
-.documents/
-
+*.temp
+*.bak
+*.orig

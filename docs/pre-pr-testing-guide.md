@@ -1,6 +1,6 @@
 # Pre-PR Testing Guide
 
-This guide helps you test your changes locally before creating a pull request.
+This guide helps you test your changes locally before creating a pull request. For comprehensive testing practices and CI/CD integration details, see [Testing Practices Guide](./testing-practices-guide.md).
 
 ## 🚀 Quick Start
 
@@ -52,42 +52,78 @@ open htmlcov/index.html
 - ✅ Critical paths should have >90% coverage
 - ⚠️ Some integration tests may require mocks for external services
 
-### 3. Linting & Code Style
+### 3. Static Analysis & Code Quality
 
-Ensure code follows project standards:
+Run comprehensive static analysis to ensure code quality:
 
 ```bash
-# Check code style with Black (currently not installed)
-# black src/ tests/ --check
+# Install all quality tools (if not already installed)
+pip install black isort flake8 pylint mypy bandit safety pre-commit
 
-# Lint with Ruff (currently not installed)  
-# ruff check src/ tests/
+# Install pre-commit hooks (recommended for automated checks)
+pre-commit install
 
-# For now, verify manually or install:
-# pip install black ruff
+# Run all quality checks at once
+pre-commit run --all-files
+
+# Or run individual checks manually:
 ```
 
-### 4. Type Checking (Optional)
-
-If using type hints:
+#### Code Formatting & Style
 
 ```bash
-# Install mypy if not already installed
-# pip install mypy
+# Format code with Black (100 char line length)
+black src/ tests/ database/
 
-# Run type checker
-# mypy src/
+# Sort imports with isort (compatible with Black)
+isort src/ tests/ database/
+
+# Check formatting without making changes
+black --check --diff src/ tests/ database/
+isort --check-only --diff src/ tests/ database/
+```
+
+#### Linting & Quality Analysis
+
+```bash
+# Fast linting with flake8 (PEP8 + PyFlakes + McCabe)
+flake8 src/ tests/ database/
+
+# Comprehensive analysis with pylint
+pylint src/ tests/ database/
+
+# Security vulnerability scanning
+bandit -r src/ database/
+
+# Dependency vulnerability scanning
+safety check
+```
+
+#### Type Checking
+
+```bash
+# Run type checking with strict settings
+mypy src/ database/
+
+# Run with detailed error codes
+mypy src/ database/ --show-error-codes
+
+# Check specific problematic files
+mypy src/server.py --ignore-missing-imports
 ```
 
 ### 5. Import Validation
 
-Verify all imports work correctly:
+Verify all imports work correctly and are properly sorted:
 
 ```bash
 # Test that modules can be imported
 python -c "from src.tools import process_audio_complete; print('✅ Imports OK')"
 python -c "from database import save_audio_metadata; print('✅ Database imports OK')"
 python -c "from src.downloader import download_from_url; print('✅ Downloader imports OK')"
+
+# Verify import sorting is consistent
+isort --check-only --diff src/ tests/
 ```
 
 ### 6. Quick Smoke Test
@@ -267,6 +303,7 @@ Before creating your PR, ensure:
 - [ ] Existing tests still pass
 - [ ] Documentation updated (if applicable)
 - [ ] Commit messages are clear and descriptive
+- [ ] **CI/CD will run**: Automated testing on push to `main` (production) or `dev` (staging)
 
 ## 🎯 Recommended Pre-PR Test Commands
 
@@ -296,14 +333,21 @@ python -m py_compile src/tools/*.py
 
 Your local tests should match what runs in CI/CD:
 
-| Test Type | Local | CI/CD |
-|-----------|-------|-------|
-| Unit Tests | ✅ Run locally | ✅ Run in CI |
-| Integration Tests (mocked) | ✅ Run locally | ✅ Run in CI |
-| Database Tests | ⚠️ May fail (no DB) | ✅ Run in CI (Cloud SQL) |
-| Storage Tests | ⚠️ May fail (no GCS) | ✅ Run in CI (GCS access) |
+| Test Type | Local | CI/CD Production | CI/CD Staging |
+|-----------|-------|------------------|---------------|
+| Unit Tests | ✅ Run locally | ✅ Run in CI | ✅ Run in CI |
+| Integration Tests (mocked) | ✅ Run locally | ✅ Run in CI | ✅ Run in CI |
+| Database Tests | ⚠️ May fail (no DB) | ✅ Run in CI (Cloud SQL) | ✅ Run in CI (Staging DB) |
+| Storage Tests | ⚠️ May fail (no GCS) | ✅ Run in CI (GCS) | ✅ Run in CI (Staging GCS) |
+| Static Analysis | ✅ Run locally | ✅ **Required** (fails build) | ⚠️ **Warns** (continues) |
+| Security Scanning | ✅ Run locally | ✅ **Required** (fails build) | ⚠️ **Warns** (continues) |
+| Coverage Check | ✅ Run locally | ✅ **80% minimum** (fails build) | ⚠️ **70% minimum** (warns) |
 
-**Tip:** Focus on unit and mocked integration tests locally. Full integration tests will run in CI/CD with proper infrastructure.
+**Quality Gates:**
+- **Production**: Tests must pass, 80%+ coverage, no static analysis errors
+- **Staging**: Tests can fail but warn, 70%+ coverage recommended, static analysis warnings allowed
+
+**Tip:** Focus on unit and mocked integration tests locally. Full integration tests will run in CI/CD with proper infrastructure. See [Testing Practices Guide](./testing-practices-guide.md) for detailed CI/CD pipeline information.
 
 ## 🔍 Debugging Failed Tests
 

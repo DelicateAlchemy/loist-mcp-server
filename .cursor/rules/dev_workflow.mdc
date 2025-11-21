@@ -31,18 +31,18 @@ Task Master offers two primary ways to interact:
 -   Start new projects by running `initialize_project` tool / `task-master init` or `parse_prd` / `task-master parse-prd --input='<prd-file.txt>'` (see [`taskmaster.mdc`](mdc:.cursor/rules/taskmaster.mdc)) to generate initial tasks.json
 -   Begin coding sessions with `get_tasks` / `task-master list` (see [`taskmaster.mdc`](mdc:.cursor/rules/taskmaster.mdc)) to see current tasks, status, and IDs
 -   Determine the next task to work on using `next_task` / `task-master next` (see [`taskmaster.mdc`](mdc:.cursor/rules/taskmaster.mdc)).
--   Analyze task complexity with `analyze_project_complexity` / `task-master analyze-complexity --research` (see [`taskmaster.mdc`](mdc:.cursor/rules/taskmaster.mdc)) before breaking down tasks
+-   Analyze task complexity with `analyze_project_complexity` / `task-master analyze-complexity` (see [`taskmaster.mdc`](mdc:.cursor/rules/taskmaster.mdc)) before breaking down tasks
 -   Review complexity report using `complexity_report` / `task-master complexity-report` (see [`taskmaster.mdc`](mdc:.cursor/rules/taskmaster.mdc)).
 -   Select tasks based on dependencies (all marked 'done'), priority level, and ID order
 -   Clarify tasks by checking task files in tasks/ directory or asking for user input
 -   View specific task details using `get_task` / `task-master show <id>` (see [`taskmaster.mdc`](mdc:.cursor/rules/taskmaster.mdc)) to understand implementation requirements
--   Break down complex tasks using `expand_task` / `task-master expand --id=<id> --force --research` (see [`taskmaster.mdc`](mdc:.cursor/rules/taskmaster.mdc)) with appropriate flags like `--force` (to replace existing subtasks) and `--research`.
+-   Break down complex tasks using `expand_task` / `task-master expand --id=<id> --force` (see [`taskmaster.mdc`](mdc:.cursor/rules/taskmaster.mdc)) with appropriate flags like `--force` (to replace existing subtasks).
 -   Clear existing subtasks if needed using `clear_subtasks` / `task-master clear-subtasks --id=<id>` (see [`taskmaster.mdc`](mdc:.cursor/rules/taskmaster.mdc)) before regenerating
 -   Implement code following task details, dependencies, and project standards
 -   Verify tasks according to test strategies before marking as complete (See [`tests.mdc`](mdc:.cursor/rules/tests.mdc))
 -   Mark completed tasks with `set_task_status` / `task-master set-status --id=<id> --status=done` (see [`taskmaster.mdc`](mdc:.cursor/rules/taskmaster.mdc))
 -   Update dependent tasks when implementation differs from original plan using `update` / `task-master update --from=<id> --prompt="..."` or `update_task` / `task-master update-task --id=<id> --prompt="..."` (see [`taskmaster.mdc`](mdc:.cursor/rules/taskmaster.mdc))
--   Add new tasks discovered during implementation using `add_task` / `task-master add-task --prompt="..." --research` (see [`taskmaster.mdc`](mdc:.cursor/rules/taskmaster.mdc)).
+-   Add new tasks discovered during implementation using `add_task` / `task-master add-task --prompt="..."` (see [`taskmaster.mdc`](mdc:.cursor/rules/taskmaster.mdc)).
 -   Add new subtasks as needed using `add_subtask` / `task-master add-subtask --parent=<id> --title="..."` (see [`taskmaster.mdc`](mdc:.cursor/rules/taskmaster.mdc)).
 -   Append notes or details to subtasks using `update_subtask` / `task-master update-subtask --id=<subtaskId> --prompt='Add implementation notes here...\nMore details...'` (see [`taskmaster.mdc`](mdc:.cursor/rules/taskmaster.mdc)).
 -   Generate task files with `generate` / `task-master generate` (see [`taskmaster.mdc`](mdc:.cursor/rules/taskmaster.mdc)) after updating tasks.json
@@ -52,7 +52,7 @@ Task Master offers two primary ways to interact:
 
 ## Task Complexity Analysis
 
--   Run `analyze_project_complexity` / `task-master analyze-complexity --research` (see [`taskmaster.mdc`](mdc:.cursor/rules/taskmaster.mdc)) for comprehensive analysis
+-   Run `analyze_project_complexity` / `task-master analyze-complexity` (see [`taskmaster.mdc`](mdc:.cursor/rules/taskmaster.mdc)) for comprehensive analysis
 -   Review complexity report via `complexity_report` / `task-master complexity-report` (see [`taskmaster.mdc`](mdc:.cursor/rules/taskmaster.mdc)) for a formatted, readable version.
 -   Focus on tasks with highest complexity scores (8-10) for detailed breakdown
 -   Use analysis results to determine appropriate subtask allocation
@@ -62,11 +62,11 @@ Task Master offers two primary ways to interact:
 
 -   Use `expand_task` / `task-master expand --id=<id>`. It automatically uses the complexity report if found, otherwise generates default number of subtasks.
 -   Use `--num=<number>` to specify an explicit number of subtasks, overriding defaults or complexity report recommendations.
--   Add `--research` flag to leverage Perplexity AI for research-backed expansion.
+-   <!-- Add `--research` flag to leverage Perplexity AI for research-backed expansion. -->
 -   Add `--force` flag to clear existing subtasks before generating new ones (default is to append).
 -   Use `--prompt="<context>"` to provide additional context when needed.
 -   Review and adjust generated subtasks as necessary.
--   Use `expand_all` tool or `task-master expand --all` to expand multiple pending tasks at once, respecting flags like `--force` and `--research`.
+-   Use `expand_all` tool or `task-master expand --all` to expand multiple pending tasks at once, respecting flags like `--force`.
 -   If subtasks need complete replacement (regardless of the `--force` flag on `expand`), clear them first with `clear_subtasks` / `task-master clear-subtasks --id=<id>`.
 
 ## Implementation Drift Handling
@@ -74,8 +74,8 @@ Task Master offers two primary ways to interact:
 -   When implementation differs significantly from planned approach
 -   When future tasks need modification due to current implementation choices
 -   When new dependencies or requirements emerge
--   Use `update` / `task-master update --from=<futureTaskId> --prompt='<explanation>\nUpdate context...' --research` to update multiple future tasks.
--   Use `update_task` / `task-master update-task --id=<taskId> --prompt='<explanation>\nUpdate context...' --research` to update a single specific task.
+-   Use `update` / `task-master update --from=<futureTaskId> --prompt='<explanation>\nUpdate context...'` to update multiple future tasks.
+-   Use `update_task` / `task-master update-task --id=<taskId> --prompt='<explanation>\nUpdate context...'` to update a single specific task.
 
 ## Task Status Management
 
@@ -98,6 +98,21 @@ Task Master offers two primary ways to interact:
 - **testStrategy**: Verification approach (Example: `"Deploy and call endpoint to confirm 'Hello World' response."`) 
 - **subtasks**: List of smaller, more specific tasks (Example: `[{"id": 1, "title": "Configure OAuth", ...}]`) 
 - Refer to task structure details (previously linked to `tasks.mdc`).
+
+## CLI Authentication Best Practices
+
+### **Google Cloud CLI Authentication**
+- **Preferred Method**: Use `gcloud auth login` (opens browser automatically)
+- **Avoid**: `gcloud auth login --no-launch-browser` (causes authentication issues in non-interactive environments)
+- **When to Use**: Always prefer the standard `gcloud auth login` command for better user experience and reliability
+- **Service Account**: Use `gcloud config set account <service-account>` when switching between personal and service accounts
+
+### **Authentication Workflow**
+1. Run `gcloud auth login` to open browser authentication
+2. Complete authentication in browser
+3. Verify with `gcloud auth list` to see active accounts
+4. Set project with `gcloud config set project <project-id>`
+5. Switch accounts as needed with `gcloud config set account <account>`
 
 ## Configuration Management (Updated)
 

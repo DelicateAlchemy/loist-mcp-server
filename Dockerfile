@@ -25,7 +25,7 @@ RUN pip install --upgrade pip && \
 # ============================================================================
 # Stage 2: Runtime - Minimal production image
 # ============================================================================
-FROM python:3.11-slim
+FROM python:3.11-slim AS runtime
 
 WORKDIR /app
 
@@ -33,6 +33,8 @@ WORKDIR /app
 RUN apt-get update && \
     apt-get install --no-install-recommends -y \
     ca-certificates \
+    libimage-exiftool-perl \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user for security
@@ -50,6 +52,11 @@ RUN pip install --no-cache-dir --find-links=/wheels -r requirements.txt && \
 
 # Copy application code
 COPY --chown=fastmcpuser:fastmcpuser src/ ./src/
+COPY --chown=fastmcpuser:fastmcpuser database/ ./database/
+COPY --chown=fastmcpuser:fastmcpuser run_server.py ./
+
+# Copy templates directory
+COPY --chown=fastmcpuser:fastmcpuser templates/ ./templates/
 
 # Switch to non-root user
 USER fastmcpuser
@@ -57,6 +64,7 @@ USER fastmcpuser
 # Environment variables (can be overridden at runtime)
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app \
     SERVER_HOST=0.0.0.0 \
     SERVER_PORT=8080 \
     LOG_LEVEL=INFO
@@ -68,7 +76,6 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import sys; sys.path.insert(0, 'src'); from server import mcp; print('healthy')" || exit 1
 
-# Keep container running for STDIO mode (server started via docker exec)
-# For HTTP mode, use: docker exec music-library-mcp python src/server.py
-CMD ["tail", "-f", "/dev/null"]
+# Run the FastMCP server using the runner script
+CMD ["python", "run_server.py"]
 

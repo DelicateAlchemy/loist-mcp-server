@@ -351,3 +351,59 @@ def execute_raw_command(query: str, params: tuple = None, commit: bool = True) -
             if commit:
                 conn.commit()
 
+
+def check_database_availability() -> Dict[str, Any]:
+    """
+    Check database connectivity and health.
+
+    Returns:
+        Dict with availability status, connection type, response time, and error info
+    """
+    import time
+    from .config import get_db_manager
+
+    start_time = time.time()
+    error_message = None
+
+    try:
+        db_manager = get_db_manager()
+
+        # Try to get a connection and run a simple query
+        conn = db_manager.get_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+                result = cur.fetchone()
+
+                # Check if we got a valid result
+                if result and result[0] == 1:
+                    response_time = int((time.time() - start_time) * 1000)  # Convert to milliseconds
+                    db_manager.return_connection(conn)
+
+                    return {
+                        "available": True,
+                        "connection_type": "postgresql_pool",
+                        "response_time_ms": response_time,
+                        "error": None
+                    }
+                else:
+                    error_message = "Invalid response from database"
+
+        except Exception as e:
+            error_message = str(e)
+        finally:
+            if conn:
+                db_manager.return_connection(conn)
+
+    except Exception as e:
+        error_message = str(e)
+
+    # Return failure status
+    response_time = int((time.time() - start_time) * 1000)
+    return {
+        "available": False,
+        "connection_type": "postgresql_pool",
+        "response_time_ms": response_time,
+        "error": error_message
+    }
+

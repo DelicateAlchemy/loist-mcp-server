@@ -1,0 +1,230 @@
+---
+description: Guidelines for leveraging Perplexity AI research during task implementation to access latest documentation and information beyond training data
+globs: **/*
+alwaysApply: true
+---
+
+# Perplexity Research Integration
+
+**Always leverage `perplexity-ask` MCP tools during subtask implementation to access current documentation and research beyond training data.**
+
+## When to Use Perplexity Research
+
+### **During Initial Exploration & Planning**
+- **Before implementation**: Research latest documentation for frameworks, libraries, or tools being used
+- **Version compatibility**: Check for breaking changes, deprecations, or new features in dependencies
+- **Best practices**: Get current recommendations for patterns, security practices, or performance optimizations
+
+### **When Encountering Implementation Challenges**
+- **Error resolution**: Research specific error messages or known issues
+- **API changes**: Verify current API signatures, parameters, or authentication methods
+- **Framework updates**: Check for new features or changed behavior in rapidly evolving frameworks
+
+### **Before Making Architectural Decisions**
+- **Technology evaluation**: Research pros/cons of different approaches or libraries
+- **Security considerations**: Get latest security best practices and vulnerability information
+- **Performance patterns**: Research current optimization techniques and benchmarks
+
+## How to Use Perplexity Research
+
+### **Research Query Patterns**
+
+#### **Framework/Libary Research**
+```bash
+# ✅ Good: Specific version and use case
+"Latest FastMCP v2.12.4 features and best practices for MCP server development"
+
+# ✅ Good: Current documentation request
+"Current Docker security best practices and multi-stage build patterns 2025"
+
+# ❌ Bad: Too vague
+"FastMCP documentation"
+```
+
+#### **Error Resolution**
+```bash
+# ✅ Good: Include error context
+"psutil pip install failure on Alpine Linux: 'linux/ethtool.h: No such file or directory' - solutions for FastMCP Docker builds"
+
+# ✅ Good: Include environment details
+"Cloud Run health check timeout after 30s - troubleshooting steps for containerized MCP servers"
+```
+
+#### **Implementation Guidance**
+```bash
+# ✅ Good: Specific use case
+"Google Cloud Storage signed URL generation in Python - current best practices and security considerations"
+
+# ✅ Good: Architecture decision
+"PostgreSQL connection pooling for Cloud Run serverless applications - current recommendations"
+```
+
+### **Research Integration Workflow**
+
+#### **1. Initial Research (Before Implementation)**
+```bash
+# Use perplexity_ask for general information (maps to Search models)
+# Use perplexity_research for comprehensive deep research (maps to Research models)
+# Use perplexity_reason for complex decision-making (maps to Reasoning models)
+```
+
+### **Choosing the Right Perplexity Model**
+
+#### **Search Models (`perplexity_ask`)**
+- **Best For**: Quick factual queries, documentation lookups, API references, current events
+- **Strengths**: Fast, cost-effective, efficient information retrieval and synthesis
+- **Weaknesses**: Not ideal for multi-step analysis or exhaustive research
+- **Use When**: Need quick answers, checking documentation, basic implementation details
+- **Query Style**: Specific, focused questions with version numbers and context
+
+#### **Reasoning Models (`perplexity_reason`)**
+- **Best For**: Complex analysis, step-by-step problem solving, logical decision-making
+- **Strengths**: Excellent at multi-step tasks, structured reasoning, informed recommendations
+- **Weaknesses**: Not for simple factual queries or exhaustive broad research
+- **Use When**: Architectural decisions, complex implementation choices, troubleshooting logic
+- **Query Style**: Include constraints, requirements, and specific decision criteria
+
+#### **Research Models (`perplexity_research`)**
+- **Best For**: Comprehensive reports, in-depth analysis, exhaustive web research
+- **Strengths**: Detailed synthesis, comprehensive coverage, market analysis, literature reviews
+- **Weaknesses**: Slower, more expensive, overkill for simple questions
+- **Use When**: Technology evaluations, security assessments, performance optimization research
+- **Query Style**: Broad topics with specific scope, include sources to cross-reference, request comparisons
+
+### **Context to Provide Each Model**
+
+#### **For Search Models (perplexity_ask)**:
+- **Technical Context**: Framework/library versions, platform/environment details
+- **Specific Question**: Clear, focused query with exact requirements
+- **Current Setup**: What you're currently using or trying to implement
+- **Constraints**: Time, budget, or technical limitations
+
+#### **For Reasoning Models (perplexity_reason)**:
+- **Decision Criteria**: What factors matter most for your decision
+- **Requirements**: Must-have vs nice-to-have features
+- **Constraints**: Technical, business, or operational limitations
+- **Options**: List specific alternatives you're considering
+- **Evaluation Framework**: How you'll measure success
+
+#### **For Research Models (perplexity_research)**:
+- **Scope Boundaries**: What to include/exclude from the research
+- **Depth Requirements**: How comprehensive the analysis should be
+- **Sources**: Specific documentation, articles, or data sources to prioritize
+- **Stakeholder Context**: Who will use this information and how
+- **Timeline**: When you need this information and how it will be used
+
+#### **2. Log Research Findings**
+- **Use `update_subtask`** to document research findings in task details
+- **Include citations** and version information
+- **Note any conflicts** between research and existing codebase patterns
+
+#### **3. Implementation with Research**
+- **Reference research** in code comments when implementing researched patterns
+- **Validate assumptions** against research findings
+- **Document deviations** from research recommendations
+
+#### **4. Update Rules if Needed**
+- **Identify new patterns** that should become Cursor rules
+- **Update existing rules** based on current best practices
+- **Create new rules** for emerging patterns
+
+## Research Quality Guidelines
+
+### **✅ DO**
+- **Be specific**: Include versions, platforms, and use cases
+- **Include context**: Mention your current setup and constraints
+- **Ask for current information**: Specify "latest", "current", or date ranges
+- **Request comparisons**: Ask for pros/cons of different approaches
+- **Follow up**: Ask clarifying questions based on initial research
+
+### **❌ DON'T**
+- **Assume currency**: Don't rely on training data for rapidly changing technologies
+- **Skip research**: Never implement without researching current documentation
+- **Ignore conflicts**: Always resolve conflicts between research and existing patterns
+- **Forget documentation**: Always document research findings in subtasks
+
+## Integration with Task-Master Workflow
+
+### **Research Timing**
+- **Before `set_task_status --status=in-progress`**: Complete initial research
+- **During implementation**: Research as needed for specific challenges
+- **Before `set_task_status --status=done`**: Validate implementation against current best practices
+
+### **Documentation Requirements**
+- **Log all research** in subtask details using `update_subtask`
+- **Include sources** and version information
+- **Note decisions** made based on research
+- **Document conflicts** and resolution approaches
+
+### **Rule Updates**
+- **After implementation**: Review if research revealed new patterns needing rules
+- **Create/update rules**: Use `self_improve.mdc` guidelines for rule creation
+- **Cross-reference**: Link new rules to research sources
+
+## Common Research Scenarios
+
+### **Framework Updates**
+- **React/Next.js**: Rapidly evolving, research before implementation
+- **Docker/Kubernetes**: Best practices change frequently
+- **Cloud services**: New features and pricing models
+
+### **Security Research**
+- **Authentication**: Latest OAuth, JWT, or custom auth patterns
+- **Dependencies**: Check for vulnerabilities and updates
+- **Infrastructure**: Current security best practices
+
+### **Performance Optimization**
+- **Database**: Latest indexing, connection pooling, query optimization
+- **Caching**: Current Redis, CDN, or in-memory caching patterns
+- **CDN/Edge**: Latest edge computing and distribution strategies
+
+## Example Research Workflows
+
+### **Technology Implementation Research**
+```bash
+# 1. Initial research - Search Model for current documentation
+perplexity_ask: "Latest Google Cloud Run best practices for Python MCP servers 2025 - include memory limits, health checks, and environment variables"
+
+# 2. Decision analysis - Reasoning Model for architectural choices
+perplexity_reason: "Should I use Cloud Run or Cloud Functions for a Python MCP server? Compare based on: startup time, concurrency limits, cost for low-traffic API, integration with Cloud SQL and GCS"
+
+# 3. Implementation research - Research Model for comprehensive setup
+perplexity_research: "Complete guide to deploying Python FastMCP servers on Cloud Run with PostgreSQL and GCS integration. Include security best practices, environment configuration, and monitoring setup"
+
+# 4. Log findings in subtask
+update_subtask --id=12.1 --prompt="Research completed: Cloud Run deployment analysis shows [key findings]. Chose Cloud Run over Cloud Functions due to [reasons]. Implementation plan: [details]"
+
+# 5. Implementation with research guidance
+# (implement based on research findings)
+```
+
+### **Framework Migration Research**
+```bash
+# 1. Current state assessment - Search Model
+perplexity_ask: "Breaking changes in FastMCP v2.12.4 vs v2.11.x for MCP server development"
+
+# 2. Migration strategy - Reasoning Model
+perplexity_reason: "Plan migration from FastMCP v2.11 to v2.12.4. Consider: authentication changes, API modifications, testing requirements, rollback plan"
+
+# 3. Comprehensive impact analysis - Research Model
+perplexity_research: "Complete FastMCP v2.12.4 migration guide including OAuth proxy setup, declarative configuration, and new authentication providers"
+
+# 4. Document migration plan in subtask
+update_subtask --id=8.2 --prompt="Migration research: FastMCP v2.12.4 introduces [changes]. Migration strategy: [approach]. Potential issues: [concerns]. Testing plan: [strategy]"
+```
+
+### **Security Research**
+```bash
+# 1. Current threat assessment - Search Model
+perplexity_ask: "Latest security vulnerabilities in psutil Python library for Alpine Linux containers"
+
+# 2. Security decision framework - Reasoning Model
+perplexity_reason: "Choose between Alpine + Distroless vs Ubuntu base images for Python MCP server. Evaluate security, size, compatibility, and performance trade-offs"
+
+# 3. Comprehensive security audit - Research Model
+perplexity_research: "Security best practices for containerized Python MCP servers on Cloud Run including vulnerability scanning, secret management, and runtime hardening"
+```
+
+---
+
+**Critical**: Research is mandatory for any technology with rapidly evolving documentation. Never implement based solely on training data for frameworks like FastMCP, Docker, Kubernetes, or cloud services.

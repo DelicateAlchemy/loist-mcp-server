@@ -60,10 +60,6 @@ env/
 # OS specific
 .DS_Store
 
-# Task files
-# tasks.json
-# tasks/ 
-
 # Google Cloud credentials
 service-account-key.json
 *-service-account*.json
@@ -72,3 +68,7 @@ gcloud.json
 
 # Database credentials
 .env.database
+
+# Task files
+# tasks.json
+# tasks/ 

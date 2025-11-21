@@ -1,0 +1,169 @@
+---
+description: MCP server connection management when Docker containers restart during development
+globs: docker-compose.yml, src/**/*.py, .cursor/mcp.json
+alwaysApply: true
+---
+
+# MCP Server Connection Management
+
+**Always restart MCP client connections after Docker container changes to avoid session timeout errors.**
+
+## Connection Lifecycle Issues
+
+### **Problem: Session Persistence**
+- MCP servers maintain session state that becomes invalid when containers restart
+- Clients (Cursor/Claude Desktop) attempt to reuse stale sessions
+- Results in "400 Bad Request: No valid session ID provided" errors
+- Requires manual client restart to establish new connection
+
+### **Problem: Development Workflow Disruption**
+- Frequent container rebuilds during development (code changes, dependency updates)
+- Each rebuild invalidates existing MCP sessions
+- Developers waste time troubleshooting "broken" MCP tools
+- Interruptive to rapid iteration cycles
+
+## Connection Management Workflow
+
+### **Before Container Changes**
+```bash
+# ✅ GOOD: Graceful shutdown maintains clean state
+docker-compose down
+
+# ❌ BAD: Force restart leaves dangling sessions
+docker-compose restart
+```
+
+### **After Container Changes**
+```bash
+# 1. Start container
+docker-compose up -d --build
+
+# 2. Wait for health check
+curl -s http://localhost:8080/health/ready | jq .status
+# Should return: "ready"
+
+# 3. 🔄 RESTART MCP CLIENT (Critical)
+# - Cursor: Cmd/Ctrl + Shift + P → "Developer: Reload Window"
+# - Claude Desktop: Restart application
+# - VS Code: Reload window or restart extension host
+```
+
+### **Connection Verification**
+```bash
+# Test MCP tools after restart
+# Should work without "session ID" errors
+mcp_loist-music-library-local_search_library(query="test")
+```
+
+## Development Best Practices
+
+### **✅ DO: Plan for Connection Resets**
+
+**Container Rebuild Checklist:**
+- [ ] Save current work (git commit if needed)
+- [ ] Note any in-progress MCP operations
+- [ ] Execute: `docker-compose down`
+- [ ] Make code/config changes
+- [ ] Execute: `docker-compose up -d --build`
+- [ ] Wait for health checks to pass
+- [ ] **Restart MCP client** (Cursor/Claude Desktop)
+- [ ] Resume work with fresh MCP session
+
+### **✅ DO: Use Health Checks**
+
+**Verify container readiness before MCP operations:**
+```bash
+# Health check endpoints
+curl http://localhost:8080/health/ready    # Overall status
+curl http://localhost:8080/health/database # Database connectivity
+
+# Only proceed with MCP tools after both return 200 OK
+```
+
+### **❌ DON'T: Ignore Session Errors**
+
+**When you see these errors:**
+```
+"400 Bad Request: No valid session ID provided"
+"Error POSTing to endpoint (HTTP 400)"
+"MCP connection timeout"
+```
+
+**Solution:** Restart MCP client, don't troubleshoot code.
+
+## Troubleshooting Guide
+
+### **Symptom: Persistent 400 Errors**
+```bash
+# Check container status
+docker-compose ps
+# Should show: Up (healthy)
+
+# Check logs for session issues
+docker-compose logs mcp-server --tail=20
+# Look for: "Created new transport with session ID"
+
+# If logs show successful session creation but client fails:
+# → RESTART MCP CLIENT (Cursor/Claude Desktop)
+```
+
+### **Symptom: Health Checks Pass But MCP Fails**
+```bash
+# Container is healthy but MCP client can't connect
+curl http://localhost:8080/health/ready  # Returns 200
+mcp_loist-music-library-local_health_check  # Returns session error
+
+# Solution: MCP client needs restart after container changes
+```
+
+### **Symptom: Tools Work But Return Stale Data**
+```bash
+# Container restarted but client using cached session
+# Data reflects old state, not new container
+
+# Solution: Fresh MCP session required after container rebuilds
+```
+
+## Integration with Development Workflow
+
+### **Container Development Cycle**
+```bash
+# Development session start
+docker-compose up -d
+# → MCP client connects automatically
+
+# Code changes requiring rebuild
+docker-compose down
+# → Make changes to src/, docker-compose.yml, etc.
+docker-compose up -d --build
+# → RESTART MCP CLIENT (required)
+# → Resume development with fresh session
+```
+
+### **Team Coordination**
+- **Document container rebuilds** in commit messages
+- **Communicate MCP client restarts** to team members
+- **Use health checks** in CI/CD to verify MCP readiness
+
+## Technical Implementation Notes
+
+### **Session Management**
+- MCP uses HTTP/2 Server-Sent Events (SSE) for persistent connections
+- Session IDs are generated per transport connection
+- Container restarts invalidate all existing sessions
+- No automatic reconnection in current MCP client implementations
+
+### **Client-Side Handling**
+- Cursor maintains MCP connections across window reloads when possible
+- Complete application restart required when sessions become stale
+- Connection pooling not currently implemented in MCP clients
+
+## Related Rules
+
+- **[Development Workflow](mdc:.cursor/rules/dev_workflow.mdc)** - Overall development process
+- **[Cloud SQL Optimization](mdc:.cursor/rules/cloud-sql-optimization.mdc)** - Database connection management
+- **[Task Master](mdc:.cursor/rules/taskmaster.mdc)** - Task management integration
+
+---
+
+**Remember**: Container rebuilds = MCP client restart. This is normal MCP behavior, not a bug in your code.

@@ -90,11 +90,12 @@ class AudioSource(BaseModel):
 class ProcessingOptions(BaseModel):
     """
     Processing options for audio ingestion.
-    
+
     Attributes:
         maxSizeMB: Maximum file size in megabytes (default: 100MB)
         timeout: Download timeout in seconds (default: 300s)
         validateFormat: Whether to validate audio format (default: True)
+        timezone: User's timezone for timestamp interpretation (default: UTC)
     """
     maxSizeMB: float = Field(
         default=100.0,
@@ -111,6 +112,11 @@ class ProcessingOptions(BaseModel):
     validateFormat: bool = Field(
         default=True,
         description="Whether to validate audio format"
+    )
+    timezone: str = Field(
+        default="UTC",
+        description="User's timezone for timestamp interpretation (IANA timezone name)",
+        pattern=r"^[A-Za-z][A-Za-z0-9/_+-]+$"
     )
 
 

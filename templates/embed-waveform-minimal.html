@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ metadata.Product.Title }} - Loist Music Library</title>
+
+    <!-- oEmbed Discovery -->
+    <link rel="alternate" type="application/json+oembed"
+          href="{{ embed_base_url }}/oembed?url={{ embed_base_url }}/embed/{{ audio_id }}&format=json"
+          title="{{ metadata.Product.Title }}" />
+
+    <!-- Open Graph Meta Tags -->
+    <meta property="og:type" content="music.song" />
+    <meta property="og:title" content="{{ metadata.Product.Title }}" />
+    <meta property="og:description" content="{{ metadata.Product.Artist }}{% if metadata.Product.Album %} - {{ metadata.Product.Album }}{% endif %}" />
+    <meta property="og:audio" content="{{ stream_url }}" />
+    <meta property="og:audio:type" content="{{ mime_type }}" />
+    {% if thumbnail_url %}
+    <meta property="og:image" content="{{ thumbnail_url }}" />
+    {% endif %}
+    <meta property="og:url" content="https://loist.io/embed/{{ audio_id }}" />
+    <meta property="og:site_name" content="Loist Music Library" />
+
+    <!-- Styles -->
+    <style>
+        :root {
+            --waveform-bg: #F5F5F5;
+            --waveform-fill: #4A90E2;
+            --waveform-progress: #357ABD;
+            --background: #FFFFFF;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            background-color: var(--background);
+            margin: 0;
+            padding: 8px;
+            overflow: hidden;
+        }
+
+        .waveform-wrapper {
+            width: 100%;
+            height: 100vh;
+            min-height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .waveform-container {
+            width: 100%;
+            height: 80px;
+            background-color: var(--waveform-bg);
+            border-radius: 4px;
+            position: relative;
+            overflow: hidden;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .waveform-container:hover {
+            opacity: 0.9;
+        }
+
+        .waveform-container:active {
+            opacity: 0.8;
+        }
+
+        .waveform-svg {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .waveform-path {
+            fill: var(--waveform-fill);
+            stroke: none;
+        }
+
+        .waveform-progress-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            background-color: rgba(74, 144, 226, 0.15);
+            width: 0%;
+            pointer-events: none;
+            transition: width 0.1s ease;
+        }
+
+        .waveform-progress-line {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background-color: var(--waveform-progress);
+            left: 0%;
+            transition: left 0.1s ease;
+            pointer-events: none;
+        }
+
+        /* Loading state */
+        .loading {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+
+        /* Error state */
+        .error-message {
+            background-color: #FEE;
+            color: #C33;
+            padding: 12px;
+            border-radius: 6px;
+            text-align: center;
+            font-size: 14px;
+            margin: 8px;
+        }
+
+        /* Fallback progress bar (when no waveform) */
+        .progress-container {
+            width: 100%;
+            height: 80px;
+            background-color: var(--waveform-bg);
+            border-radius: 4px;
+            position: relative;
+            cursor: pointer;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background-color: var(--waveform-fill);
+            border-radius: 4px;
+            width: 0%;
+            transition: width 0.1s ease;
+            opacity: 0.3;
+        }
+
+        /* Accessibility */
+        .waveform-container:focus-visible,
+        .progress-container:focus-visible {
+            outline: 2px solid var(--waveform-fill);
+            outline-offset: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div class="waveform-wrapper" role="region" aria-label="Minimal waveform audio player">
+        <!-- HTML5 Audio Element (hidden, controlled by custom UI) -->
+        <audio id="audio-player" preload="metadata" style="display: none;">
+            <source src="{{ stream_url }}" type="{{ mime_type }}">
+            Your browser does not support the audio element.
+        </audio>
+
+        {% if waveform_available and waveform_url %}
+        <div id="waveform-container"
+             class="waveform-container"
+             role="button"
+             aria-label="Play/Pause audio"
+             {% if interactive_mode %}tabindex="0"{% endif %}>
+            <!-- Waveform SVG will be loaded here -->
+            <div id="waveform-progress-overlay" class="waveform-progress-overlay"></div>
+            <div id="waveform-progress-line" class="waveform-progress-line"></div>
+        </div>
+        {% else %}
+        <!-- Fallback progress bar when no waveform -->
+        <div id="progress-container"
+             class="progress-container"
+             role="button"
+             aria-label="Play/Pause audio"
+             tabindex="0">
+            <div id="progress-bar" class="progress-bar"></div>
+        </div>
+        {% endif %}
+
+        <!-- Error message container -->
+        <div id="error-message" class="error-message" style="display: none;" role="alert"></div>
+    </div>
+
+    <!-- JavaScript for Minimal Waveform Player -->
+    <script>
+        (function() {
+            'use strict';
+
+            // Configuration
+            const isInteractive = {{ 'true' if interactive_mode else 'false' }};
+            const waveformUrl = {{ (waveform_url or '')|tojson|safe }};
+
+            // Elements
+            const audioPlayer = document.getElementById('audio-player');
+            const waveformContainer = document.getElementById('waveform-container');
+            const progressContainer = document.getElementById('progress-container');
+            const waveformProgressOverlay = document.getElementById('waveform-progress-overlay');
+            const waveformProgressLine = document.getElementById('waveform-progress-line');
+            const progressBar = document.getElementById('progress-bar');
+            const errorMessage = document.getElementById('error-message');
+
+            // State
+            let isSeeking = false;
+            let isDragging = false;
+            let waveformSvg = null;
+
+            // Format time (seconds to MM:SS)
+            function formatTime(seconds) {
+                if (!isFinite(seconds)) return '0:00';
+                const mins = Math.floor(seconds / 60);
+                const secs = Math.floor(seconds % 60).toString().padStart(2, '0');
+                return `${mins}:${secs}`;
+            }
+
+            // Load waveform SVG
+            async function loadWaveform() {
+                if (!waveformUrl || !waveformContainer) {
+                    console.log('Waveform URL or container not available');
+                    return;
+                }
+
+                try {
+                    const response = await fetch(waveformUrl, {
+                        method: 'GET',
+                        mode: 'cors',
+                        cache: 'no-cache',
+                        credentials: 'omit'
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`Failed to load waveform: ${response.status} ${response.statusText}`);
+                    }
+
+                    const svgText = await response.text();
+                    waveformContainer.innerHTML = svgText;
+
+                    // Find the SVG element
+                    waveformSvg = waveformContainer.querySelector('svg');
+                    if (waveformSvg) {
+                        waveformSvg.classList.add('waveform-svg');
+                        // Re-add progress overlay and line
+                        waveformContainer.appendChild(waveformProgressOverlay);
+                        waveformContainer.appendChild(waveformProgressLine);
+                    }
+
+                    console.log('Waveform loaded successfully');
+                } catch (error) {
+                    console.error('Failed to load waveform SVG:', error);
+                    showError('Waveform unavailable - using progress bar');
+                }
+            }
+
+            // Toggle play/pause
+            function togglePlayPause() {
+                if (audioPlayer.paused) {
+                    audioPlayer.play().catch(function(error) {
+                        showError('Playback failed: ' + error.message);
+                    });
+                } else {
+                    audioPlayer.pause();
+                }
+            }
+
+            // Update progress
+            audioPlayer.addEventListener('timeupdate', function() {
+                if (!isSeeking && audioPlayer.duration) {
+                    const progress = (audioPlayer.currentTime / audioPlayer.duration) * 100;
+
+                    if (waveformProgressOverlay) {
+                        waveformProgressOverlay.style.width = progress + '%';
+                    }
+                    if (waveformProgressLine) {
+                        waveformProgressLine.style.left = progress + '%';
+                    }
+                    if (progressBar) {
+                        progressBar.style.width = progress + '%';
+                    }
+                }
+            });
+
+            // Seeking functionality
+            function handleSeek(e) {
+                if (!audioPlayer.duration) return;
+
+                const container = waveformContainer || progressContainer;
+                if (!container) return;
+
+                const rect = container.getBoundingClientRect();
+                const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+                audioPlayer.currentTime = pos * audioPlayer.duration;
+            }
+
+            // Handle click to play/pause (called from mouseup if not dragging)
+            function handleClickAfterSeek() {
+                // Only toggle play/pause if not dragging (i.e., quick click)
+                if (!isDragging) {
+                    togglePlayPause();
+                }
+                isDragging = false;
+            }
+
+            // Mouse events for seeking
+            if (isInteractive) {
+                if (waveformContainer) {
+                    waveformContainer.addEventListener('mousedown', function(e) {
+                        isSeeking = true;
+                        isDragging = false;
+                        handleSeek(e);
+                    });
+
+                    waveformContainer.addEventListener('mousemove', function(e) {
+                        if (isSeeking) {
+                            isDragging = true;
+                            handleSeek(e);
+                        }
+                    });
+
+                    waveformContainer.addEventListener('mouseup', function(e) {
+                        handleClickAfterSeek();
+                        isSeeking = false;
+                    });
+
+                    waveformContainer.addEventListener('mouseleave', function() {
+                        isSeeking = false;
+                        isDragging = false;
+                    });
+                }
+
+                if (progressContainer) {
+                    progressContainer.addEventListener('mousedown', function(e) {
+                        isSeeking = true;
+                        isDragging = false;
+                        handleSeek(e);
+                    });
+
+                    progressContainer.addEventListener('mousemove', function(e) {
+                        if (isSeeking) {
+                            isDragging = true;
+                            handleSeek(e);
+                        }
+                    });
+
+                    progressContainer.addEventListener('mouseup', function(e) {
+                        handleClickAfterSeek();
+                        isSeeking = false;
+                    });
+
+                    progressContainer.addEventListener('mouseleave', function() {
+                        isSeeking = false;
+                        isDragging = false;
+                    });
+                }
+            } else {
+                // Non-interactive mode: just click to play/pause
+                if (waveformContainer) {
+                    waveformContainer.addEventListener('click', togglePlayPause);
+                }
+                if (progressContainer) {
+                    progressContainer.addEventListener('click', togglePlayPause);
+                }
+            }
+
+            // Handle audio ended
+            audioPlayer.addEventListener('ended', function() {
+                // Reset progress indicators
+                if (waveformProgressOverlay) waveformProgressOverlay.style.width = '0%';
+                if (waveformProgressLine) waveformProgressLine.style.left = '0%';
+                if (progressBar) progressBar.style.width = '0%';
+            });
+
+            // Error handling
+            audioPlayer.addEventListener('error', function(e) {
+                const error = audioPlayer.error;
+                let message = 'Playback error occurred';
+
+                if (error) {
+                    switch (error.code) {
+                        case error.MEDIA_ERR_ABORTED:
+                            message = 'Playback was aborted';
+                            break;
+                        case error.MEDIA_ERR_NETWORK:
+                            message = 'Network error occurred';
+                            break;
+                        case error.MEDIA_ERR_DECODE:
+                            message = 'Audio decoding failed';
+                            break;
+                        case error.MEDIA_ERR_SRC_NOT_SUPPORTED:
+                            message = 'Audio format not supported';
+                            break;
+                    }
+                }
+
+                showError(message);
+            });
+
+            function showError(message) {
+                errorMessage.textContent = message;
+                errorMessage.style.display = 'block';
+                console.error('Waveform player error:', message);
+                
+                // Hide error after 5 seconds
+                setTimeout(function() {
+                    errorMessage.style.display = 'none';
+                }, 5000);
+            }
+
+            // Global keyboard shortcuts
+            document.addEventListener('keydown', function(e) {
+                // Only handle spacebar for play/pause
+                if (e.code === 'Space' && e.target === document.body) {
+                    e.preventDefault();
+                    togglePlayPause();
+                }
+            });
+
+            // Initialize
+            // Load waveform if available
+            if (waveformUrl) {
+                loadWaveform();
+            }
+
+            // Log player ready
+            console.log('Minimal waveform player initialized for:', '{{ metadata.Product.Title }}');
+            console.log('Interactive mode:', isInteractive);
+        })();
+    </script>
+</body>
+</html>
+

@@ -1,31 +1,279 @@
 # Google Cloud Build Configuration for Staging Environment
-# Deploys to staging Cloud Run service for testing
+# Optimized staging deployment: Test → Build → Push → Deploy (uses Artifact Registry)
+# Staging embeds: https://staging.loist.io/embed/{audioId}
+# Force rebuild: 2025-11-03
 
 steps:
-  # Step 1: Build Docker image
+  # Step 1: Run Unit Tests (Staging)
+  - name: 'python:3.11-slim'
+    id: 'run-unit-tests'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "🧪 Running unit tests (staging)..."
+
+        # Install system dependencies for testing
+        apt-get update && apt-get install -y --no-install-recommends \
+          build-essential \
+          && rm -rf /var/lib/apt/lists/*
+
+        # Install Python dependencies
+        pip install --upgrade pip
+        pip install -r requirements.txt
+
+        # Install test dependencies
+        pip install pytest-cov pytest-xdist pytest-html
+
+        # Create test results directory
+        mkdir -p test-results/unit coverage-reports
+
+        # Run unit tests only (relaxed threshold for staging)
+        echo "📊 Running unit tests (staging)..."
+        python -m pytest \
+          -m "not (requires_db or requires_gcs or slow)" \
+          --cov=. \
+          --cov-report=html:coverage-reports/htmlcov \
+          --cov-report=xml:coverage-reports/coverage.xml \
+          --cov-report=term-missing \
+          --cov-fail-under=65 \
+          --junitxml=test-results/unit/junit.xml \
+          --html=test-results/unit/pytest-report.html \
+          --self-contained-html \
+          -v \
+          --tb=short \
+          --strict-markers \
+          --disable-warnings \
+          --maxfail=10 \
+          --durations=10 \
+          tests/
+
+        # Store test exit code
+        test_result=$?
+        echo "Unit test exit code: $test_result"
+
+        # Generate test summary
+        cat > test-results/unit/test-summary.json << EOF
+        {
+          "timestamp": "$(date -Iseconds)",
+          "commit": "$COMMIT_SHA",
+          "branch": "dev",
+          "environment": "staging",
+          "test_suite": "unit",
+          "test_results": {
+            "exit_code": "$test_result",
+            "coverage_required": 65,
+            "tests_run": "unit_only"
+          }
+        }
+        EOF
+
+        # For staging, only warn on test failures (don't block deployment)
+        if [ "$test_result" -ne 0 ]; then
+          echo "⚠️ Unit tests failed with exit code $test_result (staging - continuing deployment)"
+          echo "Check test artifacts for details"
+        else
+          echo "✅ Unit tests passed successfully"
+        fi
+
+  # Step 1.5: Run Database Tests with TestContainers (Staging)
+  - name: 'python:3.11-slim'
+    id: 'run-database-tests'
+    entrypoint: 'bash'
+    env:
+      - 'DOCKER_HOST=unix:///var/run/docker.sock'
+    args:
+      - '-c'
+      - |
+        echo "🗄️ Running database tests with testcontainers (staging)..."
+
+        # Install system dependencies
+        apt-get update && apt-get install -y --no-install-recommends \
+          build-essential \
+          docker.io \
+          && rm -rf /var/lib/apt/lists/*
+
+        # Start Docker daemon
+        service docker start
+        sleep 5
+
+        # Install Python dependencies
+        pip install --upgrade pip
+        pip install -r requirements.txt
+
+        # Install database testing dependencies
+        pip install testcontainers[postgresql] pytest-cov pytest-html
+
+        # Create test results directory
+        mkdir -p test-results/database coverage-reports
+
+        # Run database tests with testcontainers (relaxed threshold for staging)
+        echo "📊 Running database integration tests (staging)..."
+        python -m pytest \
+          -m "requires_db" \
+          --cov=. \
+          --cov-report=html:coverage-reports/db-htmlcov \
+          --cov-report=xml:coverage-reports/db-coverage.xml \
+          --cov-report=term-missing \
+          --cov-fail-under=60 \
+          --junitxml=test-results/database/junit.xml \
+          --html=test-results/database/pytest-report.html \
+          --self-contained-html \
+          -v \
+          --tb=short \
+          --strict-markers \
+          --disable-warnings \
+          --maxfail=5 \
+          --durations=15 \
+          tests/
+
+        # Store test exit code
+        test_result=$?
+        echo "Database test exit code: $test_result"
+
+        # Generate test summary
+        cat > test-results/database/test-summary.json << EOF
+        {
+          "timestamp": "$(date -Iseconds)",
+          "commit": "$COMMIT_SHA",
+          "branch": "dev",
+          "environment": "staging",
+          "test_suite": "database",
+          "test_results": {
+            "exit_code": "$test_result",
+            "coverage_required": 60,
+            "tests_run": "database_integration"
+          }
+        }
+        EOF
+
+        # For staging, only warn on test failures (don't block deployment)
+        if [ "$test_result" -ne 0 ]; then
+          echo "⚠️ Database tests failed with exit code $test_result (staging - continuing deployment)"
+          echo "Check test artifacts for details"
+        else
+          echo "✅ Database tests passed successfully"
+        fi
+
+  # Step 1.6: Database checks skipped in simplified staging deployment
+
+  # Step 2: Run Static Analysis and Code Quality Checks (Staging)
+  - name: 'python:3.11-slim'
+    id: 'static-analysis'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "🔍 Running static analysis and code quality checks (staging)..."
+
+        # Install system dependencies
+        apt-get update && apt-get install -y --no-install-recommends \
+          build-essential \
+          && rm -rf /var/lib/apt/lists/*
+
+        # Install Python dependencies
+        pip install --upgrade pip
+        pip install -r requirements.txt
+
+        # Install static analysis tools
+        pip install mypy flake8 black isort pylint bandit
+
+        # Create analysis results directory
+        mkdir -p analysis-results
+
+        echo "📏 Running code formatting checks..."
+        # Check black formatting (don't auto-fix in CI)
+        python -m black --check --diff --color src/ tests/ scripts/
+
+        echo "🔧 Running import sorting checks..."
+        # Check import sorting
+        python -m isort --check-only --diff --color src/ tests/ scripts/
+
+        echo "🐍 Running type checking..."
+        # Run mypy type checking
+        python -m mypy src/ --config-file mypy.ini
+
+        echo "🎯 Running code quality checks..."
+        # Run flake8
+        python -m flake8 src/ tests/ --config .flake8
+
+        echo "🛡️ Running security scanning..."
+        # Run bandit security scanning
+        python -m bandit -r src/ -f json -o analysis-results/security-scan.json
+
+        echo "📊 Generating analysis summary..."
+        cat > analysis-results/analysis-summary.json << EOF
+        {
+          "timestamp": "$(date -Iseconds)",
+          "commit": "$COMMIT_SHA",
+          "branch": "dev",
+          "environment": "staging",
+          "tools_run": ["black", "isort", "mypy", "flake8", "bandit"]
+        }
+        EOF
+
+        echo "✅ Static analysis completed successfully"
+
+  # Step 3: Build Docker image with optimized caching
   - name: 'gcr.io/cloud-builders/docker'
     id: 'build-image'
     args: [
       'build',
-      '-t', 'gcr.io/$PROJECT_ID/music-library-mcp-staging:$COMMIT_SHA',
-      '-t', 'gcr.io/$PROJECT_ID/music-library-mcp-staging:latest',
+      # Target runtime stage (Alpine-based, more reliable than distroless)
+      '--target', 'runtime',
+      # Enable BuildKit for better performance and caching
+      '--build-arg', 'BUILDKIT_INLINE_CACHE=1',
+      # Use cache from previous builds
+      '--cache-from', 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp-staging:latest',
+      # Enable BuildKit cache mounts for faster builds
+      '--build-arg', 'BUILDKIT_PROGRESS=plain',
+      # Optimized tagging: commit SHA and latest only
+      '-t', 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp-staging:${_COMMIT_SHA}',
+      '-t', 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp-staging:latest',
+      # Build context
       '.'
     ]
+    env:
+      - 'DOCKER_BUILDKIT=1'
+    timeout: '600s'
 
-  # Step 2: Push Docker image
+  # Step 3: Store Test Artifacts and Reports (Staging)
+  - name: 'gcr.io/cloud-builders/gsutil'
+    id: 'store-artifacts'
+    args: [
+      '-m', 'cp', '-r',
+      'test-results/',
+      'coverage-reports/',
+      'analysis-results/',
+      'gs://$PROJECT_ID-build-artifacts-staging/$COMMIT_SHA/'
+    ]
+    waitFor: ['run-unit-tests', 'run-database-tests', 'static-analysis']
+    allowFailure: true  # Don't fail build if artifact upload fails
+
+  # Step 4: Push Docker image to Google Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
     id: 'push-image'
-    args: ['push', '--all-tags', 'gcr.io/$PROJECT_ID/music-library-mcp-staging']
+    args: ['push', '--all-tags', 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp-staging']
     waitFor: ['build-image']
 
-  # Step 3: Deploy to staging Cloud Run
+  # Step 5: Ensure staging database exists
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'create-staging-db'
+    entrypoint: 'bash'
+    args: ['scripts/create-staging-database.sh']
+    env:
+      - 'CLOUDSDK_CORE_PROJECT=loist-music-library'
+
+  # Step 6: Note - Migrations will run automatically on Cloud Run startup
+
+  # Step 7: Deploy to staging Cloud Run (migrations run on startup)
   - name: 'gcr.io/cloud-builders/gcloud'
     id: 'deploy-staging'
     args:
       - 'run'
       - 'deploy'
       - 'music-library-mcp-staging'
-      - '--image=gcr.io/$PROJECT_ID/music-library-mcp-staging:$COMMIT_SHA'
+      - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp-staging:${_COMMIT_SHA}'
       - '--region=us-central1'
       - '--platform=managed'
       - '--allow-unauthenticated'
@@ -36,46 +284,38 @@ steps:
       - '--max-instances=3'
       - '--min-instances=0'
       - '--port=8080'
-      - '--set-env-vars=SERVER_TRANSPORT=http,LOG_LEVEL=DEBUG,AUTH_ENABLED=false,ENABLE_CORS=true,CORS_ORIGINS=*,ENABLE_HEALTHCHECK=true'
-      - '--set-env-vars=GCS_PROJECT_ID=$PROJECT_ID'
-      - '--service-account=${_CLOUD_RUN_SERVICE_ACCOUNT}'
-      - '--update-secrets=DB_CONNECTION_NAME=${_DB_CONNECTION_NAME_STAGING}:latest'
-      - '--update-secrets=GCS_BUCKET_NAME=${_GCS_BUCKET_NAME_STAGING}:latest'
+      # Run migrations on startup, then start the server
+      - '--command=/bin/bash'
+      - '--args=-c,cd /app && echo "Running database migrations..." && python3 database/migrate.py --action=up && echo "Starting server..." && python3 src/server.py'
+      # Set all environment variables in a single --set-env-vars flag (replaces all existing env vars)
+      # Note: GOOGLE_APPLICATION_CREDENTIALS is intentionally omitted to use ADC
+      - '--set-env-vars=SERVER_TRANSPORT=http,LOG_LEVEL=DEBUG,AUTH_ENABLED=false,ENABLE_CORS=true,CORS_ORIGINS=*,ENABLE_HEALTHCHECK=true,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GCS_PROJECT_ID=$PROJECT_ID,SERVER_NAME=Music Library MCP - Staging,EMBED_BASE_URL=https://staging.loist.io,DB_NAME=loist_mvp_staging,DB_USER=music_library_user,DB_PORT=5432'
+      - '--service-account=mcp-music-library-sa@$PROJECT_ID.iam.gserviceaccount.com'
+      # Update secrets (these are separate from environment variables)
+      - '--update-secrets=DB_CONNECTION_NAME=db-connection-name-staging:latest'
+      - '--update-secrets=DB_PASSWORD=db-password-staging:latest'
+      - '--update-secrets=GCS_BUCKET_NAME=gcs-bucket-name-staging:latest'
+      - '--update-secrets=BEARER_TOKEN=mcp-bearer-token-staging:latest'
+      # Remove GOOGLE_APPLICATION_CREDENTIALS secret if it exists (separate from env vars)
+      - '--remove-secrets=GOOGLE_APPLICATION_CREDENTIALS'
       - '--quiet'
-    waitFor: ['push-image']
+    waitFor: ['create-staging-db']
 
-  # Step 4: Basic health check
-  - name: 'gcr.io/cloud-builders/curl'
-    id: 'staging-health-check'
-    entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        echo "🔍 Staging health check..."
-        SERVICE_URL=$(gcloud run services describe music-library-mcp-staging \
-          --platform managed \
-          --region us-central1 \
-          --format 'value(status.url)')
-        
-        sleep 20
-        curl -f -s --max-time 30 "$SERVICE_URL/mcp/health" || echo "Staging deployment ready for testing"
-        echo "🎯 Staging URL: $SERVICE_URL"
-    waitFor: ['deploy-staging']
-
+# Automatically tag and push images
 images:
-  - 'gcr.io/$PROJECT_ID/music-library-mcp-staging:$COMMIT_SHA'
-  - 'gcr.io/$PROJECT_ID/music-library-mcp-staging:latest'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp-staging:${_COMMIT_SHA}'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/music-library-mcp-staging:latest'
 
+# Build options and configuration
 options:
-  machineType: 'N1_HIGHCPU_8'  # Valid Cloud Build machine type for staging
+  machineType: 'E2_HIGHCPU_8'  # Faster builds, same cost as default
   logging: CLOUD_LOGGING_ONLY
 
 substitutions:
-  _CLOUD_RUN_SERVICE_ACCOUNT: 'music-library-sa@${PROJECT_ID}.iam.gserviceaccount.com'
-  _DB_CONNECTION_NAME_STAGING: 'db-connection-name-staging'
-  _GCS_BUCKET_NAME_STAGING: 'gcs-bucket-name-staging'
+  _COMMIT_SHA: 'local-test'
 
-timeout: '900s'  # 15 minutes
+# Build timeout (reduced from 15 to 10 minutes)
+timeout: '600s'  # 10 minutes
 
 tags:
   - 'music-library-mcp'

@@ -1,0 +1,22 @@
+Security Scan Summary Report
+Generated: Wed Nov  5 14:54:18 GMT 2025
+=================================
+
+🔍 Scan Overview:
+  - Bandit (Python Security): ✅ Completed
+  - Safety (Dependencies): ✅ Completed
+  - Custom Checks: ✅ Completed
+
+📊 Key Metrics:
+  - High Severity Issues (Bandit): 0
+  - Dependency Vulnerabilities: 
+
+📂 Detailed Reports:
+  - Bandit JSON: /Users/Gareth/loist-mcp-server/reports/bandit-scan-20251105-145415.json
+  - Bandit HTML: /Users/Gareth/loist-mcp-server/reports/bandit-scan-20251105-145415.html
+  - Safety: /Users/Gareth/loist-mcp-server/reports/safety-scan-20251105-145415.json
+  - Custom Checks: /Users/Gareth/loist-mcp-server/reports/custom-security-checks-20251105-145415.txt
+
+💡 Recommendations:
+  - Review custom security checks for additional issues
+  - Consider integrating these scans into CI/CD pipeline

@@ -18,6 +18,9 @@ import logging
 from typing import Dict, Any, Optional
 import re
 
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).parent.parent.parent))
 from database import get_audio_metadata_by_id
 from src.exceptions import ResourceNotFoundError, ValidationError
 from .cache import get_cache
@@ -90,7 +93,7 @@ async def get_audio_stream_resource(uri: str) -> Dict[str, Any]:
     try:
         # Parse URI to extract audioId
         # Format: music-library://audio/{audioId}/stream
-        match = re.match(r"music-library://audio/([0-9a-fA-F-]+)/stream", uri)
+        match = re.match(r"music-library://audio/([0-9a-f-]+)/stream", uri)
         
         if not match:
             logger.error(f"Invalid audio stream URI format: {uri}")
@@ -189,3 +192,4 @@ def get_content_headers_for_audio(
         headers["Accept-Ranges"] = "bytes"
     
     return headers
+

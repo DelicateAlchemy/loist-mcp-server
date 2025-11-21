@@ -10,18 +10,28 @@ alwaysApply: true
 
 ## Branch Structure
 
-- **`main`**: Production-ready deployment branch
-  - Never commit directly to main
-  - Only accepts merges from dev via pull request
-  
+- **`main`**: Production deployment branch
+  - **Never commit directly** - only accepts merges from `dev` via pull request
+  - **Triggers automated deployment** via `cloudbuild.yaml` on merge
+  - **Production-ready** code with comprehensive testing and documentation
+
 - **`dev`**: Development integration branch
-  - Receives completed feature branches
-  - All task branches merge here first
-  
-- **`task-X`**: Feature branches for individual tasks
-  - Create one branch per root task ID
-  - Branch name format: `task-{taskId}` (e.g., `task-5`, `task-12`)
+  - Receives completed task branches via pull requests
+  - **Triggers staging deployment** via `cloudbuild-staging.yaml` on merge
+  - Integration testing and QA validation branch
+
+- **`task-X`**: Feature branches for individual root tasks
+  - **One branch per root task ID** (e.g., `task-5`, `task-12`, `task-20`)
+  - **Never mix multiple root tasks** in one branch
   - Created from `dev` branch
+  - **Deleted after merge** to maintain clean branch history
+
+### Branch Creation Rules
+
+- **Root Task Branches Only**: Each root task ID gets its own branch
+- **Subtasks Stay in Parent Branch**: All subtasks of a root task are implemented in that root task's branch
+- **No Cross-Task Branches**: Never create branches for individual subtasks
+- **Branch Naming**: Always `task-{rootTaskId}` (e.g., `task-5`, not `task-5.1`)
 
 ## Workflow Process
 
@@ -47,34 +57,62 @@ git checkout -b task-5
 
 ### 2. Working on Subtasks
 
-**One commit per subtask:**
+**Critical Rule: One commit per subtask implementation**
 
-- Mark subtask as `in-progress` using `set_task_status`
-- Implement the subtask
-- Stage relevant changes: `git add <files>`
-- Commit with descriptive message referencing subtask ID
-- Mark subtask as `done` using `set_task_status`
+#### **Subtask Commit Requirements**
+- **Mark subtask in-progress** before starting: `set_task_status --id={taskId}.{subtaskId} --status=in-progress`
+- **Implement only one subtask** at a time
+- **Stage relevant changes**: `git add <specific-files>` (never `git add .`)
+- **Commit immediately** after completing each subtask
+- **Mark subtask done**: `set_task_status --id={taskId}.{subtaskId} --status=done`
+- **Never batch multiple subtasks** in one commit
 
-**Commit Message Format:**
+#### **Commit Message Format**
 ```
 feat(module): Implement [subtask title] (Task {taskId}.{subtaskId})
 
 - Implementation detail 1
 - Implementation detail 2
-- Any relevant notes
+- Files changed: src/component.py, tests/test_component.py
+- Any relevant technical notes or decisions
 ```
 
-**Example:**
+#### **Example Subtask Workflow**
 ```bash
-# After completing subtask 5.1
+# Start subtask 5.1
+set_task_status --id=5.1 --status=in-progress
+
+# Implement the subtask
+# ... code changes ...
+
+# Stage only relevant files
 git add src/storage/gcs_client.py tests/test_gcs_integration.py
+
+# Commit with detailed message
 git commit -m "feat(storage): Implement GCS client initialization (Task 5.1)
 
 - Add GCS client with service account authentication
-- Implement bucket validation
-- Add comprehensive error handling
-- Include integration tests"
+- Implement bucket validation and error handling
+- Add comprehensive logging and retry logic
+- Include unit tests for all public methods
+- Files changed: src/storage/gcs_client.py, tests/test_gcs_integration.py"
+
+# Mark subtask complete
+set_task_status --id=5.1 --status=done
+
+# Start next subtask 5.2
+set_task_status --id=5.2 --status=in-progress
+# ... repeat process ...
 ```
+
+#### **Subtask Commit Rules**
+- **✅ DO**: One subtask = one commit
+- **✅ DO**: Detailed commit messages with technical details
+- **✅ DO**: List all changed files in commit message
+- **✅ DO**: Include implementation decisions and trade-offs
+- **❌ DON'T**: Mix multiple subtasks in one commit
+- **❌ DON'T**: Use vague commit messages
+- **❌ DON'T**: Stage unrelated files
 
 ### 3. Completing the Task
 

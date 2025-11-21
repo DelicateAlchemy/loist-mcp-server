@@ -10,7 +10,7 @@ The tool executes the following stages in sequence:
 
 1. **Input Validation** - Validates input schema using Pydantic
 2. **HTTP Download** - Downloads audio from URL with SSRF protection
-3. **Metadata Extraction** - Extracts ID3 tags and technical specifications
+3. **Metadata Extraction** - Extracts ID3 tags, XMP metadata, BWF data, and technical specifications
 4. **Storage Upload** - Uploads audio and artwork to Google Cloud Storage
 5. **Database Persistence** - Saves metadata to PostgreSQL database
 6. **Response Formatting** - Returns structured response with resource URIs
@@ -275,7 +275,38 @@ Only HTTP and HTTPS URLs are accepted:
 When `validateFormat: true` (default), the tool verifies:
 - File has valid audio MIME type
 - File can be parsed by metadata extractor
-- Format is supported (MP3, FLAC, M4A, OGG, WAV, etc.)
+- Format is supported (MP3, FLAC, M4A, OGG, WAV, AIF, AIFF, AAC)
+
+### Metadata Extraction Capabilities
+
+The tool extracts metadata using multiple fallback strategies:
+
+#### Primary Metadata Sources
+- **ID3 Tags** (MP3, AIF/AIFF): Artist, title, album, genre, year, composer, publisher
+- **Vorbis Comments** (FLAC, OGG): Artist, title, album, genre, year
+- **MP4 Tags** (M4A, AAC): Artist, title, album, genre, year
+- **RIFF INFO** (WAV): Basic metadata chunks
+
+#### Enhanced Metadata Sources
+- **XMP Metadata** (WAV, AIF/AIFF): Rich metadata from professional tools (Adobe Audition, Logic Pro, Pro Tools)
+  - Music fields: composer, publisher, record_label, ISRC, copyright
+  - BWF fields: originator, origination_date, description
+  - iXML fields: scene, take, project, speed (DAW session metadata)
+- **Broadcast WAV (BWF)** (WAV): Professional broadcast metadata
+- **Filename Parsing**: Extracts artist/title from filename patterns when metadata is missing
+
+#### AIF/AIFF XMP Support
+AIF files support XMP metadata embedded in custom chunks:
+- **Custom Chunks**: 'XMP ', 'iXML' chunks detected by ExifTool
+- **DAW Compatibility**: Preserves metadata from Logic Pro, Pro Tools, Adobe Audition
+- **Archival Integrity**: XMP used as enhancement only, never overwrites existing ID3 tags
+- **Smart Extraction**: XMP attempted only when basic metadata is incomplete (<2 essential fields)
+
+#### Metadata Quality Assessment
+- **Essential Fields**: artist, title, album (required for quality)
+- **Optional Fields**: genre, year, composer, publisher, etc.
+- **Quality Scoring**: 0.0-1.0 scale based on completeness
+- **Fallback Handling**: Filename parsing when metadata is missing
 
 ## Transaction Management
 

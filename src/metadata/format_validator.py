@@ -35,6 +35,14 @@ AUDIO_SIGNATURES = {
         (0, b'RIFF', "WAV"),  # RIFF header
         (8, b'WAVE', "WAV"),  # WAVE format
     ],
+    ".aif": [
+        (0, b'FORM', "AIF"),  # FORM header
+        (8, b'AIFF', "AIF"),  # AIFF format
+    ],
+    ".aiff": [
+        (0, b'FORM', "AIFF"),  # FORM header
+        (8, b'AIFF', "AIFF"),  # AIFF format
+    ],
     ".ogg": [
         (0, b'OggS', "OGG"),  # OGG container
     ],

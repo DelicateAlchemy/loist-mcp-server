@@ -2,12 +2,13 @@
 
 ## Overview
 
-The Loist Music Library MCP Server provides two query tools for retrieving and searching processed audio:
+The Loist Music Library MCP Server provides three query tools for managing audio tracks:
 
 1. **get_audio_metadata** - Retrieve metadata for a specific audio track by ID
 2. **search_library** - Search across all audio tracks with advanced filtering
+3. **delete_audio** - Delete a previously processed audio track by ID
 
-Both tools are read-only operations that query the PostgreSQL database.
+The first two tools are read-only operations that query the PostgreSQL database. The delete tool permanently removes tracks from the database.
 
 ---
 
@@ -142,22 +143,9 @@ Search across all processed audio tracks using full-text search with optional ad
 ```typescript
 {
   query: string,              // Required: search query (1-500 chars)
-  filters?: {                 // Optional filters
-    genre?: string[],         // List of genres (OR logic)
-    year?: {                  // Year range
-      min?: number,           // Minimum year (1900-2100)
-      max?: number            // Maximum year (1900-2100)
-    },
-    duration?: {              // Duration range in seconds
-      min?: number,           // Minimum duration (>=0)
-      max?: number            // Maximum duration (>=0)
-    },
-    format?: string[],        // Audio formats (MP3, FLAC, etc.)
-    artist?: string,          // Artist name (partial match)
-    album?: string            // Album name (partial match)
-  },
+  filters?: object,           // Optional: advanced filters object (see below)
   limit?: number,             // Results per page (1-100, default: 20)
-  offset?: number,            // Results to skip (0-10000, default: 0)
+  offset?: number,            // Results to skip (0+, default: 0)
   sortBy?: string,            // Sort field (default: "relevance")
   sortOrder?: string          // Sort order (asc/desc, default: "desc")
 }
@@ -165,17 +153,181 @@ Search across all processed audio tracks using full-text search with optional ad
 
 #### Validation Rules
 
-- **query**: 
+- **query**:
   - Required, 1-500 characters
   - Sanitized to remove control characters
   - Stripped of leading/trailing whitespace
-  
+
+- **filters**: Advanced filtering object
+  - **genre**: Array of genre strings (e.g., `["Rock", "Jazz"]`)
+  - **year**: Object with `min`/`max` year range (e.g., `{"min": 1960, "max": 1980}`)
+  - **duration**: Object with `min`/`max` duration in seconds (e.g., `{"min": 180, "max": 360}`)
+  - **format**: Array of audio formats (e.g., `["MP3", "FLAC"]`)
+  - **composer**: String for composer filtering (partial match)
+  - **publisher**: String for publisher filtering (partial match)
+  - **record_label**: String for record label filtering (partial match)
+  - **isrc**: String for ISRC code (exact match)
+  - **time**: Time-based filtering object (see below)
+
+- **fields**: Comma-separated field list validation
+  - Allowed fields: `id`, `title`, `score`, `artist`, `album`, `genre`, `year`, `duration`, `channels`, `sampleRate`, `bitrate`, `format`, `embedLink`
+  - Example: `"id,title,score,artist"`
+
+- **cursor**: Base64-encoded JSON validation
+  - Contains: `score` (float), `created_at` (ISO string), `id` (UUID string)
+  - Example: `"eyJzY29yZSI6MC45NSwiY3JlYXRlZF9hdCI6IjIwMjQtMTEtMTJUMTI6MzQ6NTYuMDAwWiIsImlkIjoiNTUwZTg0MDAtZTJiYi00MWQ0LWE3MTYtNDQ2NjU1NDQwMDAwIn0="`
+
 - **limit**: 1-100 (prevents excessive result sets)
-- **offset**: 0-10000 (prevents deep pagination performance issues)
-- **year.min / year.max**: 1900-2100
-- **duration.min / duration.max**: >=0
+- **offset**: 0+ (number of results to skip for pagination)
 - **sortBy**: One of: `relevance`, `title`, `artist`, `year`, `duration`, `created_at`
 - **sortOrder**: `asc` or `desc`
+
+### Time-Based Filtering
+
+The `filters.time` object supports filtering tracks by their creation date:
+
+```typescript
+{
+  "time": {
+    "period": "this_week",           // Optional: relative time period
+    "dateFrom": "2025-11-01",        // Optional: start date (ISO format)
+    "dateTo": "2025-11-30",          // Optional: end date (ISO format)
+    "timezone": "America/New_York"   // Optional: timezone (default: "UTC")
+  }
+}
+```
+
+#### Time Period Options
+- `today`: Tracks created today
+- `yesterday`: Tracks created yesterday
+- `this_week`: Tracks created this week (Monday to Sunday)
+- `last_week`: Tracks created last week
+- `this_month`: Tracks created this month
+- `last_month`: Tracks created last month
+- `this_year`: Tracks created this year
+- `last_year`: Tracks created last year
+
+#### Custom Date Ranges
+- Dates must be in ISO format: `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS`
+- `dateFrom` and `dateTo` can be used together or separately
+- Timezone affects how relative periods and dates are interpreted
+- All dates are converted to UTC for database comparison
+
+#### Examples
+```typescript
+// Tracks from this week
+{"time": {"period": "this_week", "timezone": "UTC"}}
+
+// Tracks from November 2025
+{"time": {"dateFrom": "2025-11-01", "dateTo": "2025-11-30"}}
+
+// Recent tracks in New York timezone
+{"time": {"period": "today", "timezone": "America/New_York"}}
+```
+
+### RSQL Filter Syntax
+
+The `filter` parameter uses RSQL (RESTful Service Query Language) syntax for flexible filtering:
+
+#### Operators
+- `==` - Equal
+- `!=` - Not equal
+- `>=` - Greater than or equal
+- `<=` - Less than or equal
+- `>` - Greater than
+- `<` - Less than
+- `=in=` - In list
+- `=out=` - Not in list
+- `=like=` - Like pattern (supports wildcards `*`)
+
+#### Logic
+- `;` (semicolon) - AND operator
+- `,` (comma) - OR operator
+
+#### Examples
+```
+# Simple equality
+genre==Rock
+
+# Year range (OR within field)
+year>=1960,year<=1980
+
+# Combined filters (AND between fields)
+genre==Rock;year>=1960,year<=1980
+
+# Pattern matching
+artist=like=*beatles*
+
+# Multiple genres (OR)
+genre==Rock,genre==Jazz
+
+# Complex query
+genre==Rock;year>=1960,year<=1980;format==MP3,format==FLAC
+```
+
+### Cursor-Based Pagination
+
+Instead of offset-based pagination, this tool uses cursor-based pagination for better performance:
+
+#### How It Works
+1. First request: Don't include `cursor` (starts from beginning)
+2. Response includes `nextCursor` if more results exist
+3. Next request: Include `nextCursor` from previous response
+4. Continue until `hasMore` is `false`
+
+#### Benefits
+- **Consistent Performance**: No degradation with large result sets
+- **Stable Results**: Results don't shift between pages
+- **Token Efficiency**: Opaque cursors are compact for MCP usage
+
+#### Example Usage
+```javascript
+// First page
+const response1 = await search_library({
+  query: "rock music",
+  limit: 20
+});
+
+// Next page using cursor
+if (response1.hasMore) {
+  const response2 = await search_library({
+    query: "rock music",
+    cursor: response1.nextCursor,
+    limit: 20
+  });
+}
+```
+
+### Sparse Field Selection
+
+Use the `fields` parameter to return only specific fields, reducing response size:
+
+#### Available Fields
+- `id` - Track ID
+- `title` - Track title
+- `score` - Relevance score
+- `artist` - Artist name
+- `album` - Album name
+- `genre` - Genre
+- `year` - Release year
+- `duration` - Duration in seconds
+- `channels` - Audio channels
+- `sampleRate` - Sample rate
+- `bitrate` - Bitrate
+- `format` - Audio format
+- `embedLink` - Embed URL
+
+#### Examples
+```
+# Minimal response
+fields="id,title,score"
+
+# Full metadata
+fields="id,title,score,artist,album,genre,year,duration,format"
+
+# Default (if not specified)
+fields="id,title,score,artist,album,genre,year"
+```
 
 ### Output Schema
 
@@ -208,10 +360,9 @@ Search across all processed audio tracks using full-text search with optional ad
       "score": 0.95
     }
   ],
-  "total": 150,
   "limit": 20,
-  "offset": 0,
-  "hasMore": true
+  "hasMore": true,
+  "nextCursor": "eyJzY29yZSI6MC45NSwiY3JlYXRlZF9hdCI6IjIwMjQtMTEtMTJUMTI6MzQ6NTYuMDAwWiIsImlkIjoiNTUwZTg0MDAtZTJiYi00MWQ0LWE3MTYtNDQ2NjU1NDQwMDAwIn0="
 }
 ```
 
@@ -259,18 +410,64 @@ if result["success"]:
 #### Advanced Search with Filters
 
 ```python
-# Search with multiple filters
+# Search with multiple filters including time period
 result = await search_library({
     "query": "rock music",
     "filters": {
         "genre": ["Rock", "Classic Rock"],
         "year": {"min": 1960, "max": 1980},
         "duration": {"min": 180, "max": 360},
+        "time": {
+            "period": "this_week",
+            "timezone": "America/New_York"
+        }
         "format": ["MP3", "FLAC"]
     },
     "limit": 50,
     "offset": 0,
     "sortBy": "year",
+    "sortOrder": "desc"
+})
+```
+
+#### Time-Based Filtering Examples
+
+```python
+# Search tracks created this week
+result = await search_library({
+    "query": "jazz",
+    "filters": {
+        "time": {
+            "period": "this_week",
+            "timezone": "UTC"
+        }
+    },
+    "limit": 20
+})
+
+# Search tracks from a specific date range
+result = await search_library({
+    "query": "classical",
+    "filters": {
+        "time": {
+            "dateFrom": "2025-11-01",
+            "dateTo": "2025-11-30",
+            "timezone": "Europe/London"
+        }
+    },
+    "limit": 50
+})
+
+# Search recent tracks with genre filter
+result = await search_library({
+    "query": "electronic",
+    "filters": {
+        "genre": ["Electronic", "Techno"],
+        "time": {
+            "period": "today"
+        }
+    },
+    "sortBy": "created_at",
     "sortOrder": "desc"
 })
 ```
@@ -465,11 +662,176 @@ result = await search_library({
 
 ---
 
+## Tool 3: delete_audio
+
+### Purpose
+
+Delete a previously processed audio track by its unique ID. This is a destructive operation that permanently removes the track from the database. GCS files are left in place for lifecycle management.
+
+### Input Schema
+
+```typescript
+{
+  audioId: string  // UUID of the audio track to delete (required)
+}
+```
+
+#### Validation Rules
+
+- **audioId**: Must be a valid UUID format (lowercase)
+  - Pattern: `^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`
+  - Length: Exactly 36 characters
+  - Example: `"550e8400-e29b-41d4-a716-446655440000"`
+
+### Output Schema
+
+#### Success Response
+
+```json
+{
+  "success": true,
+  "audioId": "550e8400-e29b-41d4-a716-446655440000",
+  "deleted": true
+}
+```
+
+#### Error Response
+
+```json
+{
+  "success": false,
+  "error": "RESOURCE_NOT_FOUND",
+  "message": "Audio track with ID '550e8400-e29b-41d4-a716-446655440000' was not found",
+  "details": {
+    "audioId": "550e8400-e29b-41d4-a716-446655440000"
+  }
+}
+```
+
+### Error Codes
+
+| Error Code | Description | When It Occurs |
+|-----------|-------------|----------------|
+| `RESOURCE_NOT_FOUND` | Audio track not found | Invalid or non-existent audioId |
+| `INVALID_QUERY` | Invalid input | Malformed UUID or missing audioId |
+| `DELETE_FAILED` | Deletion failed | Database transaction error |
+| `DATABASE_ERROR` | Database query failed | Connection or query execution error |
+
+### Usage Examples
+
+#### Python (Async)
+
+```python
+from src.tools import delete_audio
+
+# Delete a track by ID
+result = await delete_audio({
+    "audioId": "550e8400-e29b-41d4-a716-446655440000"
+})
+
+if result["success"]:
+    print(f"Track {result['audioId']} deleted successfully")
+else:
+    print(f"Delete failed: {result['error']} - {result['message']}")
+```
+
+#### MCP Protocol (JSON-RPC)
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "tools/call",
+  "params": {
+    "name": "delete_audio",
+    "arguments": {
+      "audioId": "550e8400-e29b-41d4-a716-446655440000"
+    }
+  },
+  "id": 1
+}
+```
+
+### HTTP API Endpoint
+
+```bash
+# DELETE request
+curl -X DELETE http://localhost:8080/api/tracks/550e8400-e29b-41d4-a716-446655440000
+
+# Success response (204 No Content)
+# Error response (404 Not Found, 400 Bad Request, 500 Server Error)
+```
+
+### Performance
+
+- **Average response time**: <100ms
+- **Database operation**: Single DELETE by primary key (O(1) lookup)
+- **Transaction**: Uses database transaction for consistency
+- **GCS cleanup**: Files are NOT deleted (lifecycle policies handle cleanup)
+
+### Important Notes
+
+#### Data Loss Warning
+
+This operation **permanently removes** the track from the database. The operation cannot be undone.
+
+#### GCS File Handling
+
+- **Database record**: Deleted permanently
+- **GCS files**: Left in place for lifecycle management
+- **Future enhancement**: GCS cleanup can be added later if needed
+
+#### Future Authentication
+
+User authorization is planned for future implementation:
+- `userId` field is reserved in the schema for ownership validation
+- Currently disabled (AUTH_ENABLED=false) for development
+- Will be required in production for proper access control
+
+### Usage Scenarios
+
+#### Clean up test data
+
+```python
+async def cleanup_test_track(track_id: str):
+    """Remove test track after validation"""
+    result = await delete_audio({"audioId": track_id})
+
+    if result["success"]:
+        print(f"Test track {track_id} cleaned up")
+        return True
+    else:
+        print(f"Failed to clean up test track: {result['message']}")
+        return False
+```
+
+#### Batch deletion (future)
+
+```python
+async def delete_multiple_tracks(track_ids: list[str]):
+    """Delete multiple tracks (requires error handling)"""
+    results = []
+
+    for track_id in track_ids:
+        result = await delete_audio({"audioId": track_id})
+        results.append({
+            "track_id": track_id,
+            "success": result["success"],
+            "error": result.get("error") if not result["success"] else None
+        })
+
+    successful = sum(1 for r in results if r["success"])
+    print(f"Deleted {successful}/{len(track_ids)} tracks")
+
+    return results
+```
+
+---
+
 ## Security
 
 ### Query Sanitization
 
-Both tools implement automatic query sanitization:
+All three tools implement automatic query sanitization:
 
 - ✅ Remove null bytes and control characters
 - ✅ Strip leading/trailing whitespace
@@ -739,14 +1101,16 @@ async def paginated_search(query: str, page: int, page_size: int = 20):
 
 ## Comparison Table
 
-| Feature | get_audio_metadata | search_library |
-|---------|-------------------|----------------|
-| **Purpose** | Get single track | Search multiple tracks |
-| **Input** | UUID only | Query + filters |
-| **Output** | Single metadata | Array of results |
-| **Performance** | Very fast (<50ms) | Fast (<200ms) |
-| **Caching** | Recommended | Recommended for common queries |
-| **Use when** | You have track ID | You need to find tracks |
+| Feature | get_audio_metadata | search_library | delete_audio |
+|---------|-------------------|----------------|--------------|
+| **Purpose** | Get single track | Search multiple tracks | Delete single track |
+| **Input** | UUID only | Query + filters | UUID only |
+| **Output** | Single metadata | Array of results | Deletion confirmation |
+| **Performance** | Very fast (<50ms) | Fast (<200ms) | Fast (<100ms) |
+| **Caching** | Recommended | Recommended for common queries | Not applicable |
+| **Use when** | You have track ID | You need to find tracks | You need to remove a track |
+| **HTTP Method** | GET | GET | DELETE |
+| **Destructive** | No | No | Yes |
 
 ---
 
@@ -790,8 +1154,203 @@ async def search_tracks(
     
     if not result["success"]:
         raise HTTPException(status_code=500, detail=result["message"])
-    
+
     return result
+
+@app.delete("/api/tracks/{audio_id}")
+async def delete_track(audio_id: str):
+    """REST endpoint for deleting a track"""
+    result = await delete_audio({"audioId": audio_id})
+
+    if not result["success"]:
+        if result["error"] == "RESOURCE_NOT_FOUND":
+            raise HTTPException(status_code=404, detail=result["message"])
+        elif result["error"] == "INVALID_QUERY":
+            raise HTTPException(status_code=400, detail=result["message"])
+        else:
+            raise HTTPException(status_code=500, detail=result["message"])
+
+    # Return 204 No Content for successful deletion
+    return {"message": f"Track {audio_id} deleted successfully"}
+```
+
+---
+
+## HTTP REST API Endpoints
+
+The MCP server now exposes HTTP REST API endpoints that wrap the MCP tools and resources, enabling direct HTTP access for frontend applications. These endpoints are available when the server runs in HTTP transport mode.
+
+### Authentication & CORS
+
+- **Authentication**: Bearer token authentication (when enabled via `AUTH_ENABLED=true`)
+- **CORS**: Configurable CORS support for frontend integration
+- **Transport**: Endpoints are available at `/api/*` when server runs with `server_transport=http`
+
+### Endpoints
+
+#### GET `/api/tracks/{audioId}`
+
+Get metadata for a specific audio track.
+
+**Parameters:**
+- `audioId` (path): UUID of the audio track
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "title": "Example Track",
+    "artist": "Example Artist",
+    "album": "Example Album",
+    "genre": "Rock",
+    "year": 2023,
+    "duration_seconds": 245.678,
+    "format": "MP3",
+    "created_at": "2023-01-01T00:00:00Z"
+  }
+}
+```
+
+**Error Responses:**
+- `400`: Invalid audio ID format
+- `404`: Track not found
+
+#### GET `/api/search`
+
+Search for audio tracks with optional filtering and pagination.
+
+**Query Parameters:**
+- `q` (required): Search query string
+- `genre` (optional): Filter by music genre
+- `limit` (optional): Maximum results (1-100, default: 20)
+- `offset` (optional): Results offset (default: 0)
+- `sortBy` (optional): Sort field (relevance, title, artist, year, duration, created_at)
+- `sortOrder` (optional): Sort order (asc, desc, default: desc)
+
+**Example Request:**
+```
+GET /api/search?q=beatles&genre=Rock&limit=10&sortBy=year&sortOrder=desc
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "title": "Hey Jude",
+      "artist": "The Beatles",
+      "album": "Past Masters",
+      "genre": "Rock",
+      "year": 1970,
+      "duration_seconds": 245.678,
+      "relevance_score": 0.95
+    }
+  ],
+  "total": 150,
+  "limit": 10,
+  "offset": 0
+}
+```
+
+**Error Responses:**
+- `400`: Missing or invalid query parameter
+
+#### GET `/api/tracks/{audioId}/stream`
+
+Get signed streaming URL for an audio track.
+
+**Parameters:**
+- `audioId` (path): UUID of the audio track
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "stream_url": "https://storage.googleapis.com/bucket/audio.mp3?X-Goog-Algorithm=GOOG4-RSA-SHA256...",
+    "expires_at": "2023-01-01T01:00:00Z"
+  }
+}
+```
+
+**Error Responses:**
+- `400`: Invalid audio ID format
+- `404`: Track not found
+
+#### GET `/api/tracks/{audioId}/thumbnail`
+
+Get signed URL for track thumbnail/artwork.
+
+**Parameters:**
+- `audioId` (path): UUID of the audio track
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "thumbnail_url": "https://storage.googleapis.com/bucket/thumbnail.jpg?X-Goog-Algorithm=GOOG4-RSA-SHA256...",
+    "expires_at": "2023-01-01T01:00:00Z"
+  }
+}
+```
+
+**Special Cases:**
+- Returns `success: false` with `error: "NO_THUMBNAIL"` if no artwork is available (HTTP 200)
+- This is not considered an error - tracks without artwork are normal
+
+**Error Responses:**
+- `400`: Invalid audio ID format
+- `404`: Track not found
+
+### Error Response Format
+
+All endpoints return errors in a consistent JSON format:
+
+```json
+{
+  "success": false,
+  "message": "Human-readable error message",
+  "error": "ERROR_CODE"
+}
+```
+
+### Frontend Integration
+
+```javascript
+// Example: Search for tracks
+const searchTracks = async (query, genre = null) => {
+  const params = new URLSearchParams({ q: query });
+  if (genre) params.append('genre', genre);
+
+  const response = await fetch(`/api/search?${params}`);
+  const result = await response.json();
+
+  if (result.success) {
+    return result.data;
+  } else {
+    throw new Error(result.message);
+  }
+};
+
+// Example: Get track metadata
+const getTrack = async (audioId) => {
+  const response = await fetch(`/api/tracks/${audioId}`);
+  const result = await response.json();
+
+  if (result.success) {
+    return result.data;
+  } else {
+    if (response.status === 404) {
+      return null; // Track not found
+    }
+    throw new Error(result.message);
+  }
+};
 ```
 
 ---
@@ -801,11 +1360,15 @@ async def search_tracks(
 ### Unit Tests
 
 ```bash
-# Run query tool tests
+# Run all query tool tests
 pytest tests/test_query_tools.py -v
 
 # Run specific test
 pytest tests/test_query_tools.py::test_get_audio_metadata_success -v
+pytest tests/test_query_tools.py::test_delete_audio_success -v
+
+# Run delete tests only
+pytest tests/test_query_tools.py -k delete_audio -v
 
 # Run with coverage
 pytest tests/test_query_tools.py --cov=src/tools/query_tools
@@ -844,8 +1407,8 @@ For issues or questions:
 
 ---
 
-**Last Updated:** 2025-10-11  
-**Version:** 1.0  
+**Last Updated:** 2025-11-11
+**Version:** 1.1
 **Status:** Production Ready
 
 

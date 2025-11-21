@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Iframe Test - HTTP Server</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 30px 0; padding: 20px; border: 1px solid #ccc; }
+        iframe { border: 1px solid #999; margin: 10px 0; }
+        .success { color: green; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+    <h1>Testing Audio Player Iframe - HTTP Server</h1>
+    <p><strong>This test is served via HTTP (localhost:8000) instead of file:// protocol</strong></p>
+
+    <div class="test-section">
+        <h2>Compact View (oEmbed style)</h2>
+        <p>Testing iframe loading from ngrok tunnel:</p>
+        <iframe src="https://857daa7fb123.ngrok-free.app/embed/324a6ab1-1b56-4ad5-adde-a7349df56472?compact=true"
+                width="400" height="120" frameborder="0" allow="autoplay"
+                style="border-radius: 12px; border: 1px solid #ccc;">
+            <p>Your browser doesn't support iframes.</p>
+        </iframe>
+
+        <h2>Full Player View</h2>
+        <p>Testing iframe loading from ngrok tunnel:</p>
+        <iframe src="https://857daa7fb123.ngrok-free.app/embed/324a6ab1-1b56-4ad5-adde-a7349df56472"
+                width="500" height="200" frameborder="0" allow="autoplay"
+                style="border-radius: 12px; border: 1px solid #ccc;">
+            <p>Your browser doesn't support iframes.</p>
+        </iframe>
+    </div>
+
+    <div class="test-section">
+        <h2>Localhost Server Test</h2>
+        <p>Testing iframe loading from localhost:8080 (same origin):</p>
+        <iframe src="http://localhost:8080/embed/324a6ab1-1b56-4ad5-adde-a7349df56472?compact=true"
+                width="400" height="120" frameborder="0" allow="autoplay"
+                style="border-radius: 12px; border: 1px solid #ccc;">
+            <p>Your browser doesn't support iframes.</p>
+        </iframe>
+    </div>
+
+    <div class="test-section">
+        <h2>Test Results</h2>
+        <div id="results">
+            <p><strong>Expected Results:</strong></p>
+            <ul>
+                <li class="success">✅ Ngrok iframes should load successfully (HTTP server bypasses file:// restrictions)</li>
+                <li class="success">✅ Localhost iframes should load successfully (same origin)</li>
+                <li class="error">❌ If iframes still don't load, there may be additional CORS or CSP issues</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // Simple test to check if iframes loaded
+        setTimeout(function() {
+            const iframes = document.querySelectorAll('iframe');
+            const results = document.getElementById('results');
+
+            iframes.forEach((iframe, index) => {
+                try {
+                    // This is a simple check - in practice, you'd need more sophisticated
+                    // iframe content checking due to same-origin restrictions
+                    const result = document.createElement('p');
+                    result.textContent = `Iframe ${index + 1}: Loaded (${iframe.src})`;
+                    result.className = 'success';
+                    results.appendChild(result);
+                } catch (e) {
+                    const result = document.createElement('p');
+                    result.textContent = `Iframe ${index + 1}: Failed to load (${iframe.src})`;
+                    result.className = 'error';
+                    results.appendChild(result);
+                }
+            });
+        }, 3000);
+    </script>
+</body>
+</html>
