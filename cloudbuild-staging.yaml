@@ -286,9 +286,9 @@ steps:
       - '--port=8080'
       # Health check optimization: use DB-free liveness check and reduced frequency
       - '--liveness-probe=httpGet.path=/health/live,periodSeconds=60'
-      # Run migrations on startup, then start the server
-      - '--command=/bin/bash'
-      - '--args=-c,cd /app && echo "Running database migrations..." && python3 database/migrate.py --action=up && echo "Starting server..." && python3 src/server.py'
+      # Explicit command override to ensure correct startup (fallback if Dockerfile CMD is misinterpreted)
+      - '--command=/usr/local/bin/python'
+      - '--args=/app/src/server.py'
       # Set all environment variables in a single --set-env-vars flag (replaces all existing env vars)
       # Note: GOOGLE_APPLICATION_CREDENTIALS is intentionally omitted to use ADC
       - '--set-env-vars=SERVER_TRANSPORT=http,LOG_LEVEL=DEBUG,AUTH_ENABLED=false,ENABLE_CORS=true,CORS_ORIGINS=*,ENABLE_HEALTHCHECK=true,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GCS_PROJECT_ID=$PROJECT_ID,SERVER_NAME=Music Library MCP - Staging,EMBED_BASE_URL=https://staging.loist.io,DB_NAME=loist_mvp_staging,DB_USER=music_library_user,DB_PORT=5432'
