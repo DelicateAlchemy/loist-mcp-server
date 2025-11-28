@@ -1,7 +1,9 @@
 #!/bin/bash
 
-# Cloud Run Deployment Script for loist-mcp-server
-# This script deploys the service to Cloud Run so we can then map the domain
+# DEPRECATED: Cloud Run Deployment Script for music-library-mcp
+# This legacy script deploys the service to Cloud Run using old Container Registry
+# Replaced by cloudbuild.yaml CI/CD pipeline with Artifact Registry
+# Only kept for reference - do not use for new deployments
 
 set -e  # Exit on any error
 
@@ -14,7 +16,7 @@ NC='\033[0m' # No Color
 
 # Configuration
 PROJECT_ID="loist-music-library"
-SERVICE_NAME="loist-mcp-server"
+SERVICE_NAME="music-library-mcp"
 REGION="us-central1"
 IMAGE_NAME="gcr.io/$PROJECT_ID/$SERVICE_NAME"
 

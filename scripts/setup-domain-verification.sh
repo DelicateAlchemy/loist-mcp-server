@@ -1,7 +1,8 @@
 #!/bin/bash
 
-# Domain Verification Setup Script for api.loist.io
-# This script helps verify domain ownership in Google Cloud Console
+# DEPRECATED: Domain Verification Setup Script for api.loist.io
+# This legacy script helps verify domain ownership in Google Cloud Console
+# Uses old Container Registry (gcr.io) - replaced by cloudbuild.yaml with Artifact Registry
 
 set -e  # Exit on any error
 
@@ -133,11 +134,11 @@ prepare_cloud_run_config() {
 steps:
   # Build the container image
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', 'gcr.io/$PROJECT_ID/loist-mcp-server:$COMMIT_SHA', '.']
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/music-library-mcp:$COMMIT_SHA', '.']
   
   # Push the container image to Container Registry
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'gcr.io/$PROJECT_ID/loist-mcp-server:$COMMIT_SHA']
+    args: ['push', 'gcr.io/$PROJECT_ID/music-library-mcp:$COMMIT_SHA']
   
   # Deploy container image to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
@@ -145,9 +146,9 @@ steps:
     args:
       - 'run'
       - 'deploy'
-      - 'loist-mcp-server'
+      - 'music-library-mcp'
       - '--image'
-      - 'gcr.io/$PROJECT_ID/loist-mcp-server:$COMMIT_SHA'
+      - 'gcr.io/$PROJECT_ID/music-library-mcp:$COMMIT_SHA'
       - '--region'
       - 'us-central1'
       - '--platform'
@@ -165,7 +166,7 @@ steps:
       - 'DB_HOST=db-host:latest,DB_PASSWORD=db-password:latest,DB_NAME=db-name:latest,DB_USER=db-user:latest'
 
 images:
-  - 'gcr.io/$PROJECT_ID/loist-mcp-server:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/music-library-mcp:$COMMIT_SHA'
 EOL
 
     success "Created cloudbuild.yaml for Cloud Run deployment"

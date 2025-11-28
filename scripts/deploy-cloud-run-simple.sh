@@ -1,7 +1,8 @@
 #!/bin/bash
 
-# Simple Cloud Run Deployment Script (No Docker Required)
-# This script deploys directly from source code using Cloud Build
+# DEPRECATED: Simple Cloud Run Deployment Script (No Docker Required)
+# This legacy script deploys directly from source code using Cloud Build
+# Replaced by cloudbuild.yaml CI/CD pipeline - do not use for new deployments
 
 set -e  # Exit on any error
 
@@ -14,7 +15,7 @@ NC='\033[0m' # No Color
 
 # Configuration
 PROJECT_ID="loist-music-library"
-SERVICE_NAME="loist-mcp-server"
+SERVICE_NAME="music-library-mcp"
 REGION="us-central1"
 
 # Logging function

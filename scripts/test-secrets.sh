@@ -14,7 +14,7 @@ NC='\033[0m' # No Color
 
 # Configuration
 PROJECT_ID="${GCP_PROJECT_ID:-loist-music-library}"
-SERVICE_NAME="loist-mcp-server"
+SERVICE_NAME="music-library-mcp"
 REGION="us-central1"
 
 # Logging functions

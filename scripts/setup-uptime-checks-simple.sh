@@ -6,7 +6,7 @@ set -e
 
 # Configuration
 PROJECT_ID="${PROJECT_ID:-loist-music-library}"
-SERVICE_URL="${SERVICE_URL:-https://loist-mcp-server-7de5nxpr4q-uc.a.run.app}"
+SERVICE_URL="${SERVICE_URL:-https://music-library-mcp-7de5nxpr4q-uc.a.run.app}"
 NOTIFICATION_EMAIL="${NOTIFICATION_EMAIL:-admin@loist.io}"
 
 echo "🔍 Setting up uptime checks for $SERVICE_URL in project $PROJECT_ID"
