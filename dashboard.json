@@ -13,7 +13,7 @@
               {
                 "timeSeriesQuery": {
                   "timeSeriesFilter": {
-                    "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"loist-mcp-server\"",
+                    "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"music-library-mcp\"",
                     "aggregation": {
                       "alignmentPeriod": "60s",
                       "perSeriesAligner": "ALIGN_RATE",
@@ -44,7 +44,7 @@
               {
                 "timeSeriesQuery": {
                   "timeSeriesFilter": {
-                    "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"loist-mcp-server\"",
+                    "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"music-library-mcp\"",
                     "aggregation": {
                       "alignmentPeriod": "60s",
                       "perSeriesAligner": "ALIGN_DELTA",
@@ -75,7 +75,7 @@
               {
                 "timeSeriesQuery": {
                   "timeSeriesFilter": {
-                    "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"loist-mcp-server\"",
+                    "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"music-library-mcp\"",
                     "aggregation": {
                       "alignmentPeriod": "60s",
                       "perSeriesAligner": "ALIGN_RATE",
@@ -107,7 +107,7 @@
               {
                 "timeSeriesQuery": {
                   "timeSeriesFilter": {
-                    "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"loist-mcp-server\"",
+                    "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"music-library-mcp\"",
                     "aggregation": {
                       "alignmentPeriod": "60s",
                       "perSeriesAligner": "ALIGN_MEAN",
@@ -138,7 +138,7 @@
               {
                 "timeSeriesQuery": {
                   "timeSeriesFilter": {
-                    "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"loist-mcp-server\"",
+                    "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"music-library-mcp\"",
                     "aggregation": {
                       "alignmentPeriod": "60s",
                       "perSeriesAligner": "ALIGN_MEAN",
@@ -170,7 +170,7 @@
               {
                 "timeSeriesQuery": {
                   "timeSeriesFilter": {
-                    "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"loist-mcp-server\"",
+                    "filter": "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"music-library-mcp\"",
                     "aggregation": {
                       "alignmentPeriod": "60s",
                       "perSeriesAligner": "ALIGN_MEAN",
