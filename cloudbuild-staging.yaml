@@ -284,6 +284,11 @@ steps:
       - '--max-instances=3'
       - '--min-instances=0'
       - '--port=8080'
+      # Health check optimization: use DB-free liveness check and reduced frequency
+      - '--liveness-probe-path=/health/live'
+      - '--readiness-probe-path=/health/ready'
+      - '--liveness-probe-interval=60'
+      - '--readiness-probe-interval=60'
       # Run migrations on startup, then start the server
       - '--command=/bin/bash'
       - '--args=-c,cd /app && echo "Running database migrations..." && python3 database/migrate.py --action=up && echo "Starting server..." && python3 src/server.py'
