@@ -292,7 +292,7 @@ steps:
         # Start Cloud SQL Proxy in background
         echo "🔌 Starting Cloud SQL Proxy..."
         /cloud-sql-proxy --port=5432 "$$DB_CONNECTION_NAME_STAGING" &
-        PROXY_PID=$!
+        PROXY_PID=$$!
         
         # Wait for proxy to be ready
         echo "⏳ Waiting for Cloud SQL Proxy..."
@@ -306,19 +306,19 @@ steps:
         
         # Run the Python migration script
         python database/migrate.py --action=up
-        migration_result=$?
+        migration_result=$$?
         
         # Show migration status
         echo "📋 Migration status:"
         python database/migrate.py --action=status || true
         
         # Clean up proxy
-        kill $PROXY_PID 2>/dev/null || true
+        kill $$PROXY_PID 2>/dev/null || true
         
-        if [ $migration_result -eq 0 ]; then
+        if [ $$migration_result -eq 0 ]; then
           echo "✅ Migrations completed successfully"
         else
-          echo "⚠️ Migration failed with exit code $migration_result"
+          echo "⚠️ Migration failed with exit code $$migration_result"
           echo "Continuing deployment anyway (migrations may already be applied)"
         fi
     waitFor: ['create-staging-db']
