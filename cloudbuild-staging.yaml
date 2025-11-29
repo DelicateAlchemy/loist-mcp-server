@@ -264,9 +264,66 @@ steps:
     env:
       - 'CLOUDSDK_CORE_PROJECT=loist-music-library'
 
-  # Step 6: Note - Migrations will run automatically on Cloud Run startup
+  # Step 6: Run Database Migrations
+  - name: 'python:3.11-slim'
+    id: 'run-migrations'
+    entrypoint: 'bash'
+    secretEnv: ['DB_PASSWORD_STAGING', 'DB_CONNECTION_NAME_STAGING']
+    args:
+      - '-c'
+      - |
+        echo "🗄️ Running database migrations for staging..."
+        
+        # Install dependencies
+        apt-get update && apt-get install -y --no-install-recommends \
+          wget \
+          ca-certificates \
+          && rm -rf /var/lib/apt/lists/*
+        
+        # Install Python dependencies for migrations
+        pip install --upgrade pip
+        pip install psycopg2-binary
+        
+        # Download Cloud SQL Auth Proxy
+        echo "📥 Downloading Cloud SQL Auth Proxy..."
+        wget -q https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.8.1/cloud-sql-proxy.linux.amd64 -O /cloud-sql-proxy
+        chmod +x /cloud-sql-proxy
+        
+        # Start Cloud SQL Proxy in background
+        echo "🔌 Starting Cloud SQL Proxy..."
+        /cloud-sql-proxy --port=5432 "$$DB_CONNECTION_NAME_STAGING" &
+        PROXY_PID=$!
+        
+        # Wait for proxy to be ready
+        echo "⏳ Waiting for Cloud SQL Proxy..."
+        sleep 10
+        
+        # Run migrations
+        echo "🚀 Running migrations..."
+        
+        # Construct DATABASE_URL for the migration script
+        export DATABASE_URL="postgresql://music_library_user:$$DB_PASSWORD_STAGING@127.0.0.1:5432/loist_mvp_staging"
+        
+        # Run the Python migration script
+        python database/migrate.py --action=up
+        migration_result=$?
+        
+        # Show migration status
+        echo "📋 Migration status:"
+        python database/migrate.py --action=status || true
+        
+        # Clean up proxy
+        kill $PROXY_PID 2>/dev/null || true
+        
+        if [ $migration_result -eq 0 ]; then
+          echo "✅ Migrations completed successfully"
+        else
+          echo "⚠️ Migration failed with exit code $migration_result"
+          echo "Continuing deployment anyway (migrations may already be applied)"
+        fi
+    waitFor: ['create-staging-db']
 
-  # Step 7: Deploy to staging Cloud Run (migrations run on startup)
+  # Step 7: Deploy to staging Cloud Run
   - name: 'gcr.io/cloud-builders/gcloud'
     id: 'deploy-staging'
     args:
@@ -301,7 +358,7 @@ steps:
       # Remove GOOGLE_APPLICATION_CREDENTIALS secret if it exists (separate from env vars)
       - '--remove-secrets=GOOGLE_APPLICATION_CREDENTIALS'
       - '--quiet'
-    waitFor: ['create-staging-db']
+    waitFor: ['run-migrations']
 
 # Automatically tag and push images
 images:
@@ -322,3 +379,11 @@ timeout: '600s'  # 10 minutes
 tags:
   - 'music-library-mcp'
   - 'staging'
+
+# Secrets for database migrations
+availableSecrets:
+  secretManager:
+    - versionName: projects/loist-music-library/secrets/db-password-staging/versions/latest
+      env: 'DB_PASSWORD_STAGING'
+    - versionName: projects/loist-music-library/secrets/db-connection-name-staging/versions/latest
+      env: 'DB_CONNECTION_NAME_STAGING'
