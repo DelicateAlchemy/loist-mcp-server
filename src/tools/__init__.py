@@ -15,6 +15,16 @@ from .query_schemas import (
     DeleteAudioOutput,
 )
 
+# Update/edit tools
+from .update_tools import update_metadata
+from .update_schemas import (
+    UpdateMetadataInput,
+    UpdateMetadataOutput,
+    UpdateMetadataError,
+    UpdateErrorCode,
+    TrackMetadataUpdate,
+)
+
 __all__ = [
     # Task 7
     "process_audio_complete",
@@ -26,4 +36,11 @@ __all__ = [
     "QueryException",
     "DeleteAudioInput",
     "DeleteAudioOutput",
+    # Update tools
+    "update_metadata",
+    "UpdateMetadataInput",
+    "UpdateMetadataOutput",
+    "UpdateMetadataError",
+    "UpdateErrorCode",
+    "TrackMetadataUpdate",
 ]
