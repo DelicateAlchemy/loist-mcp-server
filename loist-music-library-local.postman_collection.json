@@ -37,7 +37,7 @@
 					"",
 					"// AUTO-INITIALIZE: If no session exists, create one automatically",
 					"if (!sessionId) {",
-					"    console.log('🔄 No session found - auto-initializing MCP session...');",
+					"    console.log('\ud83d\udd04 No session found - auto-initializing MCP session...');",
 					"    ",
 					"    const baseUrl = pm.environment.get('base_url') || 'http://localhost:8080';",
 					"    ",
@@ -66,18 +66,18 @@
 					"    ",
 					"    pm.sendRequest(initRequest, function(err, initResponse) {",
 					"        if (err) {",
-					"            console.error('❌ Auto-init failed:', err);",
+					"            console.error('\u274c Auto-init failed:', err);",
 					"            return;",
 					"        }",
 					"        ",
 					"        // Extract session ID from response header",
 					"        const newSessionId = initResponse.headers.get('mcp-session-id');",
 					"        if (!newSessionId) {",
-					"            console.error('❌ No session ID in response headers');",
+					"            console.error('\u274c No session ID in response headers');",
 					"            return;",
 					"        }",
 					"        ",
-					"        console.log('✅ Got session:', newSessionId);",
+					"        console.log('\u2705 Got session:', newSessionId);",
 					"        pm.environment.set('sessionId', newSessionId);",
 					"        ",
 					"        // Step 2: Send notifications/initialized to complete handshake",
@@ -100,15 +100,15 @@
 					"        ",
 					"        pm.sendRequest(notifyRequest, function(notifyErr) {",
 					"            if (notifyErr) {",
-					"                console.error('❌ Handshake notification failed:', notifyErr);",
+					"                console.error('\u274c Handshake notification failed:', notifyErr);",
 					"            } else {",
-					"                console.log('✅ MCP handshake complete!');",
+					"                console.log('\u2705 MCP handshake complete!');",
 					"            }",
 					"        });",
 					"    });",
 					"    ",
 					"    // Note: Due to async nature, first request may fail. Re-run if needed.",
-					"    console.warn('⚠️ First request may fail due to async init. Re-run the folder if needed.');",
+					"    console.warn('\u26a0\ufe0f First request may fail due to async init. Re-run the folder if needed.');",
 					"}",
 					"",
 					"// Attach session ID to request (may be from env or just-created)",
@@ -216,7 +216,7 @@
 									"        if (err) {",
 									"            console.error('Failed to send notifications/initialized:', err);",
 									"        } else {",
-									"            console.log('✅ MCP handshake complete - notifications/initialized sent');",
+									"            console.log('\u2705 MCP handshake complete - notifications/initialized sent');",
 									"        }",
 									"    });",
 									"}",
@@ -362,7 +362,7 @@
 									"            ",
 									"            // Check if it's a session error",
 									"            if (errorMsg.toLowerCase().includes('session')) {",
-									"                console.log('\\n⚠️ SESSION ERROR DETECTED');",
+									"                console.log('\\n\u26a0\ufe0f SESSION ERROR DETECTED');",
 									"                console.log('FastMCP HTTP transport may require initialize() call first.');",
 									"                console.log('Try calling initialize method before tools/call');",
 									"            }",
@@ -494,8 +494,13 @@
 						"header": [],
 						"url": {
 							"raw": "{{base_url}}/health/live",
-							"host": ["{{base_url}}"],
-							"path": ["health", "live"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"health",
+								"live"
+							]
 						},
 						"description": "Basic liveness check endpoint. Returns 200 if server is running."
 					},
@@ -508,8 +513,13 @@
 						"header": [],
 						"url": {
 							"raw": "{{base_url}}/health/ready",
-							"host": ["{{base_url}}"],
-							"path": ["health", "ready"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"health",
+								"ready"
+							]
 						},
 						"description": "Readiness check endpoint. Returns 200 if server and dependencies are ready."
 					},
@@ -522,8 +532,13 @@
 						"header": [],
 						"url": {
 							"raw": "{{base_url}}/health/database",
-							"host": ["{{base_url}}"],
-							"path": ["health", "database"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"health",
+								"database"
+							]
 						},
 						"description": "Database connectivity check endpoint. Returns 200 if database connection is healthy."
 					},
@@ -547,7 +562,7 @@
 									"const audioUrl = pm.environment.get('audio_source_url') || pm.collectionVariables.get('audio_source_url');",
 									"",
 									"if (!audioUrl || audioUrl === 'https://example.com/audio.mp3') {",
-									"    console.warn('⚠️ audio_source_url is not set or is still the example URL!');",
+									"    console.warn('\u26a0\ufe0f audio_source_url is not set or is still the example URL!');",
 									"    console.warn('Set audio_source_url in your environment to the URL of an audio file to process.');",
 									"}",
 									"",
@@ -558,15 +573,15 @@
 									"        const urlObj = new URL(audioUrl);",
 									"        filename = urlObj.pathname.split('/').pop() || 'audio.mp3';",
 									"        pm.variables.set('audio_source_filename', filename);",
-									"        console.log('📁 Auto-derived filename from URL:', filename);",
+									"        console.log('\ud83d\udcc1 Auto-derived filename from URL:', filename);",
 									"    } catch (e) {",
 									"        console.warn('Could not parse URL for filename, using default');",
 									"        pm.variables.set('audio_source_filename', 'audio.mp3');",
 									"    }",
 									"}",
 									"",
-									"console.log('🎵 Processing audio from:', audioUrl);",
-									"console.log('📁 Filename:', filename || pm.variables.get('audio_source_filename'));"
+									"console.log('\ud83c\udfb5 Processing audio from:', audioUrl);",
+									"console.log('\ud83d\udcc1 Filename:', filename || pm.variables.get('audio_source_filename'));"
 								]
 							}
 						},
@@ -636,7 +651,7 @@
 									"    if (toolResult && audioIdValue) {",
 									"        pm.environment.set('audio_id', audioIdValue);",
 									"        pm.environment.set('last_processed_audio_id', audioIdValue);",
-									"        console.log('✅ Stored audio_id for chaining:', audioIdValue);",
+									"        console.log('\u2705 Stored audio_id for chaining:', audioIdValue);",
 									"    }",
 									"    ",
 									"    // Log result summary",
@@ -671,7 +686,7 @@
 								"mcp"
 							]
 						},
-						"description": "Complete audio processing pipeline: Download → Extract metadata → Upload to GCS → Save to DB. Returns audio ID and metadata."
+						"description": "Complete audio processing pipeline: Download \u2192 Extract metadata \u2192 Upload to GCS \u2192 Save to DB. Returns audio ID and metadata."
 					},
 					"response": []
 				},
@@ -695,8 +710,12 @@
 						},
 						"url": {
 							"raw": "{{base_url}}/mcp",
-							"host": ["{{base_url}}"],
-							"path": ["mcp"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"mcp"
+							]
 						},
 						"description": "Retrieve complete metadata for a processed audio track by UUID."
 					},
@@ -709,7 +728,7 @@
 									"// Verify audio_id is available",
 									"const audioId = pm.environment.get('audio_id');",
 									"if (!audioId) {",
-									"    console.warn('⚠️ No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
+									"    console.warn('\u26a0\ufe0f No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
 									"}"
 								]
 							}
@@ -806,8 +825,12 @@
 						},
 						"url": {
 							"raw": "{{base_url}}/mcp",
-							"host": ["{{base_url}}"],
-							"path": ["mcp"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"mcp"
+							]
 						},
 						"description": "Search across all processed audio with advanced filtering. Supports full-text search on title, artist, album, and genre."
 					},
@@ -883,7 +906,7 @@
 									"    const results = toolResult.results || toolResult.items || (Array.isArray(toolResult) ? toolResult : []);",
 									"    if (results.length > 0 && results[0].audio_id) {",
 									"        pm.environment.set('search_result_audio_id', results[0].audio_id);",
-									"        console.log('✅ Stored first search result audio_id:', results[0].audio_id);",
+									"        console.log('\u2705 Stored first search result audio_id:', results[0].audio_id);",
 									"    }",
 									"    ",
 									"    console.log('Search Result:', JSON.stringify(toolResult, null, 2));",
@@ -914,8 +937,12 @@
 						},
 						"url": {
 							"raw": "{{base_url}}/mcp",
-							"host": ["{{base_url}}"],
-							"path": ["mcp"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"mcp"
+							]
 						},
 						"description": "Simple search without filters - just query string and limit."
 					},
@@ -987,6 +1014,289 @@
 					"response": []
 				},
 				{
+					"name": "Update Metadata",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json, text/event-stream"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"update_metadata\",\n    \"arguments\": {\n      \"audioId\": \"{{audio_id}}\",\n      \"metadata\": {\n        \"artist\": \"Updated Artist Name\",\n        \"year\": 2024\n      }\n    }\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/mcp",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"mcp"
+							]
+						},
+						"description": "Update metadata for a previously processed audio track. Uses JSON Merge Patch semantics - omit a field to leave it unchanged, provide a value to update it.\n\nEditable fields:\n- artist, title, album, genre, year\n- composer, publisher, record_label, isrc"
+					},
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"// Verify audio_id is available",
+									"const audioId = pm.environment.get('audio_id');",
+									"if (!audioId) {",
+									"    console.warn('\u26a0\ufe0f No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
+									"}"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"// Parse JSON-RPC response (handles SSE format)",
+									"let responseBody = pm.response.text();",
+									"let jsonResponse = null;",
+									"",
+									"if (responseBody.includes('data: ')) {",
+									"    const dataLines = responseBody.split('\\n').filter(line => line.startsWith('data: '));",
+									"    if (dataLines.length > 0) {",
+									"        jsonResponse = JSON.parse(dataLines[dataLines.length - 1].replace('data: ', '').trim());",
+									"    }",
+									"} else {",
+									"    jsonResponse = pm.response.json();",
+									"}",
+									"",
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response follows JSON-RPC 2.0 format', function () {",
+									"    pm.expect(jsonResponse).to.have.property('jsonrpc', '2.0');",
+									"    pm.expect(jsonResponse).to.have.property('id');",
+									"});",
+									"",
+									"// Check for FastMCP tool error format",
+									"const isFastMCPError = jsonResponse.result && jsonResponse.result.isError === true;",
+									"const fastMCPErrorMsg = isFastMCPError && jsonResponse.result.content && jsonResponse.result.content[0] ? jsonResponse.result.content[0].text : '';",
+									"",
+									"if (jsonResponse.error || isFastMCPError) {",
+									"    const errorMsg = jsonResponse.error ? jsonResponse.error.message : fastMCPErrorMsg;",
+									"    console.log('\u274c Error:', errorMsg);",
+									"    pm.test('Update metadata should not return error', function () {",
+									"        pm.expect(jsonResponse.error).to.be.undefined;",
+									"        pm.expect(isFastMCPError).to.be.false;",
+									"    });",
+									"} else {",
+									"    pm.test('Response has result', function () {",
+									"        pm.expect(jsonResponse).to.have.property('result');",
+									"    });",
+									"    ",
+									"    // Extract tool result from MCP content format",
+									"    const result = jsonResponse.result;",
+									"    let toolResult = result;",
+									"    ",
+									"    if (result && result.content && Array.isArray(result.content)) {",
+									"        const textContent = result.content.find(c => c.type === 'text');",
+									"        if (textContent && textContent.text) {",
+									"            try {",
+									"                toolResult = JSON.parse(textContent.text);",
+									"            } catch (e) {",
+									"                toolResult = textContent.text;",
+									"            }",
+									"        }",
+									"    }",
+									"    ",
+									"    pm.test('Update result indicates success', function () {",
+									"        pm.expect(toolResult.success).to.be.true;",
+									"    });",
+									"    ",
+									"    pm.test('Response contains updatedFields array', function () {",
+									"        pm.expect(toolResult.updatedFields).to.be.an('array');",
+									"        pm.expect(toolResult.updatedFields.length).to.be.greaterThan(0);",
+									"    });",
+									"    ",
+									"    pm.test('Response contains updated metadata', function () {",
+									"        pm.expect(toolResult.metadata).to.be.an('object');",
+									"    });",
+									"    ",
+									"    console.log('\u2705 Update Metadata Result:');",
+									"    console.log('  Updated fields:', toolResult.updatedFields);",
+									"    console.log('  New artist:', toolResult.metadata?.artist);",
+									"    console.log('  New year:', toolResult.metadata?.year);",
+									"}"
+								]
+							}
+						}
+					],
+					"response": []
+				},
+				{
+					"name": "Update Metadata - Empty (Validation Error)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json, text/event-stream"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"update_metadata\",\n    \"arguments\": {\n      \"audioId\": \"{{audio_id}}\",\n      \"metadata\": {}\n    }\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/mcp",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"mcp"
+							]
+						},
+						"description": "Test validation error when empty metadata is provided. Should return VALIDATION_ERROR."
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"// Parse JSON-RPC response",
+									"let responseBody = pm.response.text();",
+									"let jsonResponse = null;",
+									"",
+									"if (responseBody.includes('data: ')) {",
+									"    const dataLines = responseBody.split('\\n').filter(line => line.startsWith('data: '));",
+									"    if (dataLines.length > 0) {",
+									"        jsonResponse = JSON.parse(dataLines[dataLines.length - 1].replace('data: ', '').trim());",
+									"    }",
+									"} else {",
+									"    jsonResponse = pm.response.json();",
+									"}",
+									"",
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"// Extract tool result",
+									"const result = jsonResponse.result;",
+									"let toolResult = result;",
+									"",
+									"if (result && result.content && Array.isArray(result.content)) {",
+									"    const textContent = result.content.find(c => c.type === 'text');",
+									"    if (textContent && textContent.text) {",
+									"        try {",
+									"            toolResult = JSON.parse(textContent.text);",
+									"        } catch (e) {",
+									"            toolResult = textContent.text;",
+									"        }",
+									"    }",
+									"}",
+									"",
+									"pm.test('Returns validation error for empty metadata', function () {",
+									"    pm.expect(toolResult.success).to.be.false;",
+									"    pm.expect(toolResult.error).to.equal('VALIDATION_ERROR');",
+									"});",
+									"",
+									"console.log('\u2705 Empty metadata correctly rejected:', toolResult.message);"
+								]
+							}
+						}
+					],
+					"response": []
+				},
+				{
+					"name": "Update Metadata - Not Found",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json, text/event-stream"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"update_metadata\",\n    \"arguments\": {\n      \"audioId\": \"00000000-0000-0000-0000-000000000000\",\n      \"metadata\": {\n        \"artist\": \"Test Artist\"\n      }\n    }\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/mcp",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"mcp"
+							]
+						},
+						"description": "Test error handling when track doesn't exist. Should return RESOURCE_NOT_FOUND."
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"// Parse JSON-RPC response",
+									"let responseBody = pm.response.text();",
+									"let jsonResponse = null;",
+									"",
+									"if (responseBody.includes('data: ')) {",
+									"    const dataLines = responseBody.split('\\n').filter(line => line.startsWith('data: '));",
+									"    if (dataLines.length > 0) {",
+									"        jsonResponse = JSON.parse(dataLines[dataLines.length - 1].replace('data: ', '').trim());",
+									"    }",
+									"} else {",
+									"    jsonResponse = pm.response.json();",
+									"}",
+									"",
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"// Extract tool result",
+									"const result = jsonResponse.result;",
+									"let toolResult = result;",
+									"",
+									"if (result && result.content && Array.isArray(result.content)) {",
+									"    const textContent = result.content.find(c => c.type === 'text');",
+									"    if (textContent && textContent.text) {",
+									"        try {",
+									"            toolResult = JSON.parse(textContent.text);",
+									"        } catch (e) {",
+									"            toolResult = textContent.text;",
+									"        }",
+									"    }",
+									"}",
+									"",
+									"pm.test('Returns not found error for non-existent track', function () {",
+									"    pm.expect(toolResult.success).to.be.false;",
+									"    pm.expect(toolResult.error).to.equal('RESOURCE_NOT_FOUND');",
+									"});",
+									"",
+									"console.log('\u2705 Non-existent track correctly rejected:', toolResult.message);"
+								]
+							}
+						}
+					],
+					"response": []
+				},
+				{
 					"name": "Delete Audio",
 					"request": {
 						"method": "POST",
@@ -1006,8 +1316,12 @@
 						},
 						"url": {
 							"raw": "{{base_url}}/mcp",
-							"host": ["{{base_url}}"],
-							"path": ["mcp"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"mcp"
+							]
 						},
 						"description": "Permanently delete an audio track from the database. GCS files are left in place for lifecycle management."
 					},
@@ -1020,8 +1334,8 @@
 									"// Verify audio_id is available",
 									"const audioId = pm.environment.get('audio_id');",
 									"if (!audioId) {",
-									"    console.warn('⚠️ No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
-									"    console.warn('⚠️ DELETE will fail without a valid audio_id.');",
+									"    console.warn('\u26a0\ufe0f No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
+									"    console.warn('\u26a0\ufe0f DELETE will fail without a valid audio_id.');",
 									"}"
 								]
 							}
@@ -1053,8 +1367,8 @@
 									"    pm.expect(jsonResponse).to.have.property('id');",
 									"});",
 									"",
-								"// ✅ delete_audio is NOW IMPLEMENTED (hard delete with GCS cleanup)",
-								"// Removes: DB record, GCS audio file, waveform SVG, thumbnails",
+									"// \u2705 delete_audio is NOW IMPLEMENTED (hard delete with GCS cleanup)",
+									"// Removes: DB record, GCS audio file, waveform SVG, thumbnails",
 									"// This test expects an error until the feature is built",
 									"",
 									"// Check for FastMCP tool error format (isError: true in result)",
@@ -1103,7 +1417,7 @@
 									"                          (typeof toolResult === 'string' && toolResult.toLowerCase().includes('deleted'));",
 									"        // Skip this check if toolResult indicates an error",
 									"        if (toolResult.error || toolResult.success === false) {",
-									"            console.log('⚠️ Delete not yet implemented - skipping success check');",
+									"            console.log('\u26a0\ufe0f Delete not yet implemented - skipping success check');",
 									"            pm.expect(true).to.be.true; // Pass anyway",
 									"        } else {",
 									"            pm.expect(isSuccess).to.be.true;",
@@ -1114,281 +1428,10 @@
 									"    ",
 									"    // Clear the audio_id since it's been deleted",
 									"    if (toolResult.success || toolResult.deleted) {",
-									"        console.log('✅ Audio deleted. Clearing audio_id from environment.');",
+									"        console.log('\u2705 Audio deleted. Clearing audio_id from environment.');",
 									"        pm.environment.unset('audio_id');",
 									"    }",
 									"}"
-								]
-							}
-						}
-					],
-					"response": []
-				},
-				{
-					"name": "Update Metadata",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							},
-							{
-								"key": "Accept",
-								"value": "application/json, text/event-stream"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"update_metadata\",\n    \"arguments\": {\n      \"audioId\": \"{{audio_id}}\",\n      \"metadata\": {\n        \"artist\": \"Updated Artist Name\",\n        \"year\": 2024\n      }\n    }\n  }\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/mcp",
-							"host": ["{{base_url}}"],
-							"path": ["mcp"]
-						},
-						"description": "Update metadata for a previously processed audio track. Uses JSON Merge Patch semantics - omit a field to leave it unchanged, provide a value to update it.\n\nEditable fields:\n- artist, title, album, genre, year\n- composer, publisher, record_label, isrc"
-					},
-					"event": [
-						{
-							"listen": "prerequest",
-							"script": {
-								"type": "text/javascript",
-								"exec": [
-									"// Verify audio_id is available",
-									"const audioId = pm.environment.get('audio_id');",
-									"if (!audioId) {",
-									"    console.warn('⚠️ No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
-									"}"
-								]
-							}
-						},
-						{
-							"listen": "test",
-							"script": {
-								"type": "text/javascript",
-								"exec": [
-									"// Parse JSON-RPC response (handles SSE format)",
-									"let responseBody = pm.response.text();",
-									"let jsonResponse = null;",
-									"",
-									"if (responseBody.includes('data: ')) {",
-									"    const dataLines = responseBody.split('\\n').filter(line => line.startsWith('data: '));",
-									"    if (dataLines.length > 0) {",
-									"        jsonResponse = JSON.parse(dataLines[dataLines.length - 1].replace('data: ', '').trim());",
-									"    }",
-									"} else {",
-									"    jsonResponse = pm.response.json();",
-									"}",
-									"",
-									"pm.test('Status code is 200', function () {",
-									"    pm.response.to.have.status(200);",
-									"});",
-									"",
-									"pm.test('Response follows JSON-RPC 2.0 format', function () {",
-									"    pm.expect(jsonResponse).to.have.property('jsonrpc', '2.0');",
-									"    pm.expect(jsonResponse).to.have.property('id');",
-									"});",
-									"",
-									"// Check for FastMCP tool error format",
-									"const isFastMCPError = jsonResponse.result && jsonResponse.result.isError === true;",
-									"const fastMCPErrorMsg = isFastMCPError && jsonResponse.result.content && jsonResponse.result.content[0] ? jsonResponse.result.content[0].text : '';",
-									"",
-									"if (jsonResponse.error || isFastMCPError) {",
-									"    const errorMsg = jsonResponse.error ? jsonResponse.error.message : fastMCPErrorMsg;",
-									"    console.log('❌ Error:', errorMsg);",
-									"    pm.test('Update metadata should not return error', function () {",
-									"        pm.expect(jsonResponse.error).to.be.undefined;",
-									"        pm.expect(isFastMCPError).to.be.false;",
-									"    });",
-									"} else {",
-									"    pm.test('Response has result', function () {",
-									"        pm.expect(jsonResponse).to.have.property('result');",
-									"    });",
-									"    ",
-									"    // Extract tool result from MCP content format",
-									"    const result = jsonResponse.result;",
-									"    let toolResult = result;",
-									"    ",
-									"    if (result && result.content && Array.isArray(result.content)) {",
-									"        const textContent = result.content.find(c => c.type === 'text');",
-									"        if (textContent && textContent.text) {",
-									"            try {",
-									"                toolResult = JSON.parse(textContent.text);",
-									"            } catch (e) {",
-									"                toolResult = textContent.text;",
-									"            }",
-									"        }",
-									"    }",
-									"    ",
-									"    pm.test('Update result indicates success', function () {",
-									"        pm.expect(toolResult.success).to.be.true;",
-									"    });",
-									"    ",
-									"    pm.test('Response contains updatedFields array', function () {",
-									"        pm.expect(toolResult.updatedFields).to.be.an('array');",
-									"        pm.expect(toolResult.updatedFields.length).to.be.greaterThan(0);",
-									"    });",
-									"    ",
-									"    pm.test('Response contains updated metadata', function () {",
-									"        pm.expect(toolResult.metadata).to.be.an('object');",
-									"    });",
-									"    ",
-									"    console.log('✅ Update Metadata Result:');",
-									"    console.log('  Updated fields:', toolResult.updatedFields);",
-									"    console.log('  New artist:', toolResult.metadata?.artist);",
-									"    console.log('  New year:', toolResult.metadata?.year);",
-									"}"
-								]
-							}
-						}
-					],
-					"response": []
-				},
-				{
-					"name": "Update Metadata - Empty (Validation Error)",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							},
-							{
-								"key": "Accept",
-								"value": "application/json, text/event-stream"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"update_metadata\",\n    \"arguments\": {\n      \"audioId\": \"{{audio_id}}\",\n      \"metadata\": {}\n    }\n  }\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/mcp",
-							"host": ["{{base_url}}"],
-							"path": ["mcp"]
-						},
-						"description": "Test validation error when empty metadata is provided. Should return VALIDATION_ERROR."
-					},
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"type": "text/javascript",
-								"exec": [
-									"// Parse JSON-RPC response",
-									"let responseBody = pm.response.text();",
-									"let jsonResponse = null;",
-									"",
-									"if (responseBody.includes('data: ')) {",
-									"    const dataLines = responseBody.split('\\n').filter(line => line.startsWith('data: '));",
-									"    if (dataLines.length > 0) {",
-									"        jsonResponse = JSON.parse(dataLines[dataLines.length - 1].replace('data: ', '').trim());",
-									"    }",
-									"} else {",
-									"    jsonResponse = pm.response.json();",
-									"}",
-									"",
-									"pm.test('Status code is 200', function () {",
-									"    pm.response.to.have.status(200);",
-									"});",
-									"",
-									"// Extract tool result",
-									"const result = jsonResponse.result;",
-									"let toolResult = result;",
-									"",
-									"if (result && result.content && Array.isArray(result.content)) {",
-									"    const textContent = result.content.find(c => c.type === 'text');",
-									"    if (textContent && textContent.text) {",
-									"        try {",
-									"            toolResult = JSON.parse(textContent.text);",
-									"        } catch (e) {",
-									"            toolResult = textContent.text;",
-									"        }",
-									"    }",
-									"}",
-									"",
-									"pm.test('Returns validation error for empty metadata', function () {",
-									"    pm.expect(toolResult.success).to.be.false;",
-									"    pm.expect(toolResult.error).to.equal('VALIDATION_ERROR');",
-									"});",
-									"",
-									"console.log('✅ Empty metadata correctly rejected:', toolResult.message);"
-								]
-							}
-						}
-					],
-					"response": []
-				},
-				{
-					"name": "Update Metadata - Not Found",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							},
-							{
-								"key": "Accept",
-								"value": "application/json, text/event-stream"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"update_metadata\",\n    \"arguments\": {\n      \"audioId\": \"00000000-0000-0000-0000-000000000000\",\n      \"metadata\": {\n        \"artist\": \"Test Artist\"\n      }\n    }\n  }\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/mcp",
-							"host": ["{{base_url}}"],
-							"path": ["mcp"]
-						},
-						"description": "Test error handling when track doesn't exist. Should return RESOURCE_NOT_FOUND."
-					},
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"type": "text/javascript",
-								"exec": [
-									"// Parse JSON-RPC response",
-									"let responseBody = pm.response.text();",
-									"let jsonResponse = null;",
-									"",
-									"if (responseBody.includes('data: ')) {",
-									"    const dataLines = responseBody.split('\\n').filter(line => line.startsWith('data: '));",
-									"    if (dataLines.length > 0) {",
-									"        jsonResponse = JSON.parse(dataLines[dataLines.length - 1].replace('data: ', '').trim());",
-									"    }",
-									"} else {",
-									"    jsonResponse = pm.response.json();",
-									"}",
-									"",
-									"pm.test('Status code is 200', function () {",
-									"    pm.response.to.have.status(200);",
-									"});",
-									"",
-									"// Extract tool result",
-									"const result = jsonResponse.result;",
-									"let toolResult = result;",
-									"",
-									"if (result && result.content && Array.isArray(result.content)) {",
-									"    const textContent = result.content.find(c => c.type === 'text');",
-									"    if (textContent && textContent.text) {",
-									"        try {",
-									"            toolResult = JSON.parse(textContent.text);",
-									"        } catch (e) {",
-									"            toolResult = textContent.text;",
-									"        }",
-									"    }",
-									"}",
-									"",
-									"pm.test('Returns not found error for non-existent track', function () {",
-									"    pm.expect(toolResult.success).to.be.false;",
-									"    pm.expect(toolResult.error).to.equal('RESOURCE_NOT_FOUND');",
-									"});",
-									"",
-									"console.log('✅ Non-existent track correctly rejected:', toolResult.message);"
 								]
 							}
 						}
@@ -1415,8 +1458,12 @@
 						},
 						"url": {
 							"raw": "{{base_url}}/mcp",
-							"host": ["{{base_url}}"],
-							"path": ["mcp"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"mcp"
+							]
 						},
 						"description": "Generate embed URL for audio track with template selection. Templates: 'standard' or 'waveform'. Device: 'mobile', 'desktop', or null for auto-detection."
 					},
@@ -1428,7 +1475,7 @@
 								"exec": [
 									"const audioId = pm.environment.get('audio_id');",
 									"if (!audioId) {",
-									"    console.warn('⚠️ No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
+									"    console.warn('\u26a0\ufe0f No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
 									"}"
 								]
 							}
@@ -1505,7 +1552,7 @@
 									"    const embedUrl = toolResult.url || toolResult.embed_url || toolResult.embedUrl;",
 									"    if (embedUrl) {",
 									"        pm.environment.set('embed_url', embedUrl);",
-									"        console.log('✅ Stored embed_url for oEmbed testing:', embedUrl);",
+									"        console.log('\u2705 Stored embed_url for oEmbed testing:', embedUrl);",
 									"    }",
 									"    ",
 									"    console.log('Embed URL Result:', JSON.stringify(toolResult, null, 2));",
@@ -1536,8 +1583,12 @@
 						},
 						"url": {
 							"raw": "{{base_url}}/mcp",
-							"host": ["{{base_url}}"],
-							"path": ["mcp"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"mcp"
+							]
 						},
 						"description": "Get embed URL with waveform template for desktop device."
 					},
@@ -1549,7 +1600,7 @@
 								"exec": [
 									"const audioId = pm.environment.get('audio_id');",
 									"if (!audioId) {",
-									"    console.warn('⚠️ No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
+									"    console.warn('\u26a0\ufe0f No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
 									"}"
 								]
 							}
@@ -1650,8 +1701,12 @@
 						},
 						"url": {
 							"raw": "{{base_url}}/mcp",
-							"host": ["{{base_url}}"],
-							"path": ["mcp"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"mcp"
+							]
 						},
 						"description": "List all available embed player templates and their capabilities."
 					},
@@ -1753,8 +1808,12 @@
 						},
 						"url": {
 							"raw": "{{base_url}}/mcp",
-							"host": ["{{base_url}}"],
-							"path": ["mcp"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"mcp"
+							]
 						},
 						"description": "Check if waveform is available for an audio track. Verifies waveform generation status and provides access information if the waveform exists."
 					},
@@ -1766,7 +1825,7 @@
 								"exec": [
 									"const audioId = pm.environment.get('audio_id');",
 									"if (!audioId) {",
-									"    console.warn('⚠️ No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
+									"    console.warn('\u26a0\ufe0f No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
 									"}"
 								]
 							}
@@ -1876,8 +1935,16 @@
 						},
 						"url": {
 							"raw": "{{base_url}}/mcp/resources/music-library://audio/{{audio_id}}/stream",
-							"host": ["{{base_url}}"],
-							"path": ["mcp", "resources", "music-library://audio", "{{audio_id}}", "stream"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"mcp",
+								"resources",
+								"music-library://audio",
+								"{{audio_id}}",
+								"stream"
+							]
 						},
 						"description": "Get signed GCS URL for streaming audio file. Supports HTTP Range requests for seeking. Signed URLs expire after 15 minutes."
 					},
@@ -1903,8 +1970,16 @@
 						},
 						"url": {
 							"raw": "{{base_url}}/mcp/resources/music-library://audio/{{audio_id}}/metadata",
-							"host": ["{{base_url}}"],
-							"path": ["mcp", "resources", "music-library://audio", "{{audio_id}}", "metadata"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"mcp",
+								"resources",
+								"music-library://audio",
+								"{{audio_id}}",
+								"metadata"
+							]
 						},
 						"description": "Get complete audio metadata as JSON. Returns Product and Format information."
 					},
@@ -1930,8 +2005,16 @@
 						},
 						"url": {
 							"raw": "{{base_url}}/mcp/resources/music-library://audio/{{audio_id}}/thumbnail",
-							"host": ["{{base_url}}"],
-							"path": ["mcp", "resources", "music-library://audio", "{{audio_id}}", "thumbnail"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"mcp",
+								"resources",
+								"music-library://audio",
+								"{{audio_id}}",
+								"thumbnail"
+							]
 						},
 						"description": "Get signed GCS URL for thumbnail/artwork image. Returns null if no artwork is available. Signed URLs expire after 15 minutes."
 					},
@@ -1950,8 +2033,13 @@
 						"header": [],
 						"url": {
 							"raw": "{{base_url}}/embed/{{audio_id}}",
-							"host": ["{{base_url}}"],
-							"path": ["embed", "{{audio_id}}"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"embed",
+								"{{audio_id}}"
+							]
 						},
 						"description": "HTML5 audio player embed page with custom UI, metadata display, Open Graph tags, and keyboard shortcuts."
 					},
@@ -1964,8 +2052,14 @@
 						"header": [],
 						"url": {
 							"raw": "{{base_url}}/embed/{{audio_id}}/waveform",
-							"host": ["{{base_url}}"],
-							"path": ["embed", "{{audio_id}}", "waveform"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"embed",
+								"{{audio_id}}",
+								"waveform"
+							]
 						},
 						"description": "Embed page with waveform visualization template."
 					},
@@ -1978,8 +2072,15 @@
 						"header": [],
 						"url": {
 							"raw": "{{base_url}}/embed/{{audio_id}}/waveform/desktop",
-							"host": ["{{base_url}}"],
-							"path": ["embed", "{{audio_id}}", "waveform", "desktop"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"embed",
+								"{{audio_id}}",
+								"waveform",
+								"desktop"
+							]
 						},
 						"description": "Embed page with waveform template optimized for desktop."
 					},
@@ -1992,8 +2093,15 @@
 						"header": [],
 						"url": {
 							"raw": "{{base_url}}/embed/{{audio_id}}/waveform/mobile",
-							"host": ["{{base_url}}"],
-							"path": ["embed", "{{audio_id}}", "waveform", "mobile"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"embed",
+								"{{audio_id}}",
+								"waveform",
+								"mobile"
+							]
 						},
 						"description": "Embed page with waveform template optimized for mobile."
 					},
@@ -2006,8 +2114,12 @@
 						"header": [],
 						"url": {
 							"raw": "{{base_url}}/oembed?url={{embed_url}}&format=json&maxwidth=800&maxheight=300",
-							"host": ["{{base_url}}"],
-							"path": ["oembed"],
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"oembed"
+							],
 							"query": [
 								{
 									"key": "url",
@@ -2042,8 +2154,12 @@
 						"header": [],
 						"url": {
 							"raw": "{{base_url}}/oembed?url={{embed_url}}&format=xml&maxwidth=500&maxheight=200",
-							"host": ["{{base_url}}"],
-							"path": ["oembed"],
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"oembed"
+							],
 							"query": [
 								{
 									"key": "url",
@@ -2083,8 +2199,14 @@
 						],
 						"url": {
 							"raw": "{{base_url}}/api/tracks/{{audio_id}}",
-							"host": ["{{base_url}}"],
-							"path": ["api", "tracks", "{{audio_id}}"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"tracks",
+								"{{audio_id}}"
+							]
 						},
 						"description": "Delete an audio track via HTTP API. Removes database record and cleans up associated GCS files (audio, thumbnail, waveform). Returns 204 No Content on success."
 					},
@@ -2097,8 +2219,13 @@
 						"header": [],
 						"url": {
 							"raw": "{{base_url}}/.well-known/oembed.json",
-							"host": ["{{base_url}}"],
-							"path": [".well-known", "oembed.json"]
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								".well-known",
+								"oembed.json"
+							]
 						},
 						"description": "oEmbed discovery endpoint. Returns provider information and endpoint configuration for oEmbed consumers."
 					},
@@ -2152,6 +2279,3 @@
 		}
 	]
 }
-
-
-
