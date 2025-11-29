@@ -1125,6 +1125,277 @@
 					"response": []
 				},
 				{
+					"name": "Update Metadata",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json, text/event-stream"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"update_metadata\",\n    \"arguments\": {\n      \"audioId\": \"{{audio_id}}\",\n      \"metadata\": {\n        \"artist\": \"Updated Artist Name\",\n        \"year\": 2024\n      }\n    }\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/mcp",
+							"host": ["{{base_url}}"],
+							"path": ["mcp"]
+						},
+						"description": "Update metadata for a previously processed audio track. Uses JSON Merge Patch semantics - omit a field to leave it unchanged, provide a value to update it.\n\nEditable fields:\n- artist, title, album, genre, year\n- composer, publisher, record_label, isrc"
+					},
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"// Verify audio_id is available",
+									"const audioId = pm.environment.get('audio_id');",
+									"if (!audioId) {",
+									"    console.warn('⚠️ No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
+									"}"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"// Parse JSON-RPC response (handles SSE format)",
+									"let responseBody = pm.response.text();",
+									"let jsonResponse = null;",
+									"",
+									"if (responseBody.includes('data: ')) {",
+									"    const dataLines = responseBody.split('\\n').filter(line => line.startsWith('data: '));",
+									"    if (dataLines.length > 0) {",
+									"        jsonResponse = JSON.parse(dataLines[dataLines.length - 1].replace('data: ', '').trim());",
+									"    }",
+									"} else {",
+									"    jsonResponse = pm.response.json();",
+									"}",
+									"",
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response follows JSON-RPC 2.0 format', function () {",
+									"    pm.expect(jsonResponse).to.have.property('jsonrpc', '2.0');",
+									"    pm.expect(jsonResponse).to.have.property('id');",
+									"});",
+									"",
+									"// Check for FastMCP tool error format",
+									"const isFastMCPError = jsonResponse.result && jsonResponse.result.isError === true;",
+									"const fastMCPErrorMsg = isFastMCPError && jsonResponse.result.content && jsonResponse.result.content[0] ? jsonResponse.result.content[0].text : '';",
+									"",
+									"if (jsonResponse.error || isFastMCPError) {",
+									"    const errorMsg = jsonResponse.error ? jsonResponse.error.message : fastMCPErrorMsg;",
+									"    console.log('❌ Error:', errorMsg);",
+									"    pm.test('Update metadata should not return error', function () {",
+									"        pm.expect(jsonResponse.error).to.be.undefined;",
+									"        pm.expect(isFastMCPError).to.be.false;",
+									"    });",
+									"} else {",
+									"    pm.test('Response has result', function () {",
+									"        pm.expect(jsonResponse).to.have.property('result');",
+									"    });",
+									"    ",
+									"    // Extract tool result from MCP content format",
+									"    const result = jsonResponse.result;",
+									"    let toolResult = result;",
+									"    ",
+									"    if (result && result.content && Array.isArray(result.content)) {",
+									"        const textContent = result.content.find(c => c.type === 'text');",
+									"        if (textContent && textContent.text) {",
+									"            try {",
+									"                toolResult = JSON.parse(textContent.text);",
+									"            } catch (e) {",
+									"                toolResult = textContent.text;",
+									"            }",
+									"        }",
+									"    }",
+									"    ",
+									"    pm.test('Update result indicates success', function () {",
+									"        pm.expect(toolResult.success).to.be.true;",
+									"    });",
+									"    ",
+									"    pm.test('Response contains updatedFields array', function () {",
+									"        pm.expect(toolResult.updatedFields).to.be.an('array');",
+									"        pm.expect(toolResult.updatedFields.length).to.be.greaterThan(0);",
+									"    });",
+									"    ",
+									"    pm.test('Response contains updated metadata', function () {",
+									"        pm.expect(toolResult.metadata).to.be.an('object');",
+									"    });",
+									"    ",
+									"    console.log('✅ Update Metadata Result:');",
+									"    console.log('  Updated fields:', toolResult.updatedFields);",
+									"    console.log('  New artist:', toolResult.metadata?.artist);",
+									"    console.log('  New year:', toolResult.metadata?.year);",
+									"}"
+								]
+							}
+						}
+					],
+					"response": []
+				},
+				{
+					"name": "Update Metadata - Empty (Validation Error)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json, text/event-stream"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"update_metadata\",\n    \"arguments\": {\n      \"audioId\": \"{{audio_id}}\",\n      \"metadata\": {}\n    }\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/mcp",
+							"host": ["{{base_url}}"],
+							"path": ["mcp"]
+						},
+						"description": "Test validation error when empty metadata is provided. Should return VALIDATION_ERROR."
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"// Parse JSON-RPC response",
+									"let responseBody = pm.response.text();",
+									"let jsonResponse = null;",
+									"",
+									"if (responseBody.includes('data: ')) {",
+									"    const dataLines = responseBody.split('\\n').filter(line => line.startsWith('data: '));",
+									"    if (dataLines.length > 0) {",
+									"        jsonResponse = JSON.parse(dataLines[dataLines.length - 1].replace('data: ', '').trim());",
+									"    }",
+									"} else {",
+									"    jsonResponse = pm.response.json();",
+									"}",
+									"",
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"// Extract tool result",
+									"const result = jsonResponse.result;",
+									"let toolResult = result;",
+									"",
+									"if (result && result.content && Array.isArray(result.content)) {",
+									"    const textContent = result.content.find(c => c.type === 'text');",
+									"    if (textContent && textContent.text) {",
+									"        try {",
+									"            toolResult = JSON.parse(textContent.text);",
+									"        } catch (e) {",
+									"            toolResult = textContent.text;",
+									"        }",
+									"    }",
+									"}",
+									"",
+									"pm.test('Returns validation error for empty metadata', function () {",
+									"    pm.expect(toolResult.success).to.be.false;",
+									"    pm.expect(toolResult.error).to.equal('VALIDATION_ERROR');",
+									"});",
+									"",
+									"console.log('✅ Empty metadata correctly rejected:', toolResult.message);"
+								]
+							}
+						}
+					],
+					"response": []
+				},
+				{
+					"name": "Update Metadata - Not Found",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json, text/event-stream"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"update_metadata\",\n    \"arguments\": {\n      \"audioId\": \"00000000-0000-0000-0000-000000000000\",\n      \"metadata\": {\n        \"artist\": \"Test Artist\"\n      }\n    }\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/mcp",
+							"host": ["{{base_url}}"],
+							"path": ["mcp"]
+						},
+						"description": "Test error handling when track doesn't exist. Should return RESOURCE_NOT_FOUND."
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"// Parse JSON-RPC response",
+									"let responseBody = pm.response.text();",
+									"let jsonResponse = null;",
+									"",
+									"if (responseBody.includes('data: ')) {",
+									"    const dataLines = responseBody.split('\\n').filter(line => line.startsWith('data: '));",
+									"    if (dataLines.length > 0) {",
+									"        jsonResponse = JSON.parse(dataLines[dataLines.length - 1].replace('data: ', '').trim());",
+									"    }",
+									"} else {",
+									"    jsonResponse = pm.response.json();",
+									"}",
+									"",
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"// Extract tool result",
+									"const result = jsonResponse.result;",
+									"let toolResult = result;",
+									"",
+									"if (result && result.content && Array.isArray(result.content)) {",
+									"    const textContent = result.content.find(c => c.type === 'text');",
+									"    if (textContent && textContent.text) {",
+									"        try {",
+									"            toolResult = JSON.parse(textContent.text);",
+									"        } catch (e) {",
+									"            toolResult = textContent.text;",
+									"        }",
+									"    }",
+									"}",
+									"",
+									"pm.test('Returns not found error for non-existent track', function () {",
+									"    pm.expect(toolResult.success).to.be.false;",
+									"    pm.expect(toolResult.error).to.equal('RESOURCE_NOT_FOUND');",
+									"});",
+									"",
+									"console.log('✅ Non-existent track correctly rejected:', toolResult.message);"
+								]
+							}
+						}
+					],
+					"response": []
+				},
+				{
 					"name": "Get Embed URL",
 					"request": {
 						"method": "POST",
