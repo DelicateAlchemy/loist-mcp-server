@@ -30,6 +30,7 @@ from .operations import (
     mark_as_failed,
     mark_as_completed,
     mark_as_processing,
+    delete_audio_track,
 )
 from .utils import check_database_availability
 
@@ -56,5 +57,6 @@ __all__ = [
     "mark_as_failed",
     "mark_as_completed",
     "mark_as_processing",
+    "delete_audio_track",
 ]
 
