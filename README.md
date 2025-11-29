@@ -489,6 +489,13 @@ SERVER_PORT=8080
 - ✅ **Pagination & Sorting**: Cursor-based pagination with stable ordering
 - ✅ **Timezone-Aware Processing**: User timezone support in process_audio_complete
 
+#### Audio Track Management (Full CRUD)
+- ✅ **Create**: `process_audio_complete` - Ingest audio from URLs with metadata extraction
+- ✅ **Read**: `get_audio_metadata` - Retrieve complete track metadata by ID
+- ✅ **Update**: `update_metadata` - Partial updates with JSON Merge Patch semantics
+- ✅ **Delete**: `delete_audio` - Remove tracks from the library
+- ✅ **Search**: `search_library` - Full-text search with advanced filtering
+
 #### Security & Configuration
 - ✅ Bearer token authentication (SimpleBearerAuth)
 - ✅ CORS configuration for iframe embedding
@@ -574,6 +581,31 @@ await process_audio_complete({
   }
 });
 ```
+
+### Metadata Editing
+
+The `update_metadata` tool supports partial updates using JSON Merge Patch semantics:
+
+```javascript
+// Update specific fields (omitted fields remain unchanged)
+await update_metadata({
+  "audioId": "550e8400-e29b-41d4-a716-446655440000",
+  "metadata": {
+    "artist": "The Beatles",
+    "year": 1968,
+    "genre": "Rock"
+  }
+});
+```
+
+**Editable Fields:**
+- Product metadata: `artist`, `title`, `album`, `genre`, `year`
+- XMP metadata: `composer`, `publisher`, `record_label`, `isrc`
+
+**Behavior:**
+- Omit a field → remains unchanged
+- Provide a value → updates to new value
+- Database triggers automatically update `search_vector` and `updated_at`
 
 ### Planned Features
 
