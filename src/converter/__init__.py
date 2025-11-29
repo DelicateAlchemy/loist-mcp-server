@@ -19,6 +19,8 @@ from .presets import (
     FORMAT_EXTENSIONS,
     get_preset_config,
     get_default_preset,
+    get_mime_type,
+    get_file_extension,
     validate_format,
     validate_preset,
 )
@@ -37,6 +39,8 @@ __all__ = [
     "FORMAT_EXTENSIONS",
     "get_preset_config",
     "get_default_preset",
+    "get_mime_type",
+    "get_file_extension",
     "validate_format",
     "validate_preset",
     # Converter
