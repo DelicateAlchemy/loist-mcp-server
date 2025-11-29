@@ -2589,6 +2589,91 @@ def check_waveform_cache(audio_id: str, source_hash: str) -> Optional[str]:
 
 
 # ============================================================================
+# Delete Operations
+# ============================================================================
+
+def delete_audio_track(track_id: str) -> Dict[str, Any]:
+    """
+    Delete an audio track from the database.
+    
+    Returns the deleted track's GCS paths for cleanup.
+    
+    Args:
+        track_id: UUID of the track to delete
+        
+    Returns:
+        Dict with deleted track info including GCS paths:
+        {
+            'id': str,
+            'audio_gcs_path': str,
+            'thumbnail_gcs_path': str | None,
+            'waveform_gcs_path': str | None
+        }
+        
+    Raises:
+        ValidationError: If track_id format is invalid
+        ResourceNotFoundError: If track doesn't exist
+        DatabaseOperationError: If deletion fails
+    
+    Example:
+        >>> result = delete_audio_track('123e4567-e89b-12d3-a456-426614174000')
+        >>> print(f"Deleted track, audio was at: {result['audio_gcs_path']}")
+    """
+    # Validate UUID format
+    try:
+        uuid.UUID(track_id)
+    except ValueError:
+        raise ValidationError(f"Invalid track_id format: {track_id}")
+    
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                # Delete and return GCS paths in single query
+                delete_query = """
+                    DELETE FROM audio_tracks
+                    WHERE id = %s
+                    RETURNING 
+                        id, 
+                        audio_gcs_path, 
+                        thumbnail_gcs_path, 
+                        waveform_gcs_path
+                """
+                
+                cur.execute(delete_query, (track_id,))
+                result = cur.fetchone()
+                
+                if not result:
+                    # Track doesn't exist
+                    raise ResourceNotFoundError(
+                        f"Audio track not found: {track_id}",
+                        details={'track_id': track_id}
+                    )
+                
+                # Commit transaction
+                conn.commit()
+                
+                logger.info(f"Successfully deleted audio track: {track_id}")
+                
+                return dict(result)
+    
+    except ResourceNotFoundError:
+        # Re-raise resource not found
+        raise
+    
+    except DatabaseError as e:
+        logger.error(f"Database error deleting track {track_id}: {e}")
+        raise DatabaseOperationError(
+            f"Failed to delete audio track: database error - {str(e)}"
+        )
+    
+    except Exception as e:
+        logger.error(f"Unexpected error deleting track {track_id}: {e}")
+        raise DatabaseOperationError(
+            f"Failed to delete audio track: {str(e)}"
+        )
+
+
+# ============================================================================
 # Error and Transaction Management
 # ============================================================================
 # Note: Error handling and transaction management are already implemented
