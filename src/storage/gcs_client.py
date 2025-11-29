@@ -698,6 +698,65 @@ class GCSClient:
             logger.error(f"Failed to check existence of {blob_name}: {e}")
             return False
 
+    def download_to_file(
+        self,
+        blob_name: str,
+        destination_path: Path | str,
+        timeout: int = 120,
+    ) -> Path:
+        """
+        Download a blob from GCS to a local file.
+        
+        Streams the file to disk rather than loading into memory,
+        making it suitable for large audio files.
+        
+        Args:
+            blob_name: Name/path of the blob in GCS
+            destination_path: Local file path to save to
+            timeout: Download timeout in seconds (default: 120)
+        
+        Returns:
+            Path to the downloaded file
+        
+        Raises:
+            NotFound: If blob doesn't exist
+            GoogleCloudError: If download fails
+        """
+        destination_path = Path(destination_path)
+        
+        try:
+            # Ensure destination directory exists
+            destination_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Get blob reference
+            blob = self.bucket.blob(blob_name)
+            
+            # Check if blob exists
+            if not blob.exists():
+                raise NotFound(f"Blob not found: {blob_name}")
+            
+            # Download to file
+            logger.info(f"Downloading {blob_name} to {destination_path}")
+            blob.download_to_filename(
+                str(destination_path),
+                timeout=timeout,
+            )
+            
+            file_size = destination_path.stat().st_size
+            logger.info(
+                f"Downloaded {blob_name} ({file_size / 1024 / 1024:.2f}MB) "
+                f"to {destination_path}"
+            )
+            
+            return destination_path
+            
+        except NotFound:
+            logger.error(f"Blob not found: {blob_name}")
+            raise
+        except GoogleCloudError as e:
+            logger.error(f"Failed to download {blob_name}: {e}")
+            raise
+
 
 # Convenience functions for backward compatibility and ease of use
 
@@ -856,6 +915,36 @@ def get_file_metadata(
     """
     client = create_gcs_client(bucket_name=bucket_name)
     return client.get_file_metadata(blob_name)
+
+
+def download_audio_file(
+    blob_name: str,
+    destination_path: Path | str,
+    bucket_name: Optional[str] = None,
+    timeout: int = 120,
+) -> Path:
+    """
+    Download an audio file from GCS to a local path.
+    
+    Args:
+        blob_name: Name/path of the blob in GCS
+        destination_path: Local file path to save to
+        bucket_name: GCS bucket name (defaults to env var)
+        timeout: Download timeout in seconds
+    
+    Returns:
+        Path to the downloaded file
+        
+    Raises:
+        NotFound: If blob doesn't exist
+        GoogleCloudError: If download fails
+    """
+    client = create_gcs_client(bucket_name=bucket_name)
+    return client.download_to_file(
+        blob_name=blob_name,
+        destination_path=destination_path,
+        timeout=timeout,
+    )
 
 
 def check_gcs_health() -> Dict[str, Any]:
