@@ -24,6 +24,9 @@ from .query_schemas import (
     QueryException,
     QueryErrorCode,
     TimeFilters,
+    DeleteAudioInput,
+    DeleteAudioOutput,
+    DeleteException,
 )
 from .schemas import (
     ProductMetadata,
@@ -42,12 +45,14 @@ from database import (
     filter_audio_tracks_cursor_xmp,
     encode_cursor,
     decode_cursor,
+    delete_audio_track,
 )
 from src.exceptions import (
     DatabaseOperationError,
     ResourceNotFoundError,
     ValidationError,
 )
+from src.storage.gcs_client import GCSClient
 
 logger = logging.getLogger(__name__)
 
@@ -428,6 +433,132 @@ async def search_library(input_data: Dict[str, Any]) -> Dict[str, Any]:
         logger.exception(f"Unexpected error during search: {e}")
         error_response = QueryException(
             error_code=QueryErrorCode.DATABASE_ERROR,
+            message=f"Unexpected error: {str(e)}",
+            details={"exception_type": type(e).__name__}
+        ).to_error_response()
+        return error_response.model_dump()
+
+
+async def delete_audio(input_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Delete a previously processed audio track.
+
+    Deletion order:
+    1. Fetch track from database (get GCS paths)
+    2. Delete database record
+    3. Delete GCS files (audio, thumbnail, waveform)
+    4. Return success (even if some GCS deletions fail)
+
+    Args:
+        input_data: Dict containing 'audioId' (UUID string)
+
+    Returns:
+        Success: {'success': True, 'audioId': str, 'deleted': True}
+        Error: {'success': False, 'error': str, 'message': str, 'details': dict}
+
+    Example:
+        >>> result = await delete_audio({"audioId": "550e8400-e29b-41d4-a716-446655440000"})
+        >>> print(result["deleted"])
+        True
+    """
+    logger.info("Deleting audio track")
+
+    try:
+        # Validate input
+        try:
+            validated_input = DeleteAudioInput(**input_data)
+        except Exception as e:
+            logger.error(f"Input validation failed: {e}")
+            raise DeleteException(
+                error_code=QueryErrorCode.INVALID_QUERY,
+                message=f"Invalid input: {str(e)}",
+                details={"validation_errors": str(e)}
+            )
+
+        audio_id = validated_input.audioId
+        logger.debug(f"Deleting audio track: {audio_id}")
+
+        # Delete from database and get GCS paths
+        try:
+            deleted_track = delete_audio_track(audio_id)
+        except ResourceNotFoundError as e:
+            logger.warning(f"Audio track not found for deletion: {audio_id}")
+            raise DeleteException(
+                error_code=QueryErrorCode.RESOURCE_NOT_FOUND,
+                message=f"Audio track with the specified ID was not found",
+                details={"audioId": audio_id}
+            )
+        except DatabaseOperationError as e:
+            logger.error(f"Database error deleting track {audio_id}: {e}")
+            raise DeleteException(
+                error_code=QueryErrorCode.DELETE_FAILED,
+                message=f"Failed to delete audio track",
+                details={"audioId": audio_id, "reason": str(e)}
+            )
+
+        # Extract GCS paths for cleanup
+        gcs_paths = []
+        if deleted_track.get("audio_gcs_path"):
+            gcs_paths.append(deleted_track["audio_gcs_path"])
+        if deleted_track.get("thumbnail_gcs_path"):
+            gcs_paths.append(deleted_track["thumbnail_gcs_path"])
+        if deleted_track.get("waveform_gcs_path"):
+            gcs_paths.append(deleted_track["waveform_gcs_path"])
+
+        # Attempt GCS cleanup (log failures, don't block on errors)
+        gcs_cleanup_results = []
+        if gcs_paths:
+            try:
+                gcs_client = GCSClient()
+                for gcs_path in gcs_paths:
+                    try:
+                        # Extract blob name from gs://bucket/path format
+                        blob_name = gcs_path.split("/", 3)[-1]  # Remove gs://bucket/
+                        success = gcs_client.delete_file(blob_name)
+                        if success:
+                            logger.info(f"Deleted GCS file: {gcs_path}")
+                            gcs_cleanup_results.append({"path": gcs_path, "status": "deleted"})
+                        else:
+                            logger.warning(f"GCS file not found (already deleted?): {gcs_path}")
+                            gcs_cleanup_results.append({"path": gcs_path, "status": "not_found"})
+                    except Exception as e:
+                        # Log warning but continue - DB deletion is the source of truth
+                        logger.warning(f"Failed to delete GCS file {gcs_path}: {e}")
+                        gcs_cleanup_results.append({"path": gcs_path, "status": "error", "error": str(e)})
+            except Exception as e:
+                # GCS client initialization failed
+                logger.warning(f"Failed to initialize GCS client for cleanup: {e}")
+                for gcs_path in gcs_paths:
+                    gcs_cleanup_results.append({"path": gcs_path, "status": "error", "error": str(e)})
+
+        # Log cleanup summary
+        if gcs_cleanup_results:
+            deleted_count = sum(1 for r in gcs_cleanup_results if r["status"] == "deleted")
+            error_count = sum(1 for r in gcs_cleanup_results if r["status"] == "error")
+            logger.info(f"GCS cleanup: {deleted_count} deleted, {error_count} errors out of {len(gcs_cleanup_results)} files")
+
+        logger.info(f"Successfully deleted audio track: {audio_id}")
+
+        # Build success response
+        response = DeleteAudioOutput(
+            success=True,
+            audioId=audio_id,
+            deleted=True
+        )
+
+        return response.model_dump()
+
+    except DeleteException as e:
+        # Known delete error
+        logger.error(f"Delete error: {e.message}")
+        error_response = e.to_error_response()
+        return error_response.model_dump()
+
+    except Exception as e:
+        # Unexpected error
+        logger.exception(f"Unexpected error deleting audio track: {e}")
+        error_response = DeleteException(
+            error_code=QueryErrorCode.DELETE_FAILED,
             message=f"Unexpected error: {str(e)}",
             details={"exception_type": type(e).__name__}
         ).to_error_response()
