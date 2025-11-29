@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Iframe Test - FILE PROTOCOL (LIMITED)</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        .warning { background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 5px; margin: 20px 0; }
+        .warning h3 { color: #856404; margin-top: 0; }
+        .test-section { background: white; padding: 20px; margin: 20px 0; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        iframe { border: 1px solid #ddd; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <h1>Testing Audio Player Iframe - FILE:// PROTOCOL</h1>
+
+    <div class="warning">
+        <h3>⚠️ BROWSER SECURITY RESTRICTION</h3>
+        <p><strong>This test file is opened via file:// protocol, which blocks iframe loading for security reasons.</strong></p>
+        <p>Iframes will likely show "broken embed icon" or "ngrok security warning" due to browser Same-Origin Policy.</p>
+        <p><strong>For proper testing, use the HTTP server version:</strong> <code>test_iframe_http.html</code></p>
+    </div>
+
+    <div class="test-section">
+        <h2>Compact View (oEmbed style) - EXPECTED TO FAIL</h2>
+        <p>Testing iframe loading from ngrok tunnel:</p>
+        <iframe src="https://857daa7fb123.ngrok-free.app/embed/324a6ab1-1b56-4ad5-adde-a7349df56472?compact=true"
+                width="400" height="120" frameborder="0" allow="autoplay"
+                style="border-radius: 12px; border: 1px solid #ccc;">
+            <p>Your browser doesn't support iframes.</p>
+        </iframe>
+    </div>
+
+    <div class="test-section">
+        <h2>Full Player View - EXPECTED TO FAIL</h2>
+        <p>Testing iframe loading from ngrok tunnel:</p>
+        <iframe src="https://857daa7fb123.ngrok-free.app/embed/324a6ab1-1b56-4ad5-adde-a7349df56472"
+                width="500" height="200" frameborder="0" allow="autoplay"
+                style="border-radius: 12px; border: 1px solid #ccc;">
+            <p>Your browser doesn't support iframes.</p>
+        </iframe>
+    </div>
+
+    <div class="test-section">
+        <h2>How to Test Iframe Embedding Properly</h2>
+        <ol>
+            <li>Start a local web server: <code>python3 -m http.server 8000</code></li>
+            <li>Open in browser: <code>http://localhost:8000/test_iframe_http.html</code></li>
+            <li>Iframes should load successfully from HTTP protocol</li>
+        </ol>
+
+        <h3>Alternative Quick Test</h3>
+        <p>Run the test script: <code>./test_iframe_browser_behavior.sh</code></p>
+    </div>
+
+    <div class="test-section">
+        <h2>Technical Details</h2>
+        <ul>
+            <li><strong>Issue:</strong> Browsers block iframes from file:// protocol (Same-Origin Policy)</li>
+            <li><strong>Solution:</strong> Serve test files via HTTP server (localhost)</li>
+            <li><strong>Server Headers:</strong> X-Frame-Options: ALLOWALL, CSP: frame-ancestors *</li>
+            <li><strong>CORS:</strong> Properly configured for cross-origin embedding</li>
+        </ul>
+    </div>
+</body>
+</html>

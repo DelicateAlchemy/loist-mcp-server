@@ -1,10 +1,11 @@
 """
 Error handling utilities for Music Library MCP Server
-Provides consistent error responses and logging
+Provides consistent error responses and logging with safe exception serialization
 """
 import logging
 from typing import Any, Optional
 from src.exceptions import MusicLibraryError, get_error_code
+from src.exception_serializer import exception_serializer
 
 logger = logging.getLogger(__name__)
 
@@ -15,30 +16,36 @@ def create_error_response(
     include_details: bool = True
 ) -> dict:
     """
-    Create a standardized error response for MCP protocol
-    
+    Create a standardized error response for MCP protocol with safe serialization
+
     Args:
         error: The exception that occurred
         message: Optional custom error message (defaults to exception message)
         include_details: Whether to include detailed error information
-        
+
     Returns:
-        dict: Standardized error response
+        dict: Standardized error response with safely serialized exception details
     """
-    error_code = get_error_code(error)
-    error_message = message or str(error)
-    
+    # Use the safe exception serializer to handle complex exception details
+    serialized_exception = exception_serializer.serialize_exception(error)
+
+    error_code = serialized_exception.get("error_code", get_error_code(error))
+    error_message = message or serialized_exception["message"]
+
     response = {
         "success": False,
         "error": error_code,
         "message": error_message
     }
-    
-    # Include additional details for MusicLibraryError exceptions
-    if include_details and isinstance(error, MusicLibraryError):
-        if error.details:
-            response["details"] = error.details
-    
+
+    # Include safely serialized details if requested and available
+    if include_details and serialized_exception.get("details"):
+        response["details"] = serialized_exception["details"]
+
+    # Include additional exception context for debugging
+    response["exception_type"] = serialized_exception["type"]
+    response["exception_module"] = serialized_exception["module"]
+
     return response
 
 
@@ -48,32 +55,35 @@ def log_error(
     level: str = "error"
 ) -> None:
     """
-    Log an error with structured context
-    
+    Log an error with structured context using safe exception serialization
+
     Args:
         error: The exception to log
         context: Additional context information
         level: Log level (error, warning, critical)
     """
-    error_code = get_error_code(error)
-    error_type = type(error).__name__
-    
+    # Use safe serializer to get structured exception information
+    serialized_exception = exception_serializer.serialize_exception(error)
+
     log_data = {
-        "error_type": error_type,
-        "error_code": error_code,
-        "error_message": str(error),  # Use error_message to avoid logging conflict
+        "error_type": serialized_exception["type"],
+        "error_module": serialized_exception["module"],
+        "error_code": serialized_exception.get("error_code", get_error_code(error)),
+        "error_message": serialized_exception["message"],
     }
-    
+
+    # Include safely serialized details
+    if serialized_exception.get("details"):
+        log_data["details"] = serialized_exception["details"]
+
+    # Include additional context if provided
     if context:
         log_data["context"] = context
-    
-    if isinstance(error, MusicLibraryError) and error.details:
-        log_data["details"] = error.details
-    
-    # Log at appropriate level
+
+    # Log at appropriate level with full exception info
     log_method = getattr(logger, level.lower(), logger.error)
     log_method(
-        f"{error_code}: {str(error)}",
+        f"{log_data['error_code']}: {log_data['error_message']}",
         extra=log_data,
         exc_info=True
     )

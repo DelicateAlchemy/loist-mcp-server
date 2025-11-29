@@ -260,6 +260,156 @@ FROM pg_stat_user_tables
 WHERE tablename = 'audio_tracks';
 
 -- ============================================================================
+-- XMP METADATA PERFORMANCE TESTS
+-- ============================================================================
+
+-- Test 19: XMP field filtering performance (should use composite indexes)
+-- Expected: Fast filtering with index usage for composer+publisher queries
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT id, artist, title, album, composer, publisher
+FROM audio_tracks
+WHERE composer ILIKE '%jager%' AND publisher ILIKE '%extreme%'
+  AND status = 'COMPLETED'
+ORDER BY created_at DESC
+LIMIT 20;
+
+-- Test 20: ISRC exact match performance (should use exact index)
+-- Expected: Very fast exact match queries
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT id, artist, title, composer, publisher
+FROM audio_tracks
+WHERE isrc = 'US-S1Z-99-00001'
+  AND status = 'COMPLETED';
+
+-- Test 21: XMP facet queries performance (for faceted search UI)
+-- Expected: Efficient aggregation queries
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT composer as name, COUNT(*) as count
+FROM audio_tracks
+WHERE status = 'COMPLETED' AND composer IS NOT NULL
+GROUP BY composer
+HAVING COUNT(*) >= 1
+ORDER BY count DESC, name ASC
+LIMIT 20;
+
+-- Test 22: Combined search + XMP filtering performance
+-- Expected: Full-text search with XMP field filtering
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT
+    id, artist, title, album, composer, publisher,
+    ts_rank(search_vector, to_tsquery('english', 'rock & music')) as rank
+FROM audio_tracks
+WHERE search_vector @@ to_tsquery('english', 'rock & music')
+  AND composer ILIKE '%john%'
+  AND status = 'COMPLETED'
+  AND ts_rank(search_vector, to_tsquery('english', 'rock & music')) >= 0.1
+ORDER BY rank DESC, created_at DESC
+LIMIT 25;
+
+-- Test 23: Cursor-based pagination performance
+-- Expected: Stable ordering with efficient pagination
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT id, artist, title, composer, created_at
+FROM audio_tracks
+WHERE status = 'COMPLETED'
+  AND composer ILIKE '%jager%'
+  AND (created_at < '2024-01-01 00:00:00+00'::timestamptz
+       OR (created_at = '2024-01-01 00:00:00+00'::timestamptz
+           AND id < '550e8400-e29b-41d4-a716-446655440000'::uuid))
+ORDER BY created_at DESC, id DESC
+LIMIT 50;
+
+-- ============================================================================
+-- INDEX USAGE VERIFICATION
+-- ============================================================================
+
+-- Test 24: Verify XMP composite index usage
+SELECT
+    schemaname,
+    tablename,
+    indexname,
+    idx_scan,
+    idx_tup_read,
+    idx_tup_fetch
+FROM pg_stat_user_indexes
+WHERE tablename = 'audio_tracks'
+  AND indexname LIKE '%xmp%'
+ORDER BY idx_scan DESC;
+
+-- Test 25: Check search vector index effectiveness
+SELECT
+    schemaname,
+    tablename,
+    indexname,
+    idx_scan,
+    idx_tup_read,
+    idx_tup_fetch
+FROM pg_stat_user_indexes
+WHERE tablename = 'audio_tracks'
+  AND indexname LIKE '%search%'
+ORDER BY idx_scan DESC;
+
+-- ============================================================================
+-- XMP DATA QUALITY VALIDATION
+-- ============================================================================
+
+-- Test 26: Check XMP field population statistics
+SELECT
+    'Total Tracks' as metric,
+    COUNT(*) as value
+FROM audio_tracks
+WHERE status = 'COMPLETED'
+UNION ALL
+SELECT
+    'Tracks with Composer' as metric,
+    COUNT(*) as value
+FROM audio_tracks
+WHERE status = 'COMPLETED' AND composer IS NOT NULL
+UNION ALL
+SELECT
+    'Tracks with Publisher' as metric,
+    COUNT(*) as value
+FROM audio_tracks
+WHERE status = 'COMPLETED' AND publisher IS NOT NULL
+UNION ALL
+SELECT
+    'Tracks with Record Label' as metric,
+    COUNT(*) as value
+FROM audio_tracks
+WHERE status = 'COMPLETED' AND record_label IS NOT NULL
+UNION ALL
+SELECT
+    'Tracks with ISRC' as metric,
+    COUNT(*) as value
+FROM audio_tracks
+WHERE status = 'COMPLETED' AND isrc IS NOT NULL
+UNION ALL
+SELECT
+    'Tracks with Complete XMP' as metric,
+    COUNT(*) as value
+FROM audio_tracks
+WHERE status = 'COMPLETED'
+  AND composer IS NOT NULL
+  AND publisher IS NOT NULL
+  AND record_label IS NOT NULL
+  AND isrc IS NOT NULL;
+
+-- Test 27: Sample XMP data for verification
+SELECT
+    id,
+    artist,
+    title,
+    composer,
+    publisher,
+    record_label,
+    isrc
+FROM audio_tracks
+WHERE status = 'COMPLETED'
+  AND (composer IS NOT NULL OR publisher IS NOT NULL OR record_label IS NOT NULL OR isrc IS NOT NULL)
+ORDER BY created_at DESC
+LIMIT 10;
+
+-- ============================================================================
 -- CLEANUP QUERIES (for testing)
 -- ============================================================================
 

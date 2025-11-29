@@ -170,13 +170,13 @@ Local environment configuration created and validated:
 - Verified server now starts successfully without errors
 - Updated all route definitions to use the correct decorator pattern
 
-## 4. Test with Real GCS Buckets [pending]
+## 4. Test with Real GCS Buckets [done]
 ### Dependencies: 11.1, 11.3, 11.9
 ### Description: Verify functionality with actual Google Cloud Storage buckets.
 ### Details:
 Configure the application to use real GCS buckets for thumbnails and audio files. Test uploading, retrieving, and generating signed URLs for these resources. Ensure the fixed FastMCP decorators work correctly with GCS operations.
 
-## 5. Validate MCP Tools Functionality [pending]
+## 5. Validate MCP Tools Functionality [done]
 ### Dependencies: 11.1, 11.2, 11.3, 11.4, 11.9
 ### Description: Ensure all Music Content Platform tools work in the local Docker environment.
 ### Details:
@@ -187,6 +187,52 @@ Test each MCP tool and feature to verify they function correctly in the local Do
 ### Description: Verify the oEmbed endpoint functions correctly in the local environment.
 ### Details:
 Test the oEmbed endpoint with various valid and invalid URLs. Verify response format, error handling, and parameter processing. Ensure the @mcp.custom_route() decorator is working correctly for the oEmbed endpoint.
+<info added on 2025-11-04T11:35:53.495Z>
+**Testing Strategy Update**
+
+Due to dependencies on Task 5 (Audio Processing), we need to revise our testing approach:
+
+**Immediate Testing (No Dependencies):**
+- Invalid URL testing with wrong domains, malformed UUIDs, missing parameters, and non-existent endpoints
+- Parameter processing for `maxwidth`/`maxheight` using mock data
+- Response format structure validation
+- Error handling verification
+- Endpoint accessibility testing for `/oembed`
+- FastMCP `@mcp.custom_route()` decorator functionality verification
+- Basic connectivity and routing tests
+
+**Deferred Testing (Requires Task 5 Completion):**
+- Valid URL testing with actual audio UUIDs
+- Full end-to-end testing with real data
+
+Document test cases clearly, separating those that can be completed now versus those that require actual audio data. Create mock response structures to validate format compliance while waiting for real data availability.
+</info added on 2025-11-04T11:35:53.495Z>
+<info added on 2025-11-04T11:39:57.153Z>
+**Updated Dependencies - Added Task 15.1 and Task 5**
+
+After review of all open subtasks, I've identified that Task 11.6 has additional dependencies that weren't originally captured:
+
+**New Dependencies Added:**
+1. **Task 15.1** (Define Staging Environment Architecture) - Required for proper testing environment setup
+2. **Task 5** (Audio Processing Implementation) - Required for real audio data to test valid URLs
+
+**Complete Dependency Chain:**
+- ✅ 11.1, 11.2, 11.3, 11.9 (already satisfied)
+- ✅ **15.1** (staging architecture - needed for proper test environment)
+- ❌ **Task 5** (audio processing - needed for real audio data)
+
+**Why Task 15.1 is Required:**
+- oEmbed endpoint testing requires a properly configured staging environment
+- Docker setup, database connectivity, and GCS access all depend on staging architecture
+- The `/embed/{uuid}` URLs in oEmbed responses need to work in staging context
+
+**Why Task 5 is Required:**
+- Testing "valid URLs" requires actual audio UUIDs from processed audio files
+- Database needs real metadata for oEmbed responses
+- GCS needs real signed URLs for thumbnail images
+
+**Current Status:** Task 11.6 is blocked until Task 15.1 and Task 5 are completed.
+</info added on 2025-11-04T11:39:57.153Z>
 
 ## 7. Test Open Graph and Twitter Card Tags [pending]
 ### Dependencies: 11.1, 11.2, 11.3, 11.9

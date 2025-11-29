@@ -1,0 +1,257 @@
+---
+description: Guidelines for managing documentation updates, deciding between README.md updates vs separate documentation files, and maintaining documentation quality
+globs: README.md,docs/**/*
+alwaysApply: true
+---
+
+# Documentation Management Guidelines
+
+**Maintain clear boundaries between high-level README.md content and detailed documentation to ensure discoverability and maintainability.**
+
+## Documentation Hierarchy
+
+### README.md - Project Overview & Entry Point
+
+**Purpose**: First impression, quick understanding, navigation to detailed docs
+
+**Content Scope**:
+- ✅ Project description and purpose (2-3 sentences)
+- ✅ Key features and capabilities (bullet list)
+- ✅ Quick start installation (basic commands)
+- ✅ Architecture overview (high-level diagram if needed)
+- ✅ Links to detailed documentation
+- ✅ Basic usage examples
+- ✅ Contributing guidelines (brief)
+- ✅ License and support information
+
+**Content Limits**:
+- ❌ Detailed configuration guides (>500 words)
+- ❌ Complex deployment procedures
+- ❌ API reference documentation
+- ❌ Troubleshooting deep-dives
+- ❌ Architecture implementation details
+
+### docs/ Directory - Detailed Documentation
+
+**Purpose**: Comprehensive, reference-quality documentation
+
+**Structure**:
+```
+docs/
+├── environment-variables.md     # Complete configuration reference
+├── cloud-run-deployment.md      # Full deployment procedures
+├── api-reference.md             # API documentation
+├── troubleshooting.md           # Common issues & solutions
+├── architecture.md              # Detailed architecture docs
+└── migration-guides/            # Version-specific migrations
+```
+
+## Decision Framework: README.md vs Separate Docs
+
+### Update README.md When
+
+**High-impact, user-facing changes:**
+
+- **New Major Features**: "This project now supports X, Y, Z"
+- **Breaking Changes**: API changes, configuration format changes
+- **Installation Changes**: New prerequisites, different setup process
+- **Architecture Shifts**: Fundamental changes to how the system works
+
+**Examples**:
+```markdown
+## Features
+- ✅ New MCP server with FastMCP framework
+- ✅ Bearer token authentication support
+- ✅ Docker containerization with multi-stage builds
+- ✅ Google Cloud Run deployment pipeline
+```
+
+### Create Separate Documentation When
+
+**Content exceeds complexity thresholds:**
+
+- **Word Count > 500**: Detailed procedures, configuration guides
+- **Technical Depth**: Implementation details, architecture decisions
+- **Multiple Scenarios**: Different deployment environments, use cases
+- **Reference Material**: API specs, configuration schemas, troubleshooting matrices
+
+**Examples**:
+- `docs/cloud-run-deployment.md` (524 lines, comprehensive pipeline docs)
+- `docs/environment-variables.md` (detailed configuration reference)
+- `docs/troubleshooting.md` (common issues and solutions)
+
+## Documentation Standards
+
+### File Organization
+
+**Naming Convention**:
+```
+kebab-case.md                    # Standard documentation
+environment-variables.md        # Configuration reference
+cloud-run-deployment.md         # Feature/area documentation
+```
+
+**Directory Structure**:
+```
+docs/
+├── guides/                      # How-to guides
+├── reference/                   # API and configuration reference
+├── troubleshooting/             # Problem-solving documentation
+└── migration/                   # Version upgrade guides
+```
+
+### Content Structure
+
+**Required Elements**:
+- **Table of Contents**: For documents > 3 sections
+- **Clear Headings**: H1 for title, H2 for major sections, H3 for subsections
+- **Code Examples**: Practical, copy-paste ready examples
+- **Cross-references**: Links to related documentation
+- **Last Updated**: Date or version when doc was last reviewed
+
+**Template Structure**:
+```markdown
+# Document Title
+
+Brief description of what this document covers.
+
+## Table of Contents
+
+- [Section 1](#section-1)
+- [Section 2](#section-2)
+
+## Section 1
+
+Detailed content with examples...
+
+## Section 2
+
+More detailed content...
+
+---
+
+**Last Updated**: YYYY-MM-DD
+**Related Docs**: [README.md](../README.md), [other-doc.md](other-doc.md)
+```
+
+## Documentation Maintenance
+
+### Update Triggers
+
+**Update documentation when**:
+- Code changes affect documented procedures
+- New features are implemented
+- Configuration options change
+- Error messages or troubleshooting steps change
+- User feedback indicates documentation gaps
+
+### Version Synchronization
+
+**Keep docs in sync with code**:
+- Update docs as part of feature implementation
+- Review docs during code reviews
+- Validate examples against current codebase
+- Update version references and compatibility notes
+
+### Quality Checks
+
+**Before committing documentation**:
+- [ ] Links work and point to correct locations
+- [ ] Code examples are tested and functional
+- [ ] Cross-references are accurate
+- [ ] Table of contents matches document structure
+- [ ] No outdated information or deprecated procedures
+
+## Integration with Task Workflow
+
+### Documentation in Task Planning
+
+**Consider documentation impact**:
+1. **Task Creation**: Note if task requires documentation updates
+2. **Subtask Breakdown**: Include documentation subtasks when needed
+3. **Implementation**: Update docs as code changes
+4. **Review**: Validate documentation during task completion
+
+### Documentation Commits
+
+**Separate documentation changes**:
+```bash
+# For documentation-only changes
+git commit -m "docs: Update deployment guide (Task 12.3)
+
+- Add comprehensive pipeline documentation
+- Include security scanning procedures
+- Document environment variable configuration
+- Files: docs/cloud-run-deployment.md"
+
+# For code + documentation changes
+git add src/ docs/
+git commit -m "feat: Implement deployment pipeline (Task 12.3)
+
+- Add cloudbuild.yaml with vulnerability scanning
+- Configure 50+ environment variables
+- Update deployment documentation
+- Files: cloudbuild.yaml, docs/cloud-run-deployment.md"
+```
+
+## README.md Maintenance Guidelines
+
+### When to Update README.md
+
+**Immediate Updates Required**:
+- Project description changes
+- Major feature additions/removals
+- Installation prerequisites change
+- Breaking API changes
+- License or support contact changes
+
+**Periodic Reviews**:
+- Every major release
+- When documentation structure changes significantly
+- When user feedback indicates confusion
+- At least quarterly for active projects
+
+### README.md Content Limits
+
+**Keep README.md focused**:
+- Installation: Basic setup only, link to detailed guides
+- Configuration: Overview only, link to environment-variables.md
+- Deployment: High-level options, link to deployment docs
+- API Usage: Basic examples, link to API reference
+
+**Anti-patterns to avoid**:
+- ❌ Including full configuration schemas
+- ❌ Detailed troubleshooting procedures
+- ❌ Complete API reference documentation
+- ❌ Architecture deep-dives with implementation details
+
+## Documentation Debt Management
+
+### Identifying Documentation Debt
+
+**Signs documentation needs attention**:
+- Outdated examples that don't work
+- Missing procedures for new features
+- Broken links or references
+- User questions that indicate documentation gaps
+- Code changes without corresponding doc updates
+
+### Addressing Documentation Debt
+
+**Incorporate into task workflow**:
+1. **Track Debt**: Note documentation gaps in task descriptions
+2. **Prioritize**: Address docs for user-facing features first
+3. **Time-box**: Allocate specific time for documentation tasks
+4. **Review**: Include documentation review in code review process
+
+### Documentation Metrics
+
+**Track documentation health**:
+- **Coverage**: Percentage of features with documentation
+- **Freshness**: How recently docs were updated
+- **Accuracy**: User feedback on documentation correctness
+- **Findability**: How easy it is to locate relevant information
+
+---
+
+**Remember**: Good documentation is documentation that users can actually find and use. Keep README.md as the entry point and detailed docs as the reference material.

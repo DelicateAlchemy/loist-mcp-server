@@ -59,9 +59,171 @@ https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000
 ### 🔒 Security Features
 
 - **Signed URLs**: 15-minute expiration for security
-- **Iframe Safe**: Proper headers for embedding
-- **CORS Enabled**: Cross-origin audio streaming
+- **Iframe Safe**: Content-Security-Policy headers for embedding
+- **CORS Enabled**: Cross-origin audio streaming and waveform access
 - **No Credential Exposure**: All auth handled server-side
+- **GCS CORS Configuration**: Waveform SVGs accessible from browsers
+
+---
+
+## Player Types
+
+The Loist Music Library provides multiple player types to suit different use cases:
+
+| Player Type | URL Pattern | Description | Features |
+|-------------|-------------|-------------|----------|
+| **Standard Player** | `/embed/{audioId}` | Traditional audio player with progress bar | Progress bar, volume controls, artwork |
+| **Standard + Waveform** | `/embed/{audioId}?template=waveform` | Waveform player loaded via query parameter | Interactive waveform, device detection |
+| **Waveform Player** | `/embed/{audioId}/waveform` | Dedicated waveform player endpoint | Interactive waveform, auto device detection |
+| **Waveform Mobile** | `/embed/{audioId}/waveform/mobile` | Mobile-optimized waveform player | Static waveform, touch-friendly |
+| **Waveform Desktop** | `/embed/{audioId}/waveform/desktop` | Desktop-optimized waveform player | Interactive waveform, click-to-seek |
+
+### Standard Player
+
+The standard player provides a traditional audio player experience with a progress bar and volume controls.
+
+**URL:** `https://loist.io/embed/{audioId}`
+
+**Features:**
+- Progress bar for seeking
+- Volume controls
+- Album artwork
+- Track metadata
+- Keyboard shortcuts
+
+### Waveform Player
+
+The waveform player provides an interactive waveform visualization that displays the audio's amplitude over time.
+
+**URL:** `https://loist.io/embed/{audioId}?template=waveform` or `/embed/{audioId}/waveform`
+
+**Features:**
+- Interactive waveform visualization (desktop)
+- Static waveform display (mobile)
+- Click-to-seek functionality (desktop)
+- Progress overlay showing playback position
+- Automatic device detection
+- Fallback to progress bar if waveform unavailable
+
+**Device Detection:**
+- **Desktop**: Interactive waveform with click-to-seek
+- **Mobile**: Static waveform display (no click-to-seek)
+
+**Waveform Generation:**
+- Waveforms are generated asynchronously after audio processing
+- SVG format for scalability
+- Stored in Google Cloud Storage
+- Cached for performance
+- Fallback to progress bar if waveform not available
+
+---
+
+## Template Selection (Query Parameters)
+
+The embed endpoint supports template selection via query parameters:
+
+### Standard Template (Default)
+
+```
+https://loist.io/embed/{audioId}
+```
+
+Returns the standard audio player with progress bar.
+
+### Waveform Template (Query Parameter)
+
+```
+https://loist.io/embed/{audioId}?template=waveform
+```
+
+Returns the waveform player with interactive visualization (desktop) or static display (mobile).
+
+**Fallback Behavior:**
+- If `template=waveform` is requested but waveform data is unavailable, the standard template is used
+- If invalid template parameter is provided, falls back to standard template
+- Device detection is automatic based on User-Agent header
+
+### JavaScript Dynamic Switching
+
+You can dynamically switch between templates using JavaScript:
+
+```javascript
+// Get the embed URL with waveform template
+const waveformUrl = `https://loist.io/embed/${audioId}?template=waveform`;
+
+// Load in iframe
+document.getElementById('player-iframe').src = waveformUrl;
+```
+
+---
+
+## CORS Configuration
+
+### Browser Access to Waveform SVGs
+
+The Loist Music Library uses Google Cloud Storage (GCS) to store waveform SVG files. To enable browser access to these files, CORS must be configured on the GCS bucket.
+
+### GCS CORS Configuration
+
+The GCS bucket is configured with the following CORS rules:
+
+```json
+[
+  {
+    "origin": ["*"],
+    "method": ["GET", "HEAD", "OPTIONS"],
+    "responseHeader": [
+      "Content-Type",
+      "Content-Length",
+      "Content-Range",
+      "Accept-Ranges",
+      "Range",
+      "Cache-Control",
+      "Access-Control-Allow-Origin",
+      "Access-Control-Allow-Methods",
+      "Access-Control-Allow-Headers"
+    ],
+    "maxAgeSeconds": 3600
+  }
+]
+```
+
+**Configuration Details:**
+- **Origin**: `*` (allows requests from any origin)
+- **Methods**: `GET`, `HEAD`, `OPTIONS` (for CORS preflight)
+- **Response Headers**: Allows all necessary headers for browser access
+- **Max Age**: 3600 seconds (1 hour) for CORS preflight caching
+
+### Configuring CORS
+
+To configure CORS for the GCS bucket, use the provided scripts:
+
+**Shell Script:**
+```bash
+./scripts/configure-gcs-cors.sh
+```
+
+**Python Script:**
+```bash
+python scripts/configure_gcs_cors.py
+```
+
+**Manual Configuration:**
+```bash
+gsutil cors set cors-config.json gs://loist-mvp-audio-files
+```
+
+### CORS Troubleshooting
+
+If you encounter CORS errors when loading waveforms:
+
+1. **Verify CORS Configuration**: Check if CORS is configured on the bucket
+2. **Check Signed URLs**: Ensure signed URLs are generated correctly
+3. **Browser Cache**: Clear browser cache or do hard refresh (Ctrl+Shift+R)
+4. **Check Console**: Look for CORS errors in browser console
+5. **Verify Headers**: Ensure `Access-Control-Allow-Origin` header is present
+
+For more details, see [Iframe Embedding Troubleshooting Guide](./iframe-embedding-troubleshooting.md).
 
 ---
 

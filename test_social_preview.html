@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Social Media Preview Tester - Loist Music Library</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .test-section {
+            background: white;
+            margin-bottom: 30px;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .test-section h2 {
+            color: #333;
+            margin-top: 0;
+            border-bottom: 2px solid #4A90E2;
+            padding-bottom: 10px;
+        }
+        
+        .url-input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 16px;
+            margin-bottom: 15px;
+        }
+        
+        .url-input:focus {
+            outline: none;
+            border-color: #4A90E2;
+        }
+        
+        .test-button {
+            background: #4A90E2;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+            margin-bottom: 10px;
+            transition: background-color 0.2s;
+        }
+        
+        .test-button:hover {
+            background: #357ABD;
+        }
+        
+        .preview-container {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            border: 1px solid #ddd;
+        }
+        
+        .preview-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        
+        .meta-tags {
+            background: #f1f3f4;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            overflow-x: auto;
+            margin-top: 10px;
+        }
+        
+        .error {
+            color: #d32f2f;
+            background: #ffebee;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        
+        .success {
+            color: #2e7d32;
+            background: #e8f5e8;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        
+        .platform-links {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .platform-link {
+            display: block;
+            padding: 15px;
+            background: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            text-decoration: none;
+            color: #333;
+            text-align: center;
+            transition: all 0.2s;
+        }
+        
+        .platform-link:hover {
+            background: #e9ecef;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .platform-link h3 {
+            margin: 0 0 5px 0;
+            color: #4A90E2;
+        }
+        
+        .platform-link p {
+            margin: 0;
+            font-size: 14px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎵 Social Media Preview Tester</h1>
+        <p>Test how your Loist Music Library tracks appear when shared on social media platforms</p>
+    </div>
+
+    <div class="test-section">
+        <h2>🔍 Test URL</h2>
+        <input type="url" id="testUrl" class="url-input" placeholder="Enter your embed URL (e.g., https://loist.io/embed/123)" />
+        <br>
+        <button onclick="testUrl()" class="test-button">Test URL</button>
+        <button onclick="loadSampleUrl()" class="test-button">Load Sample URL</button>
+        <button onclick="clearResults()" class="test-button">Clear Results</button>
+        
+        <div id="results" style="display: none;">
+            <div id="loading" style="display: none;">
+                <p>Loading and analyzing URL...</p>
+            </div>
+            
+            <div id="error" class="error" style="display: none;"></div>
+            
+            <div id="success" class="success" style="display: none;"></div>
+            
+            <div id="previewResults"></div>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>📱 Platform Testing Tools</h2>
+        <p>Use these official tools to test how your content appears on different platforms:</p>
+        
+        <div class="platform-links">
+            <a href="https://developers.facebook.com/tools/debug/" target="_blank" class="platform-link">
+                <h3>Facebook Debugger</h3>
+                <p>Test Open Graph tags for Facebook sharing</p>
+            </a>
+            
+            <a href="https://cards-dev.twitter.com/validator" target="_blank" class="platform-link">
+                <h3>Twitter Card Validator</h3>
+                <p>Validate Twitter Card meta tags</p>
+            </a>
+            
+            <a href="https://www.linkedin.com/post-inspector/" target="_blank" class="platform-link">
+                <h3>LinkedIn Post Inspector</h3>
+                <p>Test how content appears on LinkedIn</p>
+            </a>
+            
+            <a href="https://developers.pinterest.com/tools/url-debugger/" target="_blank" class="platform-link">
+                <h3>Pinterest Rich Pins Validator</h3>
+                <p>Test Pinterest Rich Pins</p>
+            </a>
+            
+            <a href="https://search.google.com/test/rich-results" target="_blank" class="platform-link">
+                <h3>Google Rich Results Test</h3>
+                <p>Test structured data and rich snippets</p>
+            </a>
+            
+            <a href="https://validator.w3.org/" target="_blank" class="platform-link">
+                <h3>W3C Markup Validator</h3>
+                <p>Validate HTML markup and meta tags</p>
+            </a>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>📋 Meta Tags Checklist</h2>
+        <p>Ensure your embed pages include all necessary meta tags for optimal social sharing:</p>
+        
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+            <div>
+                <h3>✅ Open Graph Tags</h3>
+                <ul>
+                    <li>og:title</li>
+                    <li>og:description</li>
+                    <li>og:image (1200x630px)</li>
+                    <li>og:url</li>
+                    <li>og:type</li>
+                    <li>og:site_name</li>
+                    <li>og:audio</li>
+                    <li>og:audio:type</li>
+                </ul>
+            </div>
+            
+            <div>
+                <h3>✅ Twitter Card Tags</h3>
+                <ul>
+                    <li>twitter:card</li>
+                    <li>twitter:title</li>
+                    <li>twitter:description</li>
+                    <li>twitter:image</li>
+                    <li>twitter:player</li>
+                    <li>twitter:player:width</li>
+                    <li>twitter:player:height</li>
+                </ul>
+            </div>
+            
+            <div>
+                <h3>✅ SEO Meta Tags</h3>
+                <ul>
+                    <li>title</li>
+                    <li>description</li>
+                    <li>keywords</li>
+                    <li>author</li>
+                    <li>robots</li>
+                </ul>
+            </div>
+            
+            <div>
+                <h3>✅ Structured Data</h3>
+                <ul>
+                    <li>Schema.org JSON-LD</li>
+                    <li>MusicRecording type</li>
+                    <li>AudioObject properties</li>
+                    <li>Organization info</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function loadSampleUrl() {
+            document.getElementById('testUrl').value = 'https://loist.io/embed/sample-track';
+        }
+        
+        function clearResults() {
+            document.getElementById('results').style.display = 'none';
+            document.getElementById('testUrl').value = '';
+        }
+        
+        async function testUrl() {
+            const url = document.getElementById('testUrl').value;
+            if (!url) {
+                alert('Please enter a URL to test');
+                return;
+            }
+            
+            const resultsDiv = document.getElementById('results');
+            const loadingDiv = document.getElementById('loading');
+            const errorDiv = document.getElementById('error');
+            const successDiv = document.getElementById('success');
+            const previewResultsDiv = document.getElementById('previewResults');
+            
+            resultsDiv.style.display = 'block';
+            loadingDiv.style.display = 'block';
+            errorDiv.style.display = 'none';
+            successDiv.style.display = 'none';
+            previewResultsDiv.innerHTML = '';
+            
+            try {
+                // Test if URL is accessible
+                const response = await fetch(url, { 
+                    method: 'HEAD',
+                    mode: 'no-cors'
+                });
+                
+                loadingDiv.style.display = 'none';
+                successDiv.style.display = 'block';
+                successDiv.innerHTML = `✅ URL is accessible: ${url}`;
+                
+                // Extract meta tags (this would need to be done server-side in a real implementation)
+                previewResultsDiv.innerHTML = `
+                    <div class="preview-container">
+                        <div class="preview-title">📋 Meta Tags Analysis</div>
+                        <p><strong>Note:</strong> This is a client-side demo. In a production environment, you would need server-side tools to extract and analyze meta tags from the target URL.</p>
+                        
+                        <div class="meta-tags">
+Expected meta tags for optimal social sharing:
+
+&lt;meta property="og:title" content="Track Title by Artist" /&gt;
+&lt;meta property="og:description" content="Listen to Track Title by Artist from the album Album Name on Loist Music Library" /&gt;
+&lt;meta property="og:image" content="https://loist.io/thumbnail-url" /&gt;
+&lt;meta property="og:image:width" content="1200" /&gt;
+&lt;meta property="og:image:height" content="630" /&gt;
+&lt;meta property="og:url" content="${url}" /&gt;
+&lt;meta property="og:type" content="music.song" /&gt;
+&lt;meta property="og:site_name" content="Loist Music Library" /&gt;
+&lt;meta property="og:audio" content="https://loist.io/stream-url" /&gt;
+&lt;meta property="og:audio:type" content="audio/mpeg" /&gt;
+
+&lt;meta name="twitter:card" content="player" /&gt;
+&lt;meta name="twitter:title" content="Track Title by Artist" /&gt;
+&lt;meta name="twitter:description" content="Listen to Track Title by Artist from the album Album Name" /&gt;
+&lt;meta name="twitter:image" content="https://loist.io/thumbnail-url" /&gt;
+&lt;meta name="twitter:player" content="${url}" /&gt;
+&lt;meta name="twitter:player:width" content="500" /&gt;
+&lt;meta name="twitter:player:height" content="200" /&gt;
+                        </div>
+                        
+                        <p><strong>Next Steps:</strong></p>
+                        <ul>
+                            <li>Use the platform testing tools above to validate your meta tags</li>
+                            <li>Test sharing on actual social media platforms</li>
+                            <li>Ensure images are properly sized (1200x630px for optimal display)</li>
+                            <li>Verify that all audio URLs are accessible and properly formatted</li>
+                        </ul>
+                    </div>
+                `;
+                
+            } catch (error) {
+                loadingDiv.style.display = 'none';
+                errorDiv.style.display = 'block';
+                errorDiv.innerHTML = `❌ Error testing URL: ${error.message}`;
+            }
+        }
+        
+        // Auto-focus the URL input
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('testUrl').focus();
+        });
+    </script>
+</body>
+</html>

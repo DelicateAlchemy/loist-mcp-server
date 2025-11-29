@@ -185,6 +185,7 @@ class HTTPDownloader:
         destination: Optional[Path | str] = None,
         headers: Optional[Dict[str, str]] = None,
         progress_callback: Optional[Callable[[int, int], None]] = None,
+        filename_override: Optional[str] = None,
     ) -> Path:
         """
         Download file from URL.
@@ -225,7 +226,7 @@ class HTTPDownloader:
             # Use temporary file
             temp_file = tempfile.NamedTemporaryFile(
                 delete=False,
-                suffix=self._get_file_extension(url)
+                suffix=self._get_file_extension(url, filename_override)
             )
             dest_path = Path(temp_file.name)
             temp_file.close()
@@ -296,26 +297,35 @@ class HTTPDownloader:
                 dest_path.unlink()
             raise DownloadError(f"Unexpected error during download: {e}")
     
-    def _get_file_extension(self, url: str) -> str:
+    def _get_file_extension(self, url: str, filename_override: Optional[str] = None) -> str:
         """
-        Extract file extension from URL.
-        
+        Extract file extension from URL or filename override.
+
         Args:
             url: URL to extract extension from
-        
+            filename_override: Optional filename to use instead of URL parsing
+
         Returns:
             File extension (e.g., ".mp3") or empty string
         """
+        # Use filename override if provided
+        if filename_override:
+            ext = Path(filename_override).suffix
+            if ext:
+                logger.debug(f"Using filename override extension: {ext} from {filename_override}")
+                return ext
+
+        # Fall back to URL parsing
         parsed = urlparse(url)
         path = Path(parsed.path)
-        
+
         # Get extension, default to empty string
         ext = path.suffix
-        
+
         # Common audio extensions
         if ext.lower() in [".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".wma"]:
             return ext
-        
+
         # Default to .bin for unknown
         return ".bin"
     
@@ -343,6 +353,7 @@ def download_from_url(
     timeout_seconds: int = 60,
     headers: Optional[Dict[str, str]] = None,
     progress_callback: Optional[Callable[[int, int], None]] = None,
+    filename_override: Optional[str] = None,
 ) -> Path:
     """
     Download a file from a URL.
@@ -382,6 +393,7 @@ def download_from_url(
             url=url,
             destination=destination,
             headers=headers,
-            progress_callback=progress_callback
+            progress_callback=progress_callback,
+            filename_override=filename_override
         )
 

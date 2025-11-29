@@ -1,0 +1,111 @@
+{
+  "name": "Loist MCP Server Security Baseline",
+  "version": "1.0.0",
+  "description": "Security baseline configuration defining acceptable thresholds and policies for the Loist MCP Server",
+  "lastUpdated": "2025-11-05",
+  "policies": {
+    "bandit": {
+      "description": "Python security vulnerability scanning with Bandit",
+      "acceptableThresholds": {
+        "highSeverity": 0,
+        "mediumSeverity": 5,
+        "lowSeverity": 20
+      },
+      "blockedCategories": [
+        "B102",
+        "B103",
+        "B104",
+        "B105",
+        "B106",
+        "B107",
+        "B108",
+        "B301",
+        "B302",
+        "B303",
+        "B304",
+        "B305",
+        "B306",
+        "B401",
+        "B501",
+        "B502",
+        "B503",
+        "B504",
+        "B505",
+        "B506",
+        "B507",
+        "B601",
+        "B602",
+        "B603",
+        "B604",
+        "B605",
+        "B606",
+        "B607"
+      ]
+    },
+    "safety": {
+      "description": "Dependency vulnerability scanning with Safety",
+      "acceptableThresholds": {
+        "criticalVulnerabilities": 0,
+        "highVulnerabilities": 0,
+        "mediumVulnerabilities": 3,
+        "lowVulnerabilities": 10
+      },
+      "excludedPackages": [
+        "urllib3"
+      ]
+    },
+    "customChecks": {
+      "description": "Custom security checks for application-specific concerns",
+      "rules": {
+        "hardcodedSecrets": {
+          "severity": "CRITICAL",
+          "threshold": 0,
+          "description": "No hardcoded secrets allowed in source code"
+        },
+        "debugCode": {
+          "severity": "HIGH",
+          "threshold": 5,
+          "description": "Limit debug code in production (print statements, pdb, etc.)"
+        },
+        "executableFiles": {
+          "severity": "MEDIUM",
+          "threshold": 0,
+          "description": "Python source files should not be executable"
+        },
+        "securityTodos": {
+          "severity": "MEDIUM",
+          "threshold": 0,
+          "description": "Security-related TODOs should be addressed"
+        }
+      }
+    }
+  },
+  "ci": {
+    "failOn": {
+      "banditHighSeverity": true,
+      "safetyCriticalVulnerabilities": true,
+      "customHardcodedSecrets": true,
+      "banditMediumSeverity": false,
+      "safetyHighVulnerabilities": false
+    },
+    "reportFormats": ["json", "html", "txt"],
+    "notificationChannels": ["slack", "email"],
+    "baselineComparison": true
+  },
+  "remediation": {
+    "contact": "security@loistmusic.com",
+    "responseTime": {
+      "critical": "1 hour",
+      "high": "1 day",
+      "medium": "1 week",
+      "low": "1 month"
+    },
+    "documentation": "https://docs.loistmusic.com/security/remediation"
+  },
+  "metadata": {
+    "framework": "OWASP Application Security Verification Standard",
+    "lastReview": "2025-11-05",
+    "nextReview": "2026-02-05",
+    "approvedBy": "Security Team"
+  }
+}

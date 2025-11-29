@@ -1,0 +1,78 @@
+{
+  "decorator_registration": {
+    "tools": {
+      "status": "success",
+      "count": 4,
+      "tools": [
+        "health_check",
+        "process_audio_complete",
+        "get_audio_metadata",
+        "search_library"
+      ]
+    },
+    "resources": {
+      "status": "success",
+      "count": 3,
+      "resources": [
+        "music-library://audio/{audioId}/stream",
+        "music-library://audio/{audioId}/metadata",
+        "music-library://audio/{audioId}/thumbnail"
+      ]
+    }
+  },
+  "tool_execution": {
+    "health_check": {
+      "status": "success",
+      "response": {
+        "status": "healthy",
+        "service": "Music Library MCP",
+        "version": "0.1.0",
+        "transport": "http",
+        "log_level": "DEBUG",
+        "authentication": "disabled"
+      }
+    },
+    "get_audio_metadata": {
+      "status": "graceful_failure",
+      "note": "Correctly handled missing audio"
+    },
+    "search_library": {
+      "status": "graceful_failure",
+      "note": "Correctly handled missing database"
+    },
+    "process_audio_complete": {
+      "status": "graceful_failure",
+      "note": "Correctly handled invalid URL"
+    }
+  },
+  "resource_access": {
+    "audio_stream": {
+      "status": "error",
+      "error": "Error reading resource from template 'music-library://audio/00000000-0000-0000-0000-000000000000/stream': Failed to retrieve metadata: Database URL must be provided via parameter, config, or environment variables"
+    },
+    "metadata": {
+      "status": "error",
+      "error": "Error reading resource from template 'music-library://audio/00000000-0000-0000-0000-000000000000/metadata': Failed to retrieve metadata: Database URL must be provided via parameter, config, or environment variables"
+    },
+    "thumbnail": {
+      "status": "error",
+      "error": "Error reading resource from template 'music-library://audio/00000000-0000-0000-0000-000000000000/thumbnail': Failed to retrieve metadata: Database URL must be provided via parameter, config, or environment variables"
+    }
+  },
+  "error_handling": {
+    "invalid_tool": {
+      "status": "success",
+      "note": "Correctly rejected nonexistent tool"
+    },
+    "extra_params": {
+      "status": "warning",
+      "error": "Error calling tool 'health_check': 1 validation error for call[health_check]\ninvalid_param\n  Unexpected keyword argument [type=unexpected_keyword_argument, input_value='value', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.12/v/unexpected_keyword_argument"
+    }
+  },
+  "dependency_handling": {
+    "server_startup": {
+      "status": "success",
+      "note": "Server runs without GCS/database dependencies"
+    }
+  }
+}

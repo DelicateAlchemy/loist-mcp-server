@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Player Iframe Embedding Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-section h2 {
+            color: #4A90E2;
+            margin-top: 0;
+        }
+        .test-section p {
+            color: #666;
+            margin-bottom: 15px;
+        }
+        iframe {
+            width: 100%;
+            border: 2px solid #4A90E2;
+            border-radius: 8px;
+            margin: 10px 0;
+            display: block;
+        }
+        .warning {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .warning h3 {
+            color: #856404;
+            margin-top: 0;
+        }
+        .info {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .info h3 {
+            color: #0c5460;
+            margin-top: 0;
+        }
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+        .url-display {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            word-break: break-all;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎵 Audio Player Iframe Embedding Test</h1>
+        
+        <div class="info">
+            <h3>ℹ️ Testing Information</h3>
+            <p><strong>Audio ID:</strong> <code>02ceadb6-ed7c-45d8-976a-a2bfc9222d45</code></p>
+            <p><strong>Title:</strong> POP A SQUAT - 30 SECONDS</p>
+            <p><strong>Artist:</strong> XSERIES</p>
+        </div>
+
+        <div class="warning">
+            <h3>⚠️ Important Notes</h3>
+            <p><strong>If you're using ngrok:</strong> You may need to visit the ngrok URL directly in your browser first to accept the security warning before iframes will load properly.</p>
+            <p><strong>If iframes aren't loading:</strong> Check the browser console (F12) for CORS errors or mixed content warnings.</p>
+        </div>
+
+        <!-- Test 1: Standard Player -->
+        <div class="test-section">
+            <h2>1. Standard Player</h2>
+            <p>Traditional audio player with progress bar and volume controls.</p>
+            <div class="url-display">
+                <strong>URL:</strong> http://localhost:8080/embed/02ceadb6-ed7c-45d8-976a-a2bfc9222d45
+            </div>
+            <iframe 
+                src="http://localhost:8080/embed/02ceadb6-ed7c-45d8-976a-a2bfc9222d45"
+                width="100%" 
+                height="200" 
+                frameborder="0" 
+                allow="autoplay; encrypted-media"
+                style="min-height: 200px; border: 2px solid #4A90E2;">
+                <p>Your browser doesn't support iframes. <a href="http://localhost:8080/embed/02ceadb6-ed7c-45d8-976a-a2bfc9222d45" target="_blank">Open in new tab</a></p>
+            </iframe>
+        </div>
+
+        <!-- Test 2: Waveform Player (Query Parameter) -->
+        <div class="test-section">
+            <h2>2. Waveform Player (Query Parameter)</h2>
+            <p>Interactive waveform player loaded via <code>?template=waveform</code> query parameter.</p>
+            <div class="url-display">
+                <strong>URL:</strong> http://localhost:8080/embed/02ceadb6-ed7c-45d8-976a-a2bfc9222d45?template=waveform
+            </div>
+            <iframe 
+                src="http://localhost:8080/embed/02ceadb6-ed7c-45d8-976a-a2bfc9222d45?template=waveform"
+                width="100%" 
+                height="250" 
+                frameborder="0" 
+                allow="autoplay; encrypted-media"
+                style="min-height: 250px; border: 2px solid #357ABD;">
+                <p>Your browser doesn't support iframes. <a href="http://localhost:8080/embed/02ceadb6-ed7c-45d8-976a-a2bfc9222d45?template=waveform" target="_blank">Open in new tab</a></p>
+            </iframe>
+        </div>
+
+        <!-- Test 3: Waveform Player (Separate Endpoint) -->
+        <div class="test-section">
+            <h2>3. Waveform Player (Separate Endpoint)</h2>
+            <p>Interactive waveform player loaded via dedicated <code>/waveform</code> endpoint.</p>
+            <div class="url-display">
+                <strong>URL:</strong> http://localhost:8080/embed/02ceadb6-ed7c-45d8-976a-a2bfc9222d45/waveform
+            </div>
+            <iframe 
+                src="http://localhost:8080/embed/02ceadb6-ed7c-45d8-976a-a2bfc9222d45/waveform"
+                width="100%" 
+                height="250" 
+                frameborder="0" 
+                allow="autoplay; encrypted-media"
+                style="min-height: 250px; border: 2px solid #357ABD;">
+                <p>Your browser doesn't support iframes. <a href="http://localhost:8080/embed/02ceadb6-ed7c-45d8-976a-a2bfc9222d45/waveform" target="_blank">Open in new tab</a></p>
+            </iframe>
+        </div>
+
+        <!-- Test 4: Waveform Mobile -->
+        <div class="test-section">
+            <h2>4. Waveform Player (Mobile)</h2>
+            <p>Mobile-optimized waveform player with static display.</p>
+            <div class="url-display">
+                <strong>URL:</strong> http://localhost:8080/embed/02ceadb6-ed7c-45d8-976a-a2bfc9222d45/waveform/mobile
+            </div>
+            <iframe 
+                src="http://localhost:8080/embed/02ceadb6-ed7c-45d8-976a-a2bfc9222d45/waveform/mobile"
+                width="100%" 
+                height="250" 
+                frameborder="0" 
+                allow="autoplay; encrypted-media"
+                style="min-height: 250px; border: 2px solid #357ABD;">
+                <p>Your browser doesn't support iframes. <a href="http://localhost:8080/embed/02ceadb6-ed7c-45d8-976a-a2bfc9222d45/waveform/mobile" target="_blank">Open in new tab</a></p>
+            </iframe>
+        </div>
+
+        <!-- Test 5: Waveform Desktop -->
+        <div class="test-section">
+            <h2>5. Waveform Player (Desktop)</h2>
+            <p>Desktop-optimized waveform player with interactive click-to-seek.</p>
+            <div class="url-display">
+                <strong>URL:</strong> http://localhost:8080/embed/02ceadb6-ed7c-45d8-976a-a2bfc9222d45/waveform/desktop
+            </div>
+            <iframe 
+                src="http://localhost:8080/embed/02ceadb6-ed7c-45d8-976a-a2bfc9222d45/waveform/desktop"
+                width="100%" 
+                height="250" 
+                frameborder="0" 
+                allow="autoplay; encrypted-media"
+                style="min-height: 250px; border: 2px solid #357ABD;">
+                <p>Your browser doesn't support iframes. <a href="http://localhost:8080/embed/02ceadb6-ed7c-45d8-976a-a2bfc9222d45/waveform/desktop" target="_blank">Open in new tab</a></p>
+            </iframe>
+        </div>
+
+        <!-- Debugging Section -->
+        <div class="test-section">
+            <h2>🔍 Debugging Information</h2>
+            <p>If iframes aren't loading, check the following:</p>
+            <ol>
+                <li><strong>Browser Console (F12):</strong> Look for CORS errors, mixed content warnings, or network errors</li>
+                <li><strong>Network Tab:</strong> Check if the embed URLs are returning 200 OK status</li>
+                <li><strong>Response Headers:</strong> Verify <code>X-Frame-Options: ALLOWALL</code> and <code>Content-Security-Policy: frame-ancestors *</code></li>
+                <li><strong>ngrok Warning:</strong> If using ngrok, visit the URL directly first to accept the security warning</li>
+                <li><strong>Mixed Content:</strong> Ensure HTTP/HTTPS protocols match (don't embed HTTPS in HTTP page)</li>
+            </ol>
+            
+            <h3>Test Direct Links:</h3>
+            <ul>
+                <li><a href="http://localhost:8080/embed/02ceadb6-ed7c-45d8-976a-a2bfc9222d45" target="_blank">Standard Player</a></li>
+                <li><a href="http://localhost:8080/embed/02ceadb6-ed7c-45d8-976a-a2bfc9222d45?template=waveform" target="_blank">Waveform (Query Param)</a></li>
+                <li><a href="http://localhost:8080/embed/02ceadb6-ed7c-45d8-976a-a2bfc9222d45/waveform" target="_blank">Waveform (Endpoint)</a></li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // Log iframe load events for debugging
+        document.querySelectorAll('iframe').forEach((iframe, index) => {
+            iframe.addEventListener('load', function() {
+                console.log(`Iframe ${index + 1} loaded successfully:`, iframe.src);
+            });
+            iframe.addEventListener('error', function() {
+                console.error(`Iframe ${index + 1} failed to load:`, iframe.src);
+            });
+        });
+
+        // Check if page is loaded via file:// protocol
+        if (window.location.protocol === 'file:') {
+            const warning = document.createElement('div');
+            warning.className = 'warning';
+            warning.innerHTML = '<h3>⚠️ File Protocol Detected</h3><p>This page is loaded via <code>file://</code> protocol. For iframe embedding to work properly, please serve this file via HTTP server (e.g., <code>python3 -m http.server 8000</code>).</p>';
+            document.body.insertBefore(warning, document.body.firstChild);
+        }
+    </script>
+</body>
+</html>

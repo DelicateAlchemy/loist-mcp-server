@@ -14,7 +14,10 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List
 from google.cloud import storage
 from google.cloud.exceptions import NotFound, GoogleCloudError
+from google.auth.transport.requests import Request
+from google.auth import default, impersonated_credentials
 import os
+import requests
 
 # Try to import config, but make it optional for backward compatibility
 try:
@@ -23,7 +26,78 @@ try:
 except ImportError:
     HAS_APP_CONFIG = False
 
+# Try to import circuit breaker for fault tolerance
+try:
+    from src.exceptions.circuit_breaker import get_circuit_breaker, CircuitBreakerConfig
+    HAS_CIRCUIT_BREAKER = True
+except ImportError:
+    HAS_CIRCUIT_BREAKER = False
+
+# Try to import retry utilities for enhanced error handling
+try:
+    from src.exceptions.retry import retry_call, GCS_RETRY_CONFIG, RetryExhaustedException
+    HAS_RETRY = True
+except ImportError:
+    HAS_RETRY = False
+
 logger = logging.getLogger(__name__)
+
+
+def _resolve_service_account_email() -> Optional[str]:
+    """
+    Resolve the service account email for GCS signed URL generation.
+
+    Priority order:
+    1. GCP_SERVICE_ACCOUNT_EMAIL env var
+    2. Metadata server (for Cloud Run/Compute Engine)
+    3. From credentials object (if available)
+
+    Returns:
+        Service account email or None if not found
+    """
+    logger.info("[SIGNED_URL_DEBUG] Resolving service account email")
+    
+    # Check environment variable first
+    email = os.getenv("GCP_SERVICE_ACCOUNT_EMAIL")
+    if email:
+        logger.info(f"[SIGNED_URL_DEBUG] Using service account email from env: {email}")
+        return email
+    else:
+        logger.info("[SIGNED_URL_DEBUG] GCP_SERVICE_ACCOUNT_EMAIL env var not set")
+
+    # Try metadata server (Cloud Run/Compute Engine)
+    logger.info("[SIGNED_URL_DEBUG] Attempting to get service account email from metadata server")
+    try:
+        metadata_url = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email"
+        logger.info(f"[SIGNED_URL_DEBUG] Metadata URL: {metadata_url}")
+        response = requests.get(metadata_url, headers={"Metadata-Flavor": "Google"}, timeout=1)
+        logger.info(f"[SIGNED_URL_DEBUG] Metadata server response status: {response.status_code}")
+        if response.status_code == 200:
+            email = response.text.strip()
+            logger.info(f"[SIGNED_URL_DEBUG] Using service account email from metadata: {email}")
+            return email
+        else:
+            logger.warning(f"[SIGNED_URL_DEBUG] Metadata server returned status {response.status_code}: {response.text}")
+    except Exception as e:
+        logger.warning(f"[SIGNED_URL_DEBUG] Could not get email from metadata server: {type(e).__name__}: {e}")
+
+    # Try to get from credentials
+    logger.info("[SIGNED_URL_DEBUG] Attempting to get service account email from credentials")
+    try:
+        credentials, project_id = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+        logger.info(f"[SIGNED_URL_DEBUG] Credentials type: {type(credentials).__name__}")
+        logger.info(f"[SIGNED_URL_DEBUG] Credentials has service_account_email attr: {hasattr(credentials, 'service_account_email')}")
+        if hasattr(credentials, 'service_account_email'):
+            email = credentials.service_account_email
+            logger.info(f"[SIGNED_URL_DEBUG] Using service account email from credentials: {email}")
+            return email
+        else:
+            logger.warning("[SIGNED_URL_DEBUG] Credentials object does not have service_account_email attribute")
+    except Exception as e:
+        logger.warning(f"[SIGNED_URL_DEBUG] Could not get email from credentials: {type(e).__name__}: {e}")
+
+    logger.error("[SIGNED_URL_DEBUG] Could not resolve service account email for IAM SignBlob")
+    return None
 
 
 class GCSClient:
@@ -56,16 +130,27 @@ class GCSClient:
         if not self.bucket_name:
             raise ValueError("Bucket name must be provided via parameter, config, or GCS_BUCKET_NAME env var")
         
-        # Set credentials in environment if provided
+        # Set credentials in environment if provided and file exists
         if self.credentials_path and os.path.exists(self.credentials_path):
             os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = self.credentials_path
             logger.info(f"Using credentials from: {self.credentials_path}")
         elif self.credentials_path:
             logger.warning(f"Credentials path provided but file not found: {self.credentials_path}")
-        
+
+        # For Cloud Run with service account, don't override GOOGLE_APPLICATION_CREDENTIALS
+        # Let ADC use the attached service account automatically
+        gcp_indicators = [
+            os.getenv("K_SERVICE"),  # Cloud Run
+            os.getenv("GAE_SERVICE"),  # App Engine
+            os.getenv("GCE_METADATA_HOST"),  # Compute Engine
+        ]
+        if any(gcp_indicators) and not self.credentials_path:
+            logger.info("Running on GCP with service account - using ADC")
+            # Don't set GOOGLE_APPLICATION_CREDENTIALS, let ADC work automatically
+
         self._client: Optional[storage.Client] = None
         self._bucket: Optional[storage.Bucket] = None
-        
+
         logger.info(f"Initialized GCS client for bucket: {self.bucket_name}")
     
     @property
@@ -77,9 +162,27 @@ class GCSClient:
     
     @property
     def bucket(self) -> storage.Bucket:
-        """Get or create bucket reference."""
+        """Get or create bucket reference with circuit breaker protection."""
         if self._bucket is None:
-            self._bucket = self.client.bucket(self.bucket_name)
+            def _get_bucket():
+                """Get bucket with circuit breaker protection."""
+                return self.client.bucket(self.bucket_name)
+
+            if HAS_CIRCUIT_BREAKER:
+                gcs_circuit_breaker = get_circuit_breaker(
+                    "gcs_bucket",
+                    CircuitBreakerConfig(
+                        name="gcs_bucket",
+                        failure_threshold=3,  # Fail after 3 consecutive failures
+                        recovery_timeout=30.0,  # Wait 30s before trying again
+                        success_threshold=2,  # Need 2 successes to close
+                        timeout=15.0  # 15s timeout for bucket operations
+                    )
+                )
+                self._bucket = gcs_circuit_breaker.call(_get_bucket)
+            else:
+                self._bucket = _get_bucket()
+
         return self._bucket
     
     def generate_signed_url(
@@ -92,56 +195,281 @@ class GCSClient:
     ) -> str:
         """
         Generate a signed URL for temporary access to a blob.
-        
+
+        Uses IAM SignBlob API when running on GCP (Cloud Run/Compute Engine),
+        falls back to keyfile signing for local development.
+
         Args:
             blob_name: Name/path of the blob in GCS
             expiration_minutes: URL expiration time in minutes (default: 15)
             method: HTTP method (GET, PUT, POST, DELETE)
             content_type: Content-Type header for PUT/POST requests
             response_disposition: Content-Disposition header (e.g., "attachment; filename=audio.mp3")
-        
+
         Returns:
             Signed URL string
-        
+
         Raises:
             NotFound: If blob doesn't exist (for GET requests)
             GoogleCloudError: If URL generation fails
         """
+        logger.info(f"[SIGNED_URL_DEBUG] generate_signed_url called: blob_name={blob_name}, bucket={self.bucket_name}, expiration={expiration_minutes}min, method={method}")
         try:
+            # Step 1: Get blob reference
+            logger.info(f"[SIGNED_URL_DEBUG] Step 1: Getting blob reference for {blob_name}")
             blob = self.bucket.blob(blob_name)
-            
-            # For GET requests, verify blob exists
-            if method == "GET" and not blob.exists():
-                raise NotFound(f"Blob not found: {blob_name}")
-            
-            # Build URL parameters
-            url_params: Dict[str, Any] = {
-                "version": "v4",
-                "expiration": datetime.timedelta(minutes=expiration_minutes),
-                "method": method,
-            }
-            
-            if content_type:
-                url_params["content_type"] = content_type
-            
-            if response_disposition:
-                url_params["response_disposition"] = response_disposition
-            
-            url = blob.generate_signed_url(**url_params)
-            
+            logger.info(f"[SIGNED_URL_DEBUG] Blob reference created: {blob.name}")
+
+            # Step 2: Verify blob exists (for GET requests)
+            if method == "GET":
+                logger.info(f"[SIGNED_URL_DEBUG] Step 2: Checking blob existence for GET request")
+                blob_exists = blob.exists()
+                logger.info(f"[SIGNED_URL_DEBUG] Blob exists: {blob_exists}")
+                if not blob_exists:
+                    logger.error(f"[SIGNED_URL_DEBUG] Blob not found: {blob_name}")
+                    raise NotFound(f"Blob not found: {blob_name}")
+
+            # Step 3: Determine signing method
+            logger.info("[SIGNED_URL_DEBUG] Step 3: Determining signing method")
+            use_iam_signblob = self._should_use_iam_signblob()
+            logger.info(f"[SIGNED_URL_DEBUG] Using IAM SignBlob: {use_iam_signblob}")
+
+            # Step 4: Generate signed URL
+            if use_iam_signblob:
+                logger.info(f"[SIGNED_URL_DEBUG] Step 4: Using IAM SignBlob for signed URL generation: {blob_name}")
+                url = self._generate_signed_url_iam(blob, expiration_minutes, method, content_type, response_disposition)
+            else:
+                logger.info(f"[SIGNED_URL_DEBUG] Step 4: Using keyfile signing for signed URL generation: {blob_name}")
+                url = self._generate_signed_url_keyfile(blob, expiration_minutes, method, content_type, response_disposition)
+
             logger.info(
-                f"Generated signed URL for blob: {blob_name}, "
-                f"expires in {expiration_minutes} minutes"
+                f"[SIGNED_URL_DEBUG] Generated signed URL for blob: {blob_name}, "
+                f"expires in {expiration_minutes} minutes, "
+                f"method: {'IAM SignBlob' if use_iam_signblob else 'keyfile'}"
             )
-            
+
             return url
-            
-        except NotFound:
-            logger.error(f"Blob not found: {blob_name}")
+
+        except NotFound as e:
+            logger.error(f"[SIGNED_URL_DEBUG] Blob not found: {blob_name} - {e}")
             raise
         except GoogleCloudError as e:
-            logger.error(f"Failed to generate signed URL for {blob_name}: {e}")
+            logger.error(f"[SIGNED_URL_DEBUG] Failed to generate signed URL for {blob_name}: {type(e).__name__}: {e}")
+            import traceback
+            logger.error(f"[SIGNED_URL_DEBUG] Full traceback: {traceback.format_exc()}")
             raise
+        except Exception as e:
+            logger.error(f"[SIGNED_URL_DEBUG] Unexpected error generating signed URL for {blob_name}: {type(e).__name__}: {e}")
+            import traceback
+            logger.error(f"[SIGNED_URL_DEBUG] Full traceback: {traceback.format_exc()}")
+            raise GoogleCloudError(f"Unexpected error generating signed URL: {e}")
+
+    def _should_use_iam_signblob(self) -> bool:
+        """Determine if we should use IAM SignBlob based on config, environment and credentials."""
+
+        # Check explicit config setting first
+        if HAS_APP_CONFIG:
+            mode = app_config.gcs_signer_mode.lower()
+            if mode == "iam":
+                logger.debug("GCS signer mode explicitly set to IAM")
+                return True
+            elif mode == "keyfile":
+                logger.debug("GCS signer mode explicitly set to keyfile")
+                return False
+            # mode == "auto", continue with auto-detection
+
+        # Auto-detection logic
+        # Check if GOOGLE_APPLICATION_CREDENTIALS points to a keyfile
+        credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+        if credentials_path and os.path.exists(credentials_path):
+            try:
+                import json
+                with open(credentials_path, 'r') as f:
+                    creds_data = json.load(f)
+                # If it's a service account keyfile with private_key, use keyfile signing
+                if "private_key" in creds_data and "client_email" in creds_data:
+                    logger.debug("Detected service account keyfile, using keyfile signing")
+                    return False
+            except Exception:
+                pass
+
+        # Check if we're running on GCP (Cloud Run/Compute Engine)
+        # Look for GCP-specific environment variables or metadata
+        gcp_indicators = [
+            os.getenv("K_SERVICE"),  # Cloud Run
+            os.getenv("GAE_SERVICE"),  # App Engine
+            os.getenv("GCE_METADATA_HOST"),  # Compute Engine
+            "/computeMetadata" in os.getenv("GCE_METADATA_HOST", ""),
+        ]
+
+        if any(gcp_indicators):
+            logger.debug("Detected GCP environment, will use IAM SignBlob")
+            return True
+
+        # Default to keyfile if credentials path exists
+        if credentials_path:
+            logger.debug("Credentials path exists but not GCP detected, using keyfile")
+            return False
+
+        # Last resort: try IAM SignBlob if no explicit keyfile
+        logger.debug("No explicit credentials, attempting IAM SignBlob")
+        return True
+
+    def _generate_signed_url_iam(
+        self,
+        blob: storage.Blob,
+        expiration_minutes: int,
+        method: str,
+        content_type: Optional[str],
+        response_disposition: Optional[str],
+    ) -> str:
+        """Generate signed URL using IAM SignBlob API."""
+        logger.info(f"[SIGNED_URL_DEBUG] Starting IAM SignBlob signed URL generation")
+        logger.info(f"[SIGNED_URL_DEBUG] Blob: {blob.name}, Bucket: {blob.bucket.name}")
+        logger.info(f"[SIGNED_URL_DEBUG] Expiration: {expiration_minutes} minutes, Method: {method}")
+        
+        # Step 1: Resolve service account email
+        logger.info("[SIGNED_URL_DEBUG] Step 1: Resolving service account email")
+        service_account_email = _resolve_service_account_email()
+        if not service_account_email:
+            logger.error("[SIGNED_URL_DEBUG] Failed to resolve service account email")
+            logger.error("[SIGNED_URL_DEBUG] This may indicate a deployment issue where the service account is not properly attached")
+            raise GoogleCloudError("Could not resolve service account email for IAM SignBlob")
+        logger.info(f"[SIGNED_URL_DEBUG] Service account email resolved: {service_account_email}")
+
+        try:
+            # Step 2: Get ADC credentials
+            logger.info("[SIGNED_URL_DEBUG] Step 2: Getting Application Default Credentials")
+            source_credentials, project_id = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+            logger.info(f"[SIGNED_URL_DEBUG] Project ID: {project_id}")
+            logger.info(f"[SIGNED_URL_DEBUG] Source credentials type: {type(source_credentials).__name__}")
+            
+            # Validate source credentials
+            if not source_credentials:
+                logger.error("[SIGNED_URL_DEBUG] Source credentials are None - ADC may not be properly configured")
+                raise GoogleCloudError("Application Default Credentials not available")
+            
+            # Step 3: Create impersonated credentials for IAM SignBlob
+            logger.info("[SIGNED_URL_DEBUG] Step 3: Creating impersonated credentials")
+            logger.info(f"[SIGNED_URL_DEBUG] Target principal: {service_account_email}")
+            logger.info(f"[SIGNED_URL_DEBUG] Target scopes: https://www.googleapis.com/auth/devstorage.read_only")
+            
+            # Use broader scopes for better compatibility with IAM SignBlob
+            target_scopes = [
+                "https://www.googleapis.com/auth/devstorage.read_only",
+                "https://www.googleapis.com/auth/cloud-platform"
+            ]
+            
+            signing_credentials = impersonated_credentials.Credentials(
+                source_credentials=source_credentials,
+                target_principal=service_account_email,
+                target_scopes=target_scopes,
+                lifetime=3600,  # Token lifetime in seconds (must be > 0)
+            )
+            logger.info("[SIGNED_URL_DEBUG] Impersonated credentials created successfully")
+            
+            # Validate impersonated credentials
+            logger.info(f"[SIGNED_URL_DEBUG] Impersonated credentials type: {type(signing_credentials).__name__}")
+            logger.info(f"[SIGNED_URL_DEBUG] Impersonated credentials service account: {signing_credentials.service_account_email}")
+            
+            # Test credential refresh to ensure they work
+            try:
+                signing_credentials.refresh(Request())
+                logger.info("[SIGNED_URL_DEBUG] Credentials refresh successful")
+            except Exception as refresh_error:
+                logger.warning(f"[SIGNED_URL_DEBUG] Credential refresh failed (may still work): {refresh_error}")
+                # Don't fail here as some credentials work without explicit refresh
+
+            # Step 4: Build expiration datetime
+            logger.info("[SIGNED_URL_DEBUG] Step 4: Building expiration datetime")
+            expiration = datetime.datetime.utcnow() + datetime.timedelta(minutes=expiration_minutes)
+            logger.info(f"[SIGNED_URL_DEBUG] Expiration datetime: {expiration.isoformat()}")
+            
+            # Step 5: Generate signed URL using impersonated credentials
+            logger.info("[SIGNED_URL_DEBUG] Step 5: Generating signed URL with impersonated credentials")
+            logger.info(f"[SIGNED_URL_DEBUG] Using google-cloud-storage version 2.18.2 API")
+            logger.info(f"[SIGNED_URL_DEBUG] Blob: {blob.name}, Bucket: {blob.bucket.name}")
+            logger.info(f"[SIGNED_URL_DEBUG] Method: {method}, Version: v4")
+            logger.info(f"[SIGNED_URL_DEBUG] Expiration timedelta: {datetime.timedelta(minutes=expiration_minutes)}")
+            
+            # Alternative approach: Create a new storage client with impersonated credentials
+            # This ensures the client is properly configured for signing
+            logger.info("[SIGNED_URL_DEBUG] Creating storage client with impersonated credentials")
+            signing_client = storage.Client(
+                project=project_id,
+                credentials=signing_credentials
+            )
+            signing_bucket = signing_client.bucket(blob.bucket.name)
+            signing_blob = signing_bucket.blob(blob.name)
+            
+            # Use blob.generate_signed_url() with impersonated credentials
+            # This internally uses IAM SignBlob API
+            signed_url = signing_blob.generate_signed_url(
+                version="v4",
+                expiration=datetime.timedelta(minutes=expiration_minutes),
+                method=method,
+                credentials=signing_credentials,
+                content_type=content_type,
+                response_disposition=response_disposition,
+            )
+            logger.info("[SIGNED_URL_DEBUG] Signed URL generated successfully")
+            logger.debug(f"[SIGNED_URL_DEBUG] Signed URL (first 100 chars): {signed_url[:100]}...")
+            return signed_url
+
+        except TypeError as e:
+            # This specific error suggests old code is still deployed
+            error_msg = str(e)
+            logger.error(f"[SIGNED_URL_DEBUG] TypeError in signed URL generation: {error_msg}")
+            if "signer" in error_msg:
+                logger.error("[SIGNED_URL_DEBUG] ERROR: 'signer' parameter error suggests old code is still deployed!")
+                logger.error("[SIGNED_URL_DEBUG] Current code uses 'credentials' parameter, not 'signer'")
+                logger.error("[SIGNED_URL_DEBUG] Please verify that the latest code has been deployed to Cloud Run")
+                raise GoogleCloudError(f"Deployment mismatch detected - old code still running. TypeError: {error_msg}")
+            else:
+                logger.error(f"[SIGNED_URL_DEBUG] Unexpected TypeError: {error_msg}")
+                raise GoogleCloudError(f"TypeError in signed URL generation: {error_msg}")
+        except Exception as e:
+            logger.error(f"[SIGNED_URL_DEBUG] IAM SignBlob failed: {type(e).__name__}: {e}")
+            logger.error(f"[SIGNED_URL_DEBUG] Exception details: {str(e)}")
+            
+            # Add specific error handling for common issues
+            error_msg = str(e)
+            if "403" in error_msg and "Forbidden" in error_msg:
+                logger.error("[SIGNED_URL_DEBUG] 403 Forbidden - check IAM permissions:")
+                logger.error(f"[SIGNED_URL_DEBUG] - Service account {service_account_email} needs roles/iam.serviceAccountTokenCreator")
+                logger.error(f"[SIGNED_URL_DEBUG] - Service account needs roles/storage.objectAdmin or similar")
+            elif "401" in error_msg and "Unauthorized" in error_msg:
+                logger.error("[SIGNED_URL_DEBUG] 401 Unauthorized - check credential configuration")
+            elif "impersonat" in error_msg.lower():
+                logger.error("[SIGNED_URL_DEBUG] Impersonation error - check service account permissions")
+            
+            import traceback
+            logger.error(f"[SIGNED_URL_DEBUG] Full traceback: {traceback.format_exc()}")
+            raise GoogleCloudError(f"IAM SignBlob signing failed: {e}")
+
+    def _generate_signed_url_keyfile(
+        self,
+        blob: storage.Blob,
+        expiration_minutes: int,
+        method: str,
+        content_type: Optional[str],
+        response_disposition: Optional[str],
+    ) -> str:
+        """Generate signed URL using traditional keyfile signing."""
+        # Build URL parameters
+        url_params: Dict[str, Any] = {
+            "version": "v4",
+            "expiration": datetime.timedelta(minutes=expiration_minutes),
+            "method": method,
+        }
+
+        if content_type:
+            url_params["content_type"] = content_type
+
+        if response_disposition:
+            url_params["response_disposition"] = response_disposition
+
+        return blob.generate_signed_url(**url_params)
     
     def upload_file(
         self,
@@ -171,27 +499,76 @@ class GCSClient:
         if not source_path.exists():
             raise FileNotFoundError(f"Source file not found: {source_path}")
         
+        def _upload_with_retry():
+            """Perform upload with retry and circuit breaker protection."""
+            def _single_upload_attempt():
+                """Single upload attempt."""
+                blob = self.bucket.blob(destination_blob_name)
+
+                # Set metadata if provided
+                if metadata:
+                    blob.metadata = metadata
+
+                # Upload file
+                blob.upload_from_filename(
+                    str(source_path),
+                    content_type=content_type,
+                )
+
+                return blob
+
+            # Apply retry logic first, then circuit breaker
+            if HAS_RETRY:
+                def _retryable_upload():
+                    return retry_call(_single_upload_attempt, GCS_RETRY_CONFIG)
+
+                if HAS_CIRCUIT_BREAKER:
+                    gcs_circuit_breaker = get_circuit_breaker(
+                        "gcs_upload",
+                        CircuitBreakerConfig(
+                            name="gcs_upload",
+                            failure_threshold=3,  # Fail after 3 consecutive failures
+                            recovery_timeout=30.0,  # Wait 30s before trying again
+                            success_threshold=2,  # Need 2 successes to close
+                            timeout=60.0  # 60s timeout for uploads (can be large files)
+                        )
+                    )
+                    return gcs_circuit_breaker.call(_retryable_upload)
+                else:
+                    return _retryable_upload()
+            else:
+                # Fallback without retry
+                if HAS_CIRCUIT_BREAKER:
+                    gcs_circuit_breaker = get_circuit_breaker(
+                        "gcs_upload",
+                        CircuitBreakerConfig(
+                            name="gcs_upload",
+                            failure_threshold=3,
+                            recovery_timeout=30.0,
+                            success_threshold=2,
+                            timeout=60.0
+                        )
+                    )
+                    return gcs_circuit_breaker.call(_single_upload_attempt)
+                else:
+                    return _single_upload_attempt()
+
         try:
-            blob = self.bucket.blob(destination_blob_name)
-            
-            # Set metadata if provided
-            if metadata:
-                blob.metadata = metadata
-            
-            # Upload file
-            blob.upload_from_filename(
-                str(source_path),
-                content_type=content_type,
-            )
-            
+            blob = _upload_with_retry()
+
             logger.info(
                 f"Uploaded file: {source_path} -> gs://{self.bucket_name}/{destination_blob_name}"
             )
-            
+
             return blob
-            
+
         except GoogleCloudError as e:
             logger.error(f"Failed to upload file {source_path}: {e}")
+            raise
+        except Exception as e:
+            if HAS_RETRY and isinstance(e, RetryExhaustedException):
+                logger.error(f"GCS upload failed after {e.attempts} retry attempts for {source_path}. Last error: {e.last_exception}")
+                raise e.last_exception from e
             raise
     
     def delete_file(self, blob_name: str) -> bool:
@@ -331,15 +708,19 @@ def create_gcs_client(
 ) -> GCSClient:
     """
     Create a GCS client instance.
-    
+
     Args:
         bucket_name: GCS bucket name
         project_id: GCP project ID
         credentials_path: Path to service account key file
-    
+
     Returns:
         GCSClient instance
     """
+    # If no credentials path provided, check for GOOGLE_APPLICATION_CREDENTIALS
+    if credentials_path is None:
+        credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+
     return GCSClient(
         bucket_name=bucket_name,
         project_id=project_id,
@@ -393,21 +774,28 @@ def upload_audio_file(
     """
     client = create_gcs_client(bucket_name=bucket_name)
     
-    # Determine content type for audio files
-    content_type = "audio/mpeg"  # Default
+    # Determine content type from file extension
+    content_type = "application/octet-stream"  # Default
     if isinstance(source_path, str):
         source_path = Path(source_path)
     
     suffix = source_path.suffix.lower()
-    audio_types = {
+    content_types = {
+        # Audio formats
         ".mp3": "audio/mpeg",
         ".wav": "audio/wav",
         ".flac": "audio/flac",
         ".ogg": "audio/ogg",
         ".m4a": "audio/mp4",
         ".aac": "audio/aac",
+        # Image formats
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".gif": "image/gif",
+        ".webp": "image/webp",
     }
-    content_type = audio_types.get(suffix, "audio/mpeg")
+    content_type = content_types.get(suffix, "application/octet-stream")
     
     return client.upload_file(
         source_path=source_path,
@@ -468,4 +856,74 @@ def get_file_metadata(
     """
     client = create_gcs_client(bucket_name=bucket_name)
     return client.get_file_metadata(blob_name)
+
+
+def check_gcs_health() -> Dict[str, Any]:
+    """
+    Check GCS connectivity and configuration health.
+
+    Performs basic connectivity test and configuration validation.
+
+    Returns:
+        Dict with health status and details:
+        {
+            "available": bool,
+            "configured": bool,
+            "error": str | None,
+            "bucket_name": str | None,
+            "project_id": str | None,
+            "response_time_ms": float | None
+        }
+    """
+    import time
+
+    result = {
+        "available": False,
+        "configured": False,
+        "error": None,
+        "bucket_name": None,
+        "project_id": None,
+        "response_time_ms": None
+    }
+
+    start_time = time.time()
+
+    try:
+        # Check configuration first
+        if HAS_APP_CONFIG:
+            bucket_name = app_config.gcs_bucket_name
+            project_id = app_config.gcs_project_id
+        else:
+            bucket_name = os.getenv("GCS_BUCKET_NAME")
+            project_id = os.getenv("GCS_PROJECT_ID")
+
+        if not bucket_name or not project_id:
+            result["error"] = "GCS bucket name or project ID not configured"
+            return result
+
+        result["configured"] = True
+        result["bucket_name"] = bucket_name
+        result["project_id"] = project_id
+
+        # Test connectivity by listing objects (lightweight operation)
+        # This will fail if credentials are invalid or network is down
+        client = create_gcs_client(bucket_name=bucket_name, project_id=project_id)
+
+        # Try to get bucket (this tests credentials and connectivity)
+        try:
+            bucket = client.bucket
+            # Test basic connectivity - this will throw if credentials are bad
+            bucket.reload()
+            result["available"] = True
+            result["response_time_ms"] = (time.time() - start_time) * 1000
+
+        except Exception as e:
+            result["error"] = f"GCS connectivity test failed: {str(e)}"
+            result["response_time_ms"] = (time.time() - start_time) * 1000
+
+    except Exception as e:
+        result["error"] = f"GCS health check failed: {str(e)}"
+        result["response_time_ms"] = (time.time() - start_time) * 1000
+
+    return result
 

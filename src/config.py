@@ -12,10 +12,11 @@ class ServerConfig(BaseSettings):
     """Server configuration with environment variable support"""
     
     model_config = SettingsConfigDict(
+        # Read .env file if it exists (local dev), gracefully ignore if missing (production)
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
-        extra="ignore"
+        extra="ignore",
     )
     
     # Server Identity
@@ -29,7 +30,8 @@ class ServerConfig(BaseSettings):
     
     # Server Runtime
     server_host: str = "0.0.0.0"
-    server_port: int = 8080
+    # Cloud Run sets PORT automatically, fallback to 8080 for local development
+    server_port: int = int(os.getenv("PORT", "8080"))
     server_transport: Literal["stdio", "http", "sse"] = "stdio"
     
     # Authentication
@@ -64,6 +66,7 @@ class ServerConfig(BaseSettings):
     gcs_signed_url_expiration: int = 900  # 15 minutes in seconds
     gcs_service_account_email: str | None = None
     google_application_credentials: str | None = None  # Path to service account key
+    gcs_signer_mode: str = "auto"  # auto, iam, keyfile - signing method for GCS URLs
     
     # Database Configuration
     db_host: str | None = None
@@ -86,6 +89,12 @@ class ServerConfig(BaseSettings):
     
     # Embed Configuration
     embed_base_url: str = "https://loist.io"  # Base URL for embed links (configurable for local dev)
+
+    # Task Queue Configuration
+    task_queue_mode: str = "cloud"  # "cloud" or "local" for development
+    allowed_task_queues: str = "audio-processing-queue"  # Comma-separated list of allowed queue names
+    cloud_tasks_strict_auth: bool = True  # Require service account validation in production
+    local_queue_max_workers: int = 2  # Maximum worker threads for local queue
 
     # Feature Flags
     enable_metrics: bool = False
@@ -112,6 +121,11 @@ class ServerConfig(BaseSettings):
     def cors_expose_headers_list(self) -> list[str]:
         """Parse CORS expose headers string into list"""
         return [header.strip() for header in self.cors_expose_headers.split(",") if header.strip()]
+
+    @property
+    def allowed_task_queues_list(self) -> list[str]:
+        """Parse allowed task queues string into list"""
+        return [queue.strip() for queue in self.allowed_task_queues.split(",") if queue.strip()]
     
     @property
     def log_level_int(self) -> int:
@@ -151,9 +165,14 @@ class ServerConfig(BaseSettings):
         Generate PostgreSQL connection URL.
         Returns None if database is not configured.
         """
+        # Check for explicit DATABASE_URL first (for Cloud Run with secrets)
+        explicit_url = os.getenv("DATABASE_URL")
+        if explicit_url:
+            return explicit_url
+
         if not self.is_database_configured:
             return None
-        
+
         if self.db_connection_name and self.db_connection_name.strip():
             # Cloud SQL Proxy connection
             # Format: postgresql://user:password@/dbname?host=/cloudsql/connection_name
@@ -196,4 +215,11 @@ class ServerConfig(BaseSettings):
 
 # Global configuration instance
 config = ServerConfig()
+
+# Debug logging for environment variable loading (temporary for troubleshooting)
+import sys
+if config.log_level.upper() == "DEBUG":
+    print(f"[CONFIG DEBUG] embed_base_url = {config.embed_base_url}", file=sys.stderr)
+    print(f"[CONFIG DEBUG] EMBED_BASE_URL env var = {os.getenv('EMBED_BASE_URL', 'NOT SET')}", file=sys.stderr)
+    print(f"[CONFIG DEBUG] .env file exists = {os.path.exists('.env')}", file=sys.stderr)
 
