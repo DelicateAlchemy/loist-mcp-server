@@ -9,11 +9,13 @@ It follows best practices for database migrations including:
 - Rollback support
 - Error handling and logging
 - Connection pooling for production use
+- Idempotent migrations (handles "already exists" gracefully)
 
 Usage:
     python migrate.py --action=up --database-url=postgresql://user:pass@host:port/db
     python migrate.py --action=down --migration=001 --database-url=postgresql://user:pass@host:port/db
     python migrate.py --action=status --database-url=postgresql://user:pass@host:port/db
+    python migrate.py --action=baseline --database-url=postgresql://user:pass@host:port/db
 
 Author: Task Master AI
 Created: $(date)
@@ -116,8 +118,35 @@ class DatabaseMigrator:
         with open(file_path, 'rb') as f:
             return hashlib.sha256(f.read()).hexdigest()
     
-    def apply_migration(self, conn, version: str, file_path: Path) -> bool:
-        """Apply a single migration file."""
+    # Error messages that indicate the migration was already applied
+    IDEMPOTENT_ERRORS = [
+        "already exists",
+        "duplicate key value violates unique constraint",
+        "column .* of relation .* already exists",
+        "relation .* already exists",
+        "index .* already exists",
+        "constraint .* already exists",
+        "type .* already exists",
+    ]
+    
+    def is_idempotent_error(self, error_message: str) -> bool:
+        """Check if the error indicates the migration was already applied."""
+        import re
+        error_lower = str(error_message).lower()
+        for pattern in self.IDEMPOTENT_ERRORS:
+            if re.search(pattern, error_lower):
+                return True
+        return False
+
+    def apply_migration(self, conn, version: str, file_path: Path, force_idempotent: bool = True) -> bool:
+        """Apply a single migration file.
+        
+        Args:
+            conn: Database connection
+            version: Migration version string
+            file_path: Path to migration SQL file
+            force_idempotent: If True, treat "already exists" errors as success
+        """
         logger.info(f"Applying migration {version}")
         
         start_time = datetime.now()
@@ -157,11 +186,33 @@ class DatabaseMigrator:
                 except Exception as e:
                     # Rollback on error
                     cur.execute("ROLLBACK;")
+                    
+                    # Check if this is an idempotent error (already applied)
+                    if force_idempotent and self.is_idempotent_error(str(e)):
+                        logger.warning(f"Migration {version} appears already applied (idempotent): {e}")
+                        # Mark as applied anyway
+                        return self.mark_migration_applied(conn, version, checksum)
+                    
                     logger.error(f"Migration {version} failed: {e}")
                     raise
                     
         except Exception as e:
             logger.error(f"Failed to apply migration {version}: {e}")
+            return False
+    
+    def mark_migration_applied(self, conn, version: str, checksum: str = None) -> bool:
+        """Mark a migration as applied without running it."""
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO schema_migrations (version, checksum, execution_time_ms)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (version) DO NOTHING
+                """, (version, checksum, 0))
+            logger.info(f"Migration {version} marked as applied")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to mark migration {version} as applied: {e}")
             return False
     
     def rollback_migration(self, conn, version: str) -> bool:
@@ -242,14 +293,66 @@ class DatabaseMigrator:
                 
         finally:
             conn.close()
+    
+    def baseline(self, up_to_version: str = None) -> bool:
+        """Mark all migrations (or up to a specific version) as applied without running them.
+        
+        This is useful for existing databases where the schema was created manually
+        or before migration tracking was enabled.
+        
+        Args:
+            up_to_version: Optional. If provided, only baseline up to this version.
+                          If None, baseline all migrations.
+        """
+        logger.info(f"Creating migration baseline{f' up to {up_to_version}' if up_to_version else ''}")
+        
+        conn = self.get_connection()
+        try:
+            self.ensure_migrations_table(conn)
+            
+            # Get all migration files
+            all_migrations = sorted(self.migrations_dir.glob("*.sql"))
+            applied = set(self.get_applied_migrations(conn))
+            
+            baselined = 0
+            for migration_file in all_migrations:
+                version = migration_file.stem
+                
+                # Skip if already applied
+                if version in applied:
+                    logger.info(f"Migration {version} already tracked, skipping")
+                    continue
+                
+                # Stop if we've reached the target version
+                if up_to_version and version > up_to_version:
+                    logger.info(f"Reached target version {up_to_version}, stopping baseline")
+                    break
+                
+                # Calculate checksum and mark as applied
+                checksum = self.calculate_checksum(migration_file)
+                if self.mark_migration_applied(conn, version, checksum):
+                    baselined += 1
+                else:
+                    logger.error(f"Failed to baseline migration {version}")
+                    return False
+            
+            if baselined > 0:
+                logger.info(f"✅ Baselined {baselined} migrations")
+            else:
+                logger.info("No migrations needed to be baselined")
+            
+            return True
+            
+        finally:
+            conn.close()
 
 def main():
     parser = argparse.ArgumentParser(description="Database Migration Runner")
     parser.add_argument(
         "--action", 
-        choices=["up", "down", "status"], 
+        choices=["up", "down", "status", "baseline"], 
         required=True,
-        help="Migration action to perform"
+        help="Migration action to perform: up (apply), down (rollback), status (show), baseline (mark as applied)"
     )
     parser.add_argument(
         "--database-url",
@@ -258,6 +361,10 @@ def main():
     parser.add_argument(
         "--migration",
         help="Migration version for rollback (required for down action)"
+    )
+    parser.add_argument(
+        "--up-to",
+        help="For baseline action: only baseline up to this migration version"
     )
     
     args = parser.parse_args()
@@ -284,6 +391,8 @@ def main():
         elif args.action == "status":
             migrator.get_status()
             success = True
+        elif args.action == "baseline":
+            success = migrator.baseline(args.up_to)
         
         sys.exit(0 if success else 1)
         
