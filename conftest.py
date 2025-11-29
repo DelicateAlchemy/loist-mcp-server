@@ -41,6 +41,13 @@ def pytest_collection_modifyitems(config: pytest.Config, items: List[pytest.Item
         ]) or 'gcs' in item.name.lower():
             item.add_marker(pytest.mark.requires_gcs)
 
+        # Static analysis tool tests - require tools to be installed
+        if any(pattern in str(item.fspath) for pattern in [
+            'test_static_analysis_tools.py',
+            'test_security_scanning_validation.py',
+        ]):
+            item.add_marker(pytest.mark.requires_tools)
+
         # Slow tests - by function name patterns
         if any(pattern in item.name.lower() for pattern in [
             'performance', 'stress', 'load', 'concurrent', 'timing'
@@ -70,6 +77,9 @@ def pytest_configure(config: pytest.Config) -> None:
     )
     config.addinivalue_line(
         "markers", "unit: marks tests as unit tests (fast, isolated)"
+    )
+    config.addinivalue_line(
+        "markers", "requires_tools: marks tests requiring static analysis tools (black, isort, etc.)"
     )
 
 

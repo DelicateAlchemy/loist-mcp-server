@@ -30,15 +30,15 @@ steps:
         pip install -r requirements.txt
 
         # Install test dependencies
-        pip install pytest-cov pytest-xdist pytest-html
+        pip install pytest-cov pytest-xdist pytest-html pytest-asyncio beautifulsoup4
 
         # Create test results directory
         mkdir -p test-results/unit coverage-reports
 
-        # Run unit tests only (no database, GCS, or slow tests)
+        # Run unit tests only (no database, GCS, slow, or tool-dependency tests)
         echo "📊 Running unit tests..."
         python -m pytest \
-          -m "not (requires_db or requires_gcs or slow)" \
+          -m "not (requires_db or requires_gcs or slow or requires_tools)" \
           --cov=. \
           --cov-report=html:coverage-reports/htmlcov \
           --cov-report=xml:coverage-reports/coverage.xml \
