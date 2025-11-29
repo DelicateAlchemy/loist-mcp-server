@@ -28,8 +28,9 @@ def pytest_collection_modifyitems(config: pytest.Config, items: List[pytest.Item
             'test_database_testing_infrastructure.py',
             'test_database_testing_examples.py',
             'database_testing.py',
-            'test_database_operations_integration.py',
-            'test_regression_tasks_13_14.py'  # This has database tests
+            'test_full_text_search.py',
+            'test_resources.py',
+            'test_real_gcs_integration.py',
         ]):
             item.add_marker(pytest.mark.requires_db)
 
