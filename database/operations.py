@@ -2674,6 +2674,126 @@ def delete_audio_track(track_id: str) -> Dict[str, Any]:
 
 
 # ============================================================================
+# Metadata Update Operations
+# ============================================================================
+
+def update_audio_metadata(
+    track_id: str,
+    metadata: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Update metadata fields for an audio track.
+    
+    Uses JSON Merge Patch semantics:
+    - Only updates fields that are present in the metadata dict
+    - Omitted fields remain unchanged
+    - Existing database triggers handle updated_at and search_vector
+    
+    Args:
+        track_id: UUID of the track to update
+        metadata: Dict with fields to update (pre-validated by Pydantic)
+                  Allowed fields: artist, title, album, genre, year,
+                                  composer, publisher, record_label, isrc
+    
+    Returns:
+        Full updated track record as dict
+        
+    Raises:
+        ValidationError: If track_id format is invalid or no valid fields provided
+        ResourceNotFoundError: If track doesn't exist
+        DatabaseOperationError: If update fails
+    
+    Example:
+        >>> result = update_audio_metadata(
+        ...     '123e4567-e89b-12d3-a456-426614174000',
+        ...     {'artist': 'The Beatles', 'year': 1968}
+        ... )
+        >>> print(f"Updated track: {result['title']} by {result['artist']}")
+    """
+    # Validate UUID format
+    try:
+        uuid.UUID(track_id)
+    except ValueError:
+        raise ValidationError(f"Invalid track_id format: {track_id}")
+    
+    if not metadata:
+        raise ValidationError("No metadata fields to update")
+    
+    # Allowed editable fields (whitelist for safety)
+    allowed_fields = {
+        'artist', 'title', 'album', 'genre', 'year',
+        'composer', 'publisher', 'record_label', 'isrc'
+    }
+    
+    # Filter to only allowed fields
+    updates = {k: v for k, v in metadata.items() if k in allowed_fields}
+    
+    if not updates:
+        raise ValidationError(
+            f"No valid fields to update. Allowed fields: {', '.join(sorted(allowed_fields))}"
+        )
+    
+    # Validate title is not empty if provided
+    if 'title' in updates and not updates['title']:
+        raise ValidationError("Title cannot be empty")
+    
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                # Build dynamic UPDATE query with parameterized values
+                set_clauses = [f"{field} = %s" for field in updates.keys()]
+                params = list(updates.values())
+                params.append(track_id)  # For WHERE clause
+                
+                update_query = f"""
+                    UPDATE audio_tracks
+                    SET {', '.join(set_clauses)}
+                    WHERE id = %s::uuid
+                    RETURNING *
+                """
+                # Note: updated_at and search_vector are handled by existing triggers
+                
+                cur.execute(update_query, params)
+                result = cur.fetchone()
+                
+                if not result:
+                    raise ResourceNotFoundError(
+                        f"Track not found: {track_id}",
+                        details={'track_id': track_id}
+                    )
+                
+                # Commit transaction
+                conn.commit()
+                
+                logger.info(
+                    f"Successfully updated metadata for track {track_id}: "
+                    f"fields={list(updates.keys())}"
+                )
+                
+                return dict(result)
+    
+    except ResourceNotFoundError:
+        # Re-raise resource not found
+        raise
+    
+    except ValidationError:
+        # Re-raise validation errors
+        raise
+    
+    except DatabaseError as e:
+        logger.error(f"Database error updating track {track_id}: {e}")
+        raise DatabaseOperationError(
+            f"Failed to update audio metadata: database error - {str(e)}"
+        )
+    
+    except Exception as e:
+        logger.error(f"Unexpected error updating track {track_id}: {e}")
+        raise DatabaseOperationError(
+            f"Failed to update audio metadata: {str(e)}"
+        )
+
+
+# ============================================================================
 # Error and Transaction Management
 # ============================================================================
 # Note: Error handling and transaction management are already implemented
