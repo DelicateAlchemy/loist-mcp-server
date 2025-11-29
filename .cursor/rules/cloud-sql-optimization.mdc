@@ -1,7 +1,7 @@
 ---
 description: Optimize Cloud SQL usage to prevent unnecessary costs during development
-globs: **/*
-alwaysApply: true
+globs: docker-compose.yml, database/**/*
+alwaysApply: false
 ---
 
 # Cloud SQL Cost Optimization

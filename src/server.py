@@ -137,6 +137,40 @@ def check_database_availability_cached():
     return result
 
 
+def check_gcs_health():
+    """Import and call GCS health check from storage module."""
+    try:
+        from src.storage.gcs_client import check_gcs_health as _check_gcs_health
+        return _check_gcs_health()
+    except ImportError as e:
+        return {
+            "available": False,
+            "configured": False,
+            "bucket_name": None,
+            "response_time_ms": None,
+            "error": f"GCS module not available: {e}"
+        }
+
+
+def check_cloud_tasks_health():
+    """
+    Check Cloud Tasks connectivity and configuration.
+    
+    Note: Cloud Tasks is optional and may not be configured in all environments.
+    Returns a stub response indicating Cloud Tasks is not yet implemented.
+    """
+    # Cloud Tasks health check not yet implemented
+    # Return a stub that indicates it's not configured
+    return {
+        "available": False,
+        "configured": False,
+        "queue_name": None,
+        "location": None,
+        "response_time_ms": None,
+        "error": "Cloud Tasks health check not yet implemented"
+    }
+
+
 @mcp.tool()
 def health_check() -> dict:
     """

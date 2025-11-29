@@ -365,6 +365,7 @@ def check_database_availability() -> Dict[str, Any]:
     start_time = time.time()
     error_message = None
 
+    conn = None
     try:
         db_manager = get_db_manager()
 
@@ -378,7 +379,6 @@ def check_database_availability() -> Dict[str, Any]:
                 # Check if we got a valid result
                 if result and result[0] == 1:
                     response_time = int((time.time() - start_time) * 1000)  # Convert to milliseconds
-                    db_manager.return_connection(conn)
 
                     return {
                         "available": True,

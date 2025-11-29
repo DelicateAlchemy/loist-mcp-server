@@ -177,10 +177,10 @@ class ProductMetadata(BaseModel):
 
 class FormatMetadata(BaseModel):
     """Technical format metadata (duration, bitrate, etc.)"""
-    Duration: float = Field(ge=0, description="Duration in seconds")
-    Channels: int = Field(ge=1, le=16, description="Number of audio channels")
-    SampleRate: int = Field(alias="Sample rate", ge=8000, description="Sample rate in Hz")
-    Bitrate: int = Field(ge=0, description="Bitrate in bits per second")
+    Duration: Optional[float] = Field(default=None, ge=0, description="Duration in seconds (may be null if not extracted)")
+    Channels: Optional[int] = Field(default=None, ge=1, le=16, description="Number of audio channels")
+    SampleRate: Optional[int] = Field(default=None, alias="Sample rate", ge=8000, description="Sample rate in Hz")
+    Bitrate: Optional[int] = Field(default=None, ge=0, description="Bitrate in bits per second")
     Format: str = Field(description="Audio format (e.g., 'MP3', 'FLAC')")
 
     model_config = {

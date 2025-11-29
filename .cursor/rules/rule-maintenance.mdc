@@ -1,0 +1,147 @@
+---
+description: Guidelines for creating, maintaining, and improving Cursor rules based on emerging code patterns
+globs: .cursor/rules/*.mdc
+alwaysApply: false
+---
+
+# Rule Maintenance Guidelines
+
+**Create consistent, actionable rules and continuously improve them based on emerging patterns.**
+
+## Rule Structure
+
+### Required Format
+
+```markdown
+---
+description: Clear, one-line description of what the rule enforces
+globs: path/to/files/*.ext, other/path/**/*
+alwaysApply: boolean
+---
+
+# Rule Title
+
+**Bold summary of the rule's purpose.**
+
+## Section 1
+
+- **Main Points in Bold**
+  - Sub-points with details
+  - Examples and explanations
+```
+
+### File References
+
+- Use `[filename](mdc:path/to/file)` to reference other rules or code
+- Example: [project-context.mdc](mdc:.cursor/rules/project-context.mdc) for rule references
+- Example: [server.py](mdc:src/server.py) for code references
+
+### Code Examples
+
+Use language-specific code blocks with DO/DON'T patterns:
+
+```python
+# ✅ DO: Show good examples
+def good_example():
+    return handle_error_properly()
+
+# ❌ DON'T: Show anti-patterns
+def bad_example():
+    return ignore_errors()
+```
+
+## When to Create Rules
+
+### Add New Rules When
+
+- A new technology/pattern is used in **3+ files**
+- Common bugs could be prevented by standardization
+- Code reviews repeatedly mention the same feedback
+- New security or performance patterns emerge
+- A workflow causes repeated confusion
+
+### Rule Content Guidelines
+
+- Start with high-level overview
+- Include specific, actionable requirements
+- Show examples from actual codebase (not theoretical)
+- Reference existing code when possible
+- Keep rules DRY by referencing other rules
+- Include both DO and DON'T examples
+
+## When to Update Rules
+
+### Modify Existing Rules When
+
+- Better examples exist in the codebase
+- Additional edge cases are discovered
+- Related rules have been updated
+- Implementation details have changed
+- Documentation references become outdated
+
+### Improvement Triggers
+
+Watch for these signals:
+
+- New code patterns not covered by existing rules
+- Repeated similar implementations across files
+- Common error patterns that could be prevented
+- New libraries or tools being used consistently
+- Emerging best practices in the codebase
+
+## Rule Quality Checks
+
+Before committing rule changes:
+
+- [ ] Rules are actionable and specific
+- [ ] Examples come from actual code (not theoretical)
+- [ ] All file references are valid (no dead links)
+- [ ] Patterns are consistently enforced across codebase
+- [ ] DO/DON'T examples are clear and relevant
+
+## Rule Deprecation
+
+When patterns become outdated:
+
+1. Mark outdated patterns as deprecated in the rule
+2. Add migration guidance for old → new pattern
+3. Update references in other rules
+4. Remove after transition period (typically 1-2 sprints)
+
+## Project-Specific Patterns
+
+### This Codebase Uses
+
+| Pattern | Location | Rule Reference |
+|---------|----------|----------------|
+| Repository Pattern | `src/repositories/` | [project-context.mdc](mdc:.cursor/rules/project-context.mdc) |
+| Exception Framework | `src/exceptions/` | [project-context.mdc](mdc:.cursor/rules/project-context.mdc) |
+| Docker Development | `docker-compose.yml` | [cloud-sql-optimization.mdc](mdc:.cursor/rules/cloud-sql-optimization.mdc) |
+| Task Branching | Git workflow | [git-workflow.mdc](mdc:.cursor/rules/git-workflow.mdc) |
+| MCP Sessions | Container restarts | [mcp-server-connection.mdc](mdc:.cursor/rules/mcp-server-connection.mdc) |
+
+### Watch for New Patterns In
+
+- `src/tools/` - New MCP tool patterns
+- `src/resources/` - New MCP resource patterns
+- `database/migrations/` - New migration patterns
+- `tests/` - New testing patterns
+
+## Documentation Sync
+
+Keep rules synchronized with:
+
+- **README.md** - High-level features and quick start
+- **docs/** - Detailed technical documentation
+- **Code comments** - Inline implementation notes
+
+When code changes, check if rules need updating:
+
+1. Did a pattern change? → Update relevant rule
+2. Did a file move? → Update file references
+3. Did a convention change? → Update examples
+4. Is the rule still relevant? → Deprecate if not
+
+---
+
+**Remember**: Rules should make development faster, not slower. If a rule creates friction without clear benefit, revise or remove it.

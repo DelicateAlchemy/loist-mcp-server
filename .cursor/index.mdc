@@ -1,0 +1,89 @@
+---
+description: Core project context for the Loist Music Library MCP Server - essential understanding for AI agents
+alwaysApply: true
+---
+
+# Project Context: Loist Music Library MCP Server
+
+**A FastMCP-based server for audio ingestion, metadata extraction, and streaming for a music library SaaS platform.**
+
+## What This Project Is
+
+- **Purpose**: MCP (Model Context Protocol) server enabling AI agents to process, search, and stream audio files
+- **Framework**: FastMCP 2.12.4 with MCP Protocol v1.16.0
+- **Domain**: Music/audio library management with full-text search, metadata extraction, and embeddable players
+- **Stage**: Pre-MVP development - authentication disabled for development convenience
+
+## Key Architecture
+
+```
+FastMCP Protocol Layer → Repository Pattern → PostgreSQL + GCS
+```
+
+**Core Components:**
+- `src/server.py` - MCP server entry point and tool registration
+- `src/tools/` - MCP tools (process_audio, search_library, query tools)
+- `src/resources/` - MCP resources (audio streams, metadata, thumbnails)
+- `src/repositories/` - Data access layer with AudioRepository
+- `src/exceptions/` - Unified exception framework with recovery strategies
+- `database/` - PostgreSQL schema, migrations, connection pooling
+
+## Technology Stack
+
+| Layer | Technology |
+|-------|------------|
+| Protocol | FastMCP (MCP Protocol) |
+| API | HTTP/SSE + REST endpoints |
+| Database | PostgreSQL (Cloud SQL) with full-text search |
+| Storage | Google Cloud Storage (GCS) with signed URLs via IAM SignBlob |
+| Hosting | Google Cloud Run (serverless) |
+| CI/CD | Google Cloud Build (not GitHub Actions) |
+
+## Key Patterns
+
+- **Repository Pattern**: `AudioRepositoryInterface` with PostgreSQL implementation
+- **Exception Framework**: Unified error handling in `src/exceptions/` with recovery strategies
+- **Signed URLs**: GCS access via service account impersonation (`IAM SignBlob API`)
+- **Connection Pooling**: Optimized for Cloud Run serverless with `database/pool.py`
+- **Full-Text Search**: PostgreSQL `tsvector` with weighted ranking
+
+## Environments
+
+| Environment | Server Name | Database | Trigger |
+|-------------|-------------|----------|---------|
+| Local | `loist-music-library-local` | Docker PostgreSQL | `docker-compose up` |
+| Staging | `loist-music-library-staging` | Cloud SQL | Push to `dev` branch |
+| Production | `loist-music-library` | Cloud SQL | Push to `main` branch |
+
+## Critical Context for AI Agents
+
+1. **Use Docker for development** - `docker-compose up -d` (not local venv)
+2. **Cloud SQL costs money** - Stop when not testing staging/production
+3. **MCP sessions invalidate on container restart** - Restart Cursor after rebuilds
+4. **CI/CD is Cloud Build only** - Not GitHub Actions
+5. **Auth is disabled** - `AUTH_ENABLED=false` during pre-MVP development
+6. **Service Account**: `mcp-music-library-sa@loist-music-library.iam.gserviceaccount.com`
+
+## Key Files Quick Reference
+
+| Need | Look Here |
+|------|-----------|
+| Server configuration | `src/config.py`, `docker-compose.yml` |
+| MCP tools | `src/tools/process_audio.py`, `src/tools/query_tools.py` |
+| Database operations | `database/operations.py`, `database/pool.py` |
+| Migrations | `database/migrations/*.sql` |
+| Environment vars | `docs/environment-variables.md` |
+| Deployment | `cloudbuild.yaml`, `cloudbuild-staging.yaml` |
+| Exception handling | `src/exceptions/`, `docs/exception-handling-guide.md` |
+| Testing | `tests/`, `docs/testing-practices-guide.md` |
+
+## Documentation Hierarchy
+
+- **`README.md`**: Entry point, quick start, feature overview
+- **`docs/`**: Detailed guides (50+ documents)
+- **`database/README.md`**: Schema, migrations, query examples
+- **`.cursor/rules/`**: AI agent workflow rules
+
+---
+
+**Remember**: This is a music library backend. Audio files are stored in GCS, metadata in PostgreSQL, and everything is accessed via MCP tools/resources or REST API endpoints.

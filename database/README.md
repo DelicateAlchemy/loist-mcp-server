@@ -99,7 +99,15 @@ The database is designed to support multi-user SaaS functionality with proper da
 
 ### Migrations
 - `migrations/001_initial_schema.sql`: Initial schema creation
+- `migrations/002_add_user_id.sql`: Multi-user support (user_id column)
+- `migrations/002_add_waveform_support.sql`: Waveform generation columns
+- `migrations/002_performance_indexes.sql`: Additional performance indexes
+- `migrations/003_add_a2a_tasks.sql`: Agent-to-agent task coordination table
+- `migrations/004_add_xmp_fields.sql`: XMP metadata fields (composer, publisher, record_label, isrc)
+- `migrations/005_optimize_xmp_indexes.sql`: Composite indexes for XMP field filtering
+- `migrations/006_optimize_search_vector.sql`: Enhanced full-text search optimization
 - `migrate.py`: Migration runner with rollback support
+- `migrate.py`: Migration runner with automatic discovery and rollback support
 
 ### Configuration
 - `config.py`: Database connection and pool management
@@ -112,16 +120,36 @@ The database is designed to support multi-user SaaS functionality with proper da
 
 ### Running Migrations
 
+The migration system automatically discovers and applies all `.sql` files in the `migrations/` directory in order.
+
 ```bash
-# Apply all pending migrations
+# Apply all pending migrations (automatic discovery)
 python migrate.py --action=up --database-url=postgresql://user:pass@host:port/db
 
 # Check migration status
 python migrate.py --action=status --database-url=postgresql://user:pass@host:port/db
 
-# Rollback specific migration (manual rollback required)
+# Rollback specific migration (manual rollback SQL required)
 python migrate.py --action=down --migration=001 --database-url=postgresql://user:pass@host:port/db
 ```
+
+### Automated Deployment Migrations
+
+Migrations run automatically during Cloud Build deployments:
+
+```bash
+# Staging environment (post-deployment)
+./scripts/migrate-db.sh staging
+
+# Production environment (during deployment)
+# Handled automatically by Cloud Build pipeline
+```
+
+The system ensures:
+- **Idempotent**: Migrations only run once, tracked in `schema_migrations` table
+- **Transactional**: Each migration runs in a transaction for consistency
+- **Ordered**: Migrations execute in version order (001, 002, 003, etc.)
+- **Environment-aware**: Automatically detects production vs staging databases
 
 ### Environment Variables
 

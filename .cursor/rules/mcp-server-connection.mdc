@@ -1,7 +1,7 @@
 ---
 description: MCP server connection management when Docker containers restart during development
-globs: docker-compose.yml, src/**/*.py, .cursor/mcp.json
-alwaysApply: true
+globs: docker-compose.yml, .cursor/mcp.json
+alwaysApply: false
 ---
 
 # MCP Server Connection Management
