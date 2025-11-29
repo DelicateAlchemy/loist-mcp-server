@@ -37,6 +37,9 @@ class DatabaseConfig:
     username: str = "loist_user"
     password: str = ""
     
+    # Cloud SQL connection (for Cloud Run deployments)
+    cloud_sql_connection_name: Optional[str] = None
+    
     # Connection pool settings
     min_connections: int = 5
     max_connections: int = 20
@@ -51,13 +54,30 @@ class DatabaseConfig:
     
     @classmethod
     def from_env(cls) -> 'DatabaseConfig':
-        """Create configuration from environment variables."""
+        """
+        Create configuration from environment variables.
+        
+        Connection Priority:
+        1. Cloud SQL via Unix socket (DB_CONNECTION_NAME set) - for Cloud Run
+        2. Direct TCP connection (DB_HOST set) - for local/direct connections
+        3. Fallback to localhost - for local development
+        """
+        cloud_sql_connection_name = os.getenv("DB_CONNECTION_NAME")
+        
+        # Log which connection mode we're using
+        if cloud_sql_connection_name:
+            logger.info(f"Database config: Using Cloud SQL connection via {cloud_sql_connection_name}")
+        else:
+            db_host = os.getenv("DB_HOST", "localhost")
+            logger.info(f"Database config: Using direct connection to {db_host}")
+        
         return cls(
             host=os.getenv("DB_HOST", "localhost"),
             port=int(os.getenv("DB_PORT", "5432")),
             database=os.getenv("DB_NAME", "loist_mvp"),
             username=os.getenv("DB_USER", "loist_user"),
             password=os.getenv("DB_PASSWORD", ""),
+            cloud_sql_connection_name=cloud_sql_connection_name,
             min_connections=int(os.getenv("DB_MIN_CONNECTIONS", "5")),
             max_connections=int(os.getenv("DB_MAX_CONNECTIONS", "20")),
             statement_timeout=int(os.getenv("DB_STATEMENT_TIMEOUT", "30000")),
@@ -67,14 +87,40 @@ class DatabaseConfig:
         )
     
     @property
+    def is_cloud_sql(self) -> bool:
+        """Check if using Cloud SQL connection."""
+        return self.cloud_sql_connection_name is not None
+    
+    @property
     def connection_url(self) -> str:
-        """Get PostgreSQL connection URL."""
-        return f"postgresql://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}"
+        """
+        Get PostgreSQL connection URL.
+        
+        For Cloud SQL: Uses Unix socket path
+        For direct: Uses TCP host:port
+        """
+        if self.cloud_sql_connection_name:
+            # Cloud SQL Unix socket connection (for Cloud Run)
+            return f"postgresql://{self.username}:{self.password}@/{self.database}?host=/cloudsql/{self.cloud_sql_connection_name}"
+        else:
+            # Direct TCP connection
+            return f"postgresql://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}"
     
     @property
     def dsn(self) -> str:
-        """Get PostgreSQL DSN string."""
-        return f"host={self.host} port={self.port} dbname={self.database} user={self.username} password={self.password}"
+        """
+        Get PostgreSQL DSN string.
+        
+        For Cloud SQL: Uses Unix socket path as host
+        For direct: Uses TCP host and port
+        """
+        if self.cloud_sql_connection_name:
+            # Cloud SQL Unix socket connection (for Cloud Run)
+            # Note: port is not used with Unix sockets
+            return f"host=/cloudsql/{self.cloud_sql_connection_name} dbname={self.database} user={self.username} password={self.password}"
+        else:
+            # Direct TCP connection
+            return f"host={self.host} port={self.port} dbname={self.database} user={self.username} password={self.password}"
 
 class DatabaseManager:
     """Manages database connections and operations."""
