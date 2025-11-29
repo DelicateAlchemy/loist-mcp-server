@@ -636,6 +636,59 @@ async def delete_audio(audioId: str) -> dict:
 
 
 # ============================================================================
+# Update Metadata Tool
+# ============================================================================
+
+
+@mcp.tool()
+async def update_metadata(audioId: str, metadata: dict) -> dict:
+    """
+    Update metadata for a previously processed audio track.
+
+    Uses JSON Merge Patch semantics:
+    - Omit a field → leave unchanged
+    - Provide a value → update it
+
+    Editable fields: artist, title, album, genre, year,
+                     composer, publisher, record_label, isrc
+
+    Args:
+        audioId: UUID of the audio track to update
+        metadata: Dict with fields to update (omit fields to leave unchanged)
+            - artist: Track artist name (max 500 chars)
+            - title: Track title (max 500 chars, cannot be empty)
+            - album: Album name (max 500 chars)
+            - genre: Music genre (max 100 chars)
+            - year: Release year (1800-2100)
+            - composer: Composer name (max 500 chars)
+            - publisher: Publisher name (max 500 chars)
+            - record_label: Record label name (max 500 chars)
+            - isrc: ISRC code (max 20 chars)
+
+    Returns:
+        dict: {success, audioId, updatedFields, metadata} on success,
+              or {success: false, error, message} on failure
+
+    Example:
+        >>> result = await update_metadata(
+        ...     audioId="550e8400-e29b-41d4-a716-446655440000",
+        ...     metadata={"artist": "The Beatles", "year": 1968}
+        ... )
+        >>> print(result["updatedFields"])
+        ["artist", "year"]
+    """
+    from src.error_utils import handle_tool_error
+    from src.tools.update_tools import update_metadata as update_func
+
+    try:
+        return await update_func({"audioId": audioId, "metadata": metadata})
+    except Exception as e:
+        error_response = handle_tool_error(e, "update_metadata")
+        logger.error(f"Update metadata failed for ID '{audioId}': {error_response}")
+        return error_response
+
+
+# ============================================================================
 # Task 9: MCP Resources
 # ============================================================================
 
