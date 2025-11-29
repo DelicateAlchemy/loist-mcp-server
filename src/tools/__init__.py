@@ -8,8 +8,12 @@ This module provides MCP tool implementations for audio processing and query wor
 from .process_audio import process_audio_complete, ProcessAudioError
 
 # Task 8: Query/retrieval tools
-from .query_tools import get_audio_metadata, search_library
-from .query_schemas import QueryException
+from .query_tools import get_audio_metadata, search_library, delete_audio
+from .query_schemas import (
+    QueryException,
+    DeleteAudioInput,
+    DeleteAudioOutput,
+)
 
 __all__ = [
     # Task 7
@@ -18,5 +22,8 @@ __all__ = [
     # Task 8
     "get_audio_metadata",
     "search_library",
+    "delete_audio",
     "QueryException",
+    "DeleteAudioInput",
+    "DeleteAudioOutput",
 ]
