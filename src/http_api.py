@@ -431,7 +431,7 @@ def register_http_api_routes(mcp: FastMCP) -> None:
                 )
 
             # Get GCS audio path
-            audio_gcs_path = metadata.get("audio_path")
+            audio_gcs_path = metadata.get("audio_gcs_path")
             if not audio_gcs_path:
                 return JSONResponse(
                     {"success": False, "message": "Audio file path not found", "error": "SOURCE_FILE_MISSING"},

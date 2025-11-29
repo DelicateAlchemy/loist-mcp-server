@@ -73,6 +73,10 @@ mcp = create_fastmcp_server()
 from src.tasks.handler import register_task_handlers
 register_task_handlers(mcp)
 
+# Register HTTP API routes (search, stream, thumbnail, download, etc.)
+from src.http_api import register_http_api_routes
+register_http_api_routes(mcp)
+
 # Configure Jinja2 templates
 templates = setup_jinja_templates()
 
