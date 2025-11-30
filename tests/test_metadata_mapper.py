@@ -200,11 +200,16 @@ class TestFormatSpecificFlags:
         assert '-write_bext' in flags
         assert '1' in flags
 
-    def test_other_formats_no_flags(self):
-        """Test that other formats don't have special flags."""
-        for fmt in ['flac', 'aac', 'ogg']:
-            flags = _get_format_specific_flags(fmt)
-            assert flags == []
+    def test_other_formats_flags(self):
+        """Test format-specific flags for other formats."""
+        # FLAC and OGG don't have special flags
+        assert _get_format_specific_flags('flac') == []
+        assert _get_format_specific_flags('ogg') == []
+
+        # AAC uses iPod container format
+        aac_flags = _get_format_specific_flags('aac')
+        assert '-f' in aac_flags
+        assert 'ipod' in aac_flags
 
 
 class TestArtworkFormatSupport:
@@ -282,8 +287,8 @@ class TestErrorHandling:
             map_metadata_to_ffmpeg_args(metadata, 'mp3')
 
     def test_none_metadata_error(self):
-        """Test error when metadata is None."""
-        with pytest.raises(ValueError, match="Metadata dictionary is required"):
+        """Test error when metadata is None and no artwork."""
+        with pytest.raises(ValueError, match="Metadata dictionary or artwork path is required"):
             map_metadata_to_ffmpeg_args(None, 'mp3')
 
 

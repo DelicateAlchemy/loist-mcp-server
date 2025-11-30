@@ -258,14 +258,16 @@ def _build_ffmpeg_command(
     # Preset-specific encoding arguments
     cmd.extend(preset_config.ffmpeg_args)
 
-    # Add metadata arguments if provided
-    if metadata:
+    # Add metadata and/or artwork arguments if provided
+    if metadata or artwork_path:
         try:
-            metadata_args = map_metadata_to_ffmpeg_args(metadata, target_format, artwork_path)
+            # Pass empty dict if no metadata but we have artwork
+            metadata_to_pass = metadata or {}
+            metadata_args = map_metadata_to_ffmpeg_args(metadata_to_pass, target_format, artwork_path)
             cmd.extend(metadata_args)
         except Exception as e:
-            logger.warning(f"Failed to map metadata for FFmpeg command: {e}")
-            # Continue without metadata rather than failing
+            logger.warning(f"Failed to map metadata/artwork for FFmpeg command: {e}")
+            # Continue without metadata/artwork rather than failing
 
     # Output file
     cmd.append(str(output_path))

@@ -37,43 +37,47 @@ def map_metadata_to_ffmpeg_args(
     Raises:
         ValueError: If required metadata is missing or format is invalid
     """
-    if not metadata:
-        raise ValueError("Metadata dictionary is required")
+    # Metadata is required unless we only have artwork
+    if not metadata and not artwork_path:
+        raise ValueError("Metadata dictionary or artwork path is required")
 
-    if not metadata.get('title'):
+    # Title is required only if we have metadata
+    if metadata and not metadata.get('title'):
         raise ValueError("Title is required for metadata embedding")
 
     target_format = target_format.lower()
     args = []
 
-    # Map standard metadata fields to FFmpeg keys
-    metadata_mappings = {
-        'title': metadata.get('title', ''),
-        'artist': metadata.get('artist', ''),
-        'album': metadata.get('album', ''),
-        'genre': metadata.get('genre', ''),
-        'date': str(metadata.get('year', '')) if metadata.get('year') else '',
-        'composer': metadata.get('composer', ''),
-        'publisher': metadata.get('publisher', ''),
-        'ISRC': metadata.get('isrc', ''),
-    }
+    # Map standard metadata fields to FFmpeg keys (only if metadata provided)
+    metadata_mappings = {}
+    if metadata:
+        metadata_mappings = {
+            'title': metadata.get('title', ''),
+            'artist': metadata.get('artist', ''),
+            'album': metadata.get('album', ''),
+            'genre': metadata.get('genre', ''),
+            'date': str(metadata.get('year', '')) if metadata.get('year') else '',
+            'composer': metadata.get('composer', ''),
+            'publisher': metadata.get('publisher', ''),
+            'ISRC': metadata.get('isrc', ''),
+        }
 
-    # Format track number (handle track/total format)
-    track_number = metadata.get('track_number')
-    if track_number:
-        # If we have total tracks, format as "track/total", otherwise just "track"
-        total_tracks = metadata.get('total_tracks')
-        if total_tracks and total_tracks > 0:
-            metadata_mappings['track'] = f"{track_number}/{total_tracks}"
-        else:
-            metadata_mappings['track'] = str(track_number)
+        # Format track number (handle track/total format)
+        track_number = metadata.get('track_number')
+        if track_number:
+            # If we have total tracks, format as "track/total", otherwise just "track"
+            total_tracks = metadata.get('total_tracks')
+            if total_tracks and total_tracks > 0:
+                metadata_mappings['track'] = f"{track_number}/{total_tracks}"
+            else:
+                metadata_mappings['track'] = str(track_number)
 
-    # Format-specific metadata handling
-    if target_format == 'mp3':
-        # MP3: Add album_artist for ID3 tags
-        album_artist = metadata.get('album_artist')
-        if album_artist:
-            metadata_mappings['album_artist'] = album_artist
+        # Format-specific metadata handling
+        if target_format == 'mp3':
+            # MP3: Add album_artist for ID3 tags
+            album_artist = metadata.get('album_artist')
+            if album_artist:
+                metadata_mappings['album_artist'] = album_artist
 
     # Add metadata arguments, filtering out empty values
     for key, value in metadata_mappings.items():
