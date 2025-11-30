@@ -277,7 +277,53 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
 
 ---
 
-#### 7. Delete Audio Track
+#### 7. Download Audio Track
+```http
+GET /api/tracks/{audioId}/download?format={format}&preset={preset}
+Authorization: Bearer {token}  # If AUTH_ENABLED=true
+```
+
+**Path Parameters**:
+- `audioId` (string, required): UUID of the audio track to download
+
+**Query Parameters**:
+- `format` (string, required): Target format - `mp3`, `wav`, `flac`, `aac`, `ogg`
+- `preset` (string, optional): Quality preset (defaults to `high`)
+
+**Supported Formats & Presets**:
+
+| Format | Presets | Description |
+|--------|---------|-------------|
+| `mp3` | `high` (320kbps), `standard` (192kbps), `compact` (128kbps) | Lossy compression |
+| `wav` | `broadcast` (48kHz/24-bit), `cd` (44.1kHz/16-bit), `high` (96kHz/24-bit) | Lossless with BWF metadata |
+| `flac` | `high` (level 8), `fast` (level 0) | Lossless compressed |
+| `aac` | `high` (256kbps), `standard` (192kbps) | Lossy for Apple devices |
+| `ogg` | `high` (Q8 ~256kbps), `standard` (Q5 ~160kbps) | Lossy VBR |
+
+**Response**:
+- **Content-Type**: `audio/mpeg`, `audio/wav`, `audio/flac`, `audio/aac`, or `audio/ogg`
+- **Content-Disposition**: `attachment; filename="Track Title - Artist.mp3"`
+- **Body**: Audio file with embedded metadata and artwork
+
+**Short-circuit Response**: `302 Found` with `Location` header redirecting to signed GCS URL when no conversion is needed.
+
+**Status Codes**: `200` (converted file), `302` (redirect to original), `400` (invalid params), `404` (not found), `500` (conversion error), `504` (timeout)
+
+**Examples**:
+```bash
+# Download as high-quality MP3
+GET /api/tracks/550e8400-e29b-41d4-a716-446655440000/download?format=mp3
+
+# Download as broadcast WAV
+GET /api/tracks/550e8400-e29b-41d4-a716-446655440000/download?format=wav&preset=broadcast
+
+# Download as lossless FLAC
+GET /api/tracks/550e8400-e29b-41d4-a716-446655440000/download?format=flac
+```
+
+---
+
+#### 8. Delete Audio Track
 ```http
 DELETE /api/tracks/{audioId}
 Authorization: Bearer {token}  # If AUTH_ENABLED=true
@@ -294,7 +340,7 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
 
 ### Embed Endpoints
 
-#### 8. Embed Player Page
+#### 9. Embed Player Page
 ```http
 GET /embed/{audioId}?template={template}&device={device}&platform={platform}
 ```
@@ -363,7 +409,7 @@ GET /embed/{audioId}/waveform/desktop
 
 ### oEmbed Endpoints
 
-#### 12. oEmbed Endpoint
+#### 13. oEmbed Endpoint
 ```http
 GET /oembed?url={embed_url}&format=json&maxwidth={width}&maxheight={height}
 ```
@@ -402,7 +448,7 @@ GET /oembed?url=https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000&maxw
 
 ---
 
-#### 13. oEmbed Discovery
+#### 14. oEmbed Discovery
 ```http
 GET /.well-known/oembed.json
 ```
@@ -430,7 +476,7 @@ GET /.well-known/oembed.json
 
 These endpoints return signed GCS URLs for accessing audio content:
 
-#### 14. Audio Stream Resource
+#### 15. Audio Stream Resource
 ```http
 POST /mcp/resources/music-library://audio/{audioId}/stream
 Content-Type: application/json
@@ -451,7 +497,7 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
 
 ---
 
-#### 15. Metadata Resource
+#### 16. Metadata Resource
 ```http
 POST /mcp/resources/music-library://audio/{audioId}/metadata
 Content-Type: application/json
@@ -470,7 +516,7 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
 
 ---
 
-#### 16. Thumbnail Resource
+#### 17. Thumbnail Resource
 ```http
 POST /mcp/resources/music-library://audio/{audioId}/thumbnail
 Content-Type: application/json
@@ -493,7 +539,7 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
 
 ### Embed Management Tools
 
-#### 17. Get Embed URL (MCP Tool via HTTP)
+#### 18. Get Embed URL (MCP Tool via HTTP)
 ```http
 POST /mcp/tools/get_embed_url
 Content-Type: application/json
@@ -529,7 +575,7 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
 
 ---
 
-#### 18. List Embed Templates (MCP Tool via HTTP)
+#### 19. List Embed Templates (MCP Tool via HTTP)
 ```http
 POST /mcp/tools/list_embed_templates
 Content-Type: application/json
@@ -567,7 +613,7 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
 
 ---
 
-#### 19. Check Waveform Availability (MCP Tool via HTTP)
+#### 20. Check Waveform Availability (MCP Tool via HTTP)
 ```http
 POST /mcp/tools/check_waveform_availability
 Content-Type: application/json

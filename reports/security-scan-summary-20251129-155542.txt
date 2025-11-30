@@ -1,0 +1,19 @@
+Security Scan Summary Report
+Generated: Sat Nov 29 15:55:42 UTC 2025
+=================================
+
+🔍 Scan Overview:
+  - Bandit (Python Security): ❌ Failed
+  - Safety (Dependencies): ✅ Completed
+  - Custom Checks: ✅ Completed
+
+
+📂 Detailed Reports:
+  - Bandit JSON: /workspace/reports/bandit-scan-20251129-155542.json
+  - Bandit HTML: /workspace/reports/bandit-scan-20251129-155542.html
+  - Safety: /workspace/reports/safety-scan-20251129-155542.json
+  - Custom Checks: /workspace/reports/custom-security-checks-20251129-155542.txt
+
+💡 Recommendations:
+  - Review custom security checks for additional issues
+  - Consider integrating these scans into CI/CD pipeline

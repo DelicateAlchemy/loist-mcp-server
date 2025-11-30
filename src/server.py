@@ -73,6 +73,10 @@ mcp = create_fastmcp_server()
 from src.tasks.handler import register_task_handlers
 register_task_handlers(mcp)
 
+# Register HTTP API routes (search, stream, thumbnail, download, etc.)
+from src.http_api import register_http_api_routes
+register_http_api_routes(mcp)
+
 # Configure Jinja2 templates
 templates = setup_jinja_templates()
 
@@ -2104,6 +2108,46 @@ async def delete_track(request):
             "details": {"exception_type": type(e).__name__}
         }
         return JSONResponse(error_response, status_code=500)
+
+
+@mcp.tool()
+def download_audio(input_data: dict) -> dict:
+    """
+    Download audio track in specified format with conversion.
+
+    Downloads an audio track, converts it to the requested format with metadata
+    and artwork embedding, and returns a temporary download URL.
+
+    Args:
+        input_data: Dictionary containing:
+            - audioId: UUID of the audio track (required)
+            - format: Target format (mp3, wav, flac, aac, ogg) (required)
+            - preset: Quality preset (optional, defaults to 'high')
+
+    Returns:
+        Dictionary containing:
+            - success: Boolean indicating success
+            - downloadUrl: Temporary signed URL for download (expires in 15 minutes)
+            - format: Target format used
+            - quality: Quality description (e.g., "320kbps")
+            - originalFormat: Source format of the track
+            - fileSize: File size in bytes
+            - filename: Generated download filename
+            - expiresIn: URL expiration time in seconds
+            - error: Error message if operation failed
+            - errorCode: Error code for programmatic handling
+
+    Example:
+        >>> result = await mcp.call("download_audio", {
+        ...     "audioId": "550e8400-e29b-41d4-a716-446655440000",
+        ...     "format": "mp3",
+        ...     "preset": "high"
+        ... })
+        >>> print(result["downloadUrl"])
+        https://storage.googleapis.com/bucket/temp/...
+    """
+    from src.tools.download_tool import download_audio as download_audio_func
+    return download_audio_func(input_data)
 
 
 def create_mcp_tools():
