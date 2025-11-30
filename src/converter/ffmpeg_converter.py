@@ -17,7 +17,7 @@ import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any
 
 from .presets import (
     get_preset_config,
@@ -25,6 +25,9 @@ from .presets import (
     validate_format,
     validate_preset,
     PresetConfig,
+)
+from .metadata_mapper import (
+    map_metadata_to_ffmpeg_args,
 )
 
 logger = logging.getLogger(__name__)
@@ -60,13 +63,16 @@ def convert_audio(
     preset_name: Optional[str] = None,
     timeout_seconds: int = 300,
     overwrite: bool = True,
+    metadata: Optional[Dict[str, Any]] = None,
+    artwork_path: Optional[Path] = None,
 ) -> ConversionResult:
     """
     Convert audio file to target format using FFmpeg.
-    
+
     Uses subprocess to call FFmpeg with appropriate codec and quality
-    settings based on the selected preset.
-    
+    settings based on the selected preset. Supports metadata embedding
+    and artwork embedding for supported formats.
+
     Args:
         source_path: Path to source audio file
         output_path: Path for converted output file
@@ -74,22 +80,26 @@ def convert_audio(
         preset_name: Quality preset (optional, uses format default)
         timeout_seconds: Maximum time for conversion (default: 300s / 5 min)
         overwrite: Whether to overwrite existing output file
-        
+        metadata: Optional dictionary of metadata to embed (title, artist, album, etc.)
+        artwork_path: Optional path to artwork image file for embedding
+
     Returns:
         ConversionResult with success status and details
-        
+
     Raises:
         ConversionError: If conversion fails
         ConversionTimeoutError: If conversion exceeds timeout
         ValueError: If format or preset is invalid
         FileNotFoundError: If source file doesn't exist
-        
+
     Example:
         >>> result = convert_audio(
         ...     source_path=Path("/tmp/audio.wav"),
         ...     output_path=Path("/tmp/audio.mp3"),
         ...     target_format="mp3",
-        ...     preset_name="high"
+        ...     preset_name="high",
+        ...     metadata={"title": "Song Title", "artist": "Artist Name"},
+        ...     artwork_path=Path("/tmp/cover.jpg")
         ... )
         >>> print(f"Converted in {result.processing_time_seconds}s")
     """
@@ -126,11 +136,16 @@ def convert_audio(
         output_path=output_path,
         preset_config=preset_config,
         overwrite=overwrite,
+        target_format=target_format_lower,
+        metadata=metadata,
+        artwork_path=artwork_path,
     )
-    
+
+    metadata_info = " with metadata" if metadata else ""
+    artwork_info = " with artwork" if artwork_path else ""
     logger.info(
         f"Converting {source_path.name} to {target_format_lower} "
-        f"(preset: {preset_config.name})"
+        f"(preset: {preset_config.name}){metadata_info}{artwork_info}"
     )
     logger.debug(f"FFmpeg command: {' '.join(cmd)}")
     
@@ -210,36 +225,51 @@ def _build_ffmpeg_command(
     output_path: Path,
     preset_config: PresetConfig,
     overwrite: bool = True,
+    target_format: str = "",
+    metadata: Optional[Dict[str, Any]] = None,
+    artwork_path: Optional[Path] = None,
 ) -> list:
     """
     Build FFmpeg command with appropriate arguments.
-    
+
     Args:
         source_path: Input file path
         output_path: Output file path
         preset_config: Preset configuration with codec settings
         overwrite: Whether to overwrite existing files
-        
+        target_format: Target format for metadata/artwork handling
+        metadata: Optional metadata dictionary to embed
+        artwork_path: Optional artwork file path to embed
+
     Returns:
         List of command arguments for subprocess
     """
     cmd = ["ffmpeg"]
-    
+
     # Overwrite flag (before input)
     if overwrite:
         cmd.append("-y")
     else:
         cmd.append("-n")
-    
+
     # Input file
     cmd.extend(["-i", str(source_path)])
-    
+
     # Preset-specific encoding arguments
     cmd.extend(preset_config.ffmpeg_args)
-    
+
+    # Add metadata arguments if provided
+    if metadata:
+        try:
+            metadata_args = map_metadata_to_ffmpeg_args(metadata, target_format, artwork_path)
+            cmd.extend(metadata_args)
+        except Exception as e:
+            logger.warning(f"Failed to map metadata for FFmpeg command: {e}")
+            # Continue without metadata rather than failing
+
     # Output file
     cmd.append(str(output_path))
-    
+
     return cmd
 
 
