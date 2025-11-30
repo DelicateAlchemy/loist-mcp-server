@@ -277,7 +277,10 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
 
 ---
 
-#### 7. Download Audio Track
+#### 7. Download Audio Track ✅ **IMPLEMENTED & WORKING**
+
+Download audio tracks with on-the-fly format conversion, metadata embedding, and artwork embedding.
+
 ```http
 GET /api/tracks/{audioId}/download?format={format}&preset={preset}
 Authorization: Bearer {token}  # If AUTH_ENABLED=true

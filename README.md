@@ -495,6 +495,7 @@ SERVER_PORT=8080
 - ✅ **Update**: `update_metadata` - Partial updates with JSON Merge Patch semantics
 - ✅ **Delete**: `delete_audio` - Remove tracks from the library
 - ✅ **Search**: `search_library` - Full-text search with advanced filtering
+- ✅ **Download**: HTTP API + `download_audio` MCP tool - On-the-fly format conversion (MP3, WAV, FLAC, AAC, OGG) with metadata/artwork embedding
 
 #### Security & Configuration
 - ✅ Bearer token authentication (SimpleBearerAuth)

@@ -25,7 +25,7 @@
 - ✅ **Upload & Store**: Audio files stored in GCS (`audio/{uuid}/audio.{ext}`)
 - ✅ **Stream**: Signed URL generation for streaming original format
 - ✅ **FFmpeg Available**: Already installed in Docker container (used for waveform generation)
-- ❌ **Download with Conversion**: NOT YET IMPLEMENTED
+- ✅ **Download with Conversion**: **IMPLEMENTED AND WORKING** (November 2025)
 
 ### Proposed Feature
 A download endpoint that:
@@ -36,6 +36,31 @@ A download endpoint that:
 5. **Embeds album artwork where format supports it**
 6. Returns converted file for download
 7. Cleans up temp files (no caching)
+
+### Implementation Status ✅ **COMPLETED**
+
+**Status**: Successfully implemented and deployed to staging (November 2025)
+
+**Working Features**:
+- ✅ **HTTP API Endpoints**: `/api/tracks/{audioId}/download?format={format}&preset={preset}`
+- ✅ **MCP Tool**: `download_audio` with audioId, format, and preset parameters
+- ✅ **Format Support**: MP3, WAV, FLAC, AAC, OGG (all 5 formats)
+- ✅ **Quality Presets**: high, standard, broadcast configurations
+- ✅ **Metadata Embedding**: ID3v2.3, BWF, Vorbis comments, iTunes atoms
+- ✅ **Short-circuit Optimization**: Redirects to GCS for same-format requests
+- ✅ **Error Handling**: Comprehensive validation and user-friendly error responses
+- ✅ **GCS Integration**: Secure signed URLs for temp downloads
+
+**Tested & Verified**:
+- ✅ Format conversions working (MP3→FLAC, WAV→MP3, etc.)
+- ✅ Metadata properly embedded in output files
+- ✅ Short-circuit optimization reduces unnecessary conversions
+- ✅ Error handling for invalid tracks, formats, and parameters
+- ✅ Both HTTP API and MCP tool interfaces functional
+
+**Known Limitations**:
+- ⚠️ **Artwork Embedding**: Cross-format conversion with artwork has FFmpeg command construction issues (short-circuit preserves original artwork)
+- 📝 **Performance**: Synchronous conversion may timeout for very large files (300s limit)
 
 ### Non-Goals (Out of Scope for MVP)
 
