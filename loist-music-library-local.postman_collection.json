@@ -1789,6 +1789,124 @@
 					"response": []
 				},
 				{
+					"name": "Download Audio",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json, text/event-stream"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"download_audio\",\n    \"arguments\": {\n      \"audioId\": \"{{audio_id}}\",\n      \"format\": \"mp3\",\n      \"preset\": \"high\"\n    }\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/mcp",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"mcp"
+							]
+						},
+						"description": "Download audio track in specified format with on-the-fly conversion and metadata embedding. Returns temporary signed URL for download."
+					},
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"const audioId = pm.environment.get('audio_id');",
+									"if (!audioId) {",
+									"    console.warn('\u26a0\ufe0f No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
+									"}"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"// Parse JSON-RPC response",
+									"let responseBody = pm.response.text();",
+									"let jsonResponse = null;",
+									"",
+									"if (responseBody.includes('data: ')) {",
+									"    const dataLines = responseBody.split('\\n').filter(line => line.startsWith('data: '));",
+									"    if (dataLines.length > 0) {",
+									"        jsonResponse = JSON.parse(dataLines[dataLines.length - 1].replace('data: ', '').trim());",
+									"    }",
+									"} else {",
+									"    jsonResponse = pm.response.json();",
+									"}",
+									"",
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response follows JSON-RPC 2.0 format', function () {",
+									"    pm.expect(jsonResponse).to.have.property('jsonrpc', '2.0');",
+									"    pm.expect(jsonResponse).to.have.property('id');",
+									"});",
+									"",
+									"if (jsonResponse.error) {",
+									"    console.log('JSON-RPC Error:', JSON.stringify(jsonResponse.error, null, 2));",
+									"    pm.test('No unexpected errors', function () {",
+									"        const isNotFound = jsonResponse.error.message && jsonResponse.error.message.toLowerCase().includes('not found');",
+									"        pm.expect(isNotFound || !jsonResponse.error).to.be.true;",
+									"    });",
+									"} else {",
+									"    pm.test('Response has result', function () {",
+									"        pm.expect(jsonResponse).to.have.property('result');",
+									"    });",
+									"    ",
+									"    // Extract tool result",
+									"    const result = jsonResponse.result;",
+									"    let toolResult = result;",
+									"    ",
+									"    if (result && result.content && Array.isArray(result.content)) {",
+									"        const textContent = result.content.find(c => c.type === 'text');",
+									"        if (textContent && textContent.text) {",
+									"            try {",
+									"                toolResult = JSON.parse(textContent.text);",
+									"            } catch (e) {",
+									"                toolResult = textContent.text;",
+									"            }",
+									"        }",
+									"    }",
+									"    ",
+									"    pm.test('Download result has expected fields', function () {",
+									"        pm.expect(toolResult).to.be.an('object');",
+									"        pm.expect(toolResult).to.have.property('success');",
+									"        pm.expect(toolResult).to.have.property('downloadUrl');",
+									"        pm.expect(toolResult).to.have.property('format');",
+									"        pm.expect(toolResult).to.have.property('filename');",
+									"        pm.expect(toolResult).to.have.property('expiresIn');",
+									"    });",
+									"    ",
+									"    // Store download URL for testing",
+									"    if (toolResult.success && toolResult.downloadUrl) {",
+									"        pm.environment.set('download_url', toolResult.downloadUrl);",
+									"        console.log('\ud83d\udce5 Download URL stored in environment');",
+									"    }",
+									"    ",
+									"    console.log('Download Result:', JSON.stringify(toolResult, null, 2));",
+									"}"
+								]
+							}
+						}
+					],
+					"response": []
+				},
+				{
 					"name": "Check Waveform Availability",
 					"request": {
 						"method": "POST",
@@ -2185,6 +2303,216 @@
 						},
 						"description": "oEmbed endpoint returning XML format."
 					},
+					"response": []
+				},
+				{
+					"name": "Download Audio Track - MP3",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/tracks/{{audio_id}}/download?format=mp3",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"tracks",
+								"{{audio_id}}",
+								"download"
+							],
+							"query": [
+								{
+									"key": "format",
+									"value": "mp3",
+									"description": "Target format: mp3, wav, flac, aac, ogg"
+								}
+							]
+						},
+						"description": "Download audio track with on-the-fly format conversion and metadata embedding. Returns converted audio file with proper ID3/MP3 tags, artwork, and filename."
+					},
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"const audioId = pm.environment.get('audio_id');",
+									"if (!audioId) {",
+									"    console.warn('\u26a0\ufe0f No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
+									"}"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status code indicates success', function () {",
+									"    const status = pm.response.code;",
+									"    // 200 for converted file, 302 for redirect to original",
+									"    pm.expect(status).to.be.oneOf([200, 302]);",
+									"});",
+									"",
+									"if (pm.response.code === 302) {",
+									"    pm.test('Redirect to signed GCS URL', function () {",
+									"        const location = pm.response.headers.get('Location');",
+									"        pm.expect(location).to.include('storage.googleapis.com');",
+									"    });",
+									"    console.log('\u27a1\ufe0f Short-circuit: redirected to original file');",
+									"} else {",
+									"    pm.test('Returns audio file', function () {",
+									"        const contentType = pm.response.headers.get('Content-Type');",
+									"        pm.expect(contentType).to.include('audio/mpeg');",
+									"        ",
+									"        const contentDisposition = pm.response.headers.get('Content-Disposition');",
+									"        pm.expect(contentDisposition).to.include('attachment');",
+									"        pm.expect(contentDisposition).to.include('filename');",
+									"    });",
+									"    ",
+									"    console.log('\u2705 Downloaded converted MP3 file');",
+									"    console.log('Content-Type:', pm.response.headers.get('Content-Type'));",
+									"    console.log('Content-Length:', pm.response.headers.get('Content-Length'));",
+									"    console.log('Filename:', pm.response.headers.get('Content-Disposition'));",
+									"}"
+								]
+							}
+						}
+					],
+					"response": []
+				},
+				{
+					"name": "Download Audio Track - WAV",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/tracks/{{audio_id}}/download?format=wav&preset=broadcast",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"tracks",
+								"{{audio_id}}",
+								"download"
+							],
+							"query": [
+								{
+									"key": "format",
+									"value": "wav",
+									"description": "Target format: mp3, wav, flac, aac, ogg"
+								},
+								{
+									"key": "preset",
+									"value": "broadcast",
+									"description": "Quality preset (format-specific)"
+								}
+							]
+						},
+						"description": "Download audio track as WAV with broadcast quality (48kHz/24-bit) and BWF metadata including RIFF INFO and bext chunk."
+					},
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"const audioId = pm.environment.get('audio_id');",
+									"if (!audioId) {",
+									"    console.warn('\u26a0\ufe0f No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
+									"}"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Returns WAV file', function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 302]);",
+									"    ",
+									"    if (pm.response.code === 200) {",
+									"        const contentType = pm.response.headers.get('Content-Type');",
+									"        pm.expect(contentType).to.include('audio/wav');",
+									"        ",
+									"        const contentDisposition = pm.response.headers.get('Content-Disposition');",
+									"        pm.expect(contentDisposition).to.include('attachment');",
+									"        pm.expect(contentDisposition).to.include('.wav');",
+									"    }",
+									"});",
+									"",
+									"console.log('\u2705 Downloaded WAV file with BWF metadata');"
+								]
+							}
+						}
+					],
+					"response": []
+				},
+				{
+					"name": "Download Audio Track - FLAC",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/tracks/{{audio_id}}/download?format=flac",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"tracks",
+								"{{audio_id}}",
+								"download"
+							],
+							"query": [
+								{
+									"key": "format",
+									"value": "flac",
+									"description": "Target format: mp3, wav, flac, aac, ogg"
+								}
+							]
+						},
+						"description": "Download audio track as lossless FLAC with embedded artwork and Vorbis comment metadata."
+					},
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"const audioId = pm.environment.get('audio_id');",
+									"if (!audioId) {",
+									"    console.warn('\u26a0\ufe0f No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
+									"}"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Returns FLAC file', function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 302]);",
+									"    ",
+									"    if (pm.response.code === 200) {",
+									"        const contentType = pm.response.headers.get('Content-Type');",
+									"        pm.expect(contentType).to.include('audio/flac');",
+									"        ",
+									"        const contentDisposition = pm.response.headers.get('Content-Disposition');",
+									"        pm.expect(contentDisposition).to.include('attachment');",
+									"        pm.expect(contentDisposition).to.include('.flac');",
+									"    }",
+									"});",
+									"",
+									"console.log('\u2705 Downloaded lossless FLAC file');"
+								]
+							}
+						}
+					],
 					"response": []
 				},
 				{
