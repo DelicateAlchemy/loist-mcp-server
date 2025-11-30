@@ -43,6 +43,7 @@ from src.converter import (
     validate_format,
     validate_preset,
     get_default_preset,
+    get_supported_artwork_formats,
 )
 from src.storage import download_audio_file, generate_signed_url
 from src.resources.audio_stream import parse_gcs_path
@@ -485,13 +486,54 @@ def register_http_api_routes(mcp: FastMCP) -> None:
                 output_filename = f"converted_{audio_id}{output_ext}"
                 output_path = Path(temp_dir) / output_filename
 
-                # Convert audio
+                # Prepare metadata for embedding
+                metadata_for_embedding = {
+                    'title': metadata.get('title'),
+                    'artist': metadata.get('artist'),
+                    'album': metadata.get('album'),
+                    'album_artist': metadata.get('album_artist'),
+                    'genre': metadata.get('genre'),
+                    'year': metadata.get('year'),
+                    'track_number': metadata.get('track_number'),
+                    'composer': metadata.get('composer'),
+                    'publisher': metadata.get('publisher'),
+                    'isrc': metadata.get('isrc'),
+                }
+
+                # Filter out None values
+                metadata_for_embedding = {k: v for k, v in metadata_for_embedding.items() if v is not None}
+
+                # Prepare artwork if available and format supports it
+                artwork_path = None
+                artwork_gcs_path = metadata.get('thumbnail_gcs_path') or metadata.get('artwork_gcs_path')
+
+                if artwork_gcs_path and get_supported_artwork_formats(target_format):
+                    try:
+                        # Download artwork to temp file
+                        artwork_filename = f"artwork_{audio_id}{Path(artwork_gcs_path).suffix}"
+                        artwork_path = Path(temp_dir) / artwork_filename
+
+                        logger.info(f"Downloading artwork from GCS: {artwork_gcs_path}")
+                        artwork_bucket, artwork_blob = parse_gcs_path(artwork_gcs_path)
+                        download_audio_file(
+                            blob_name=artwork_blob,
+                            destination_path=artwork_path,
+                            timeout=60,  # Shorter timeout for artwork
+                        )
+                        logger.info(f"Downloaded artwork to: {artwork_path}")
+                    except Exception as e:
+                        logger.warning(f"Failed to download artwork {artwork_gcs_path}: {e}")
+                        artwork_path = None
+
+                # Convert audio with metadata and artwork
                 conversion_result = convert_audio(
                     source_path=source_path,
                     output_path=output_path,
                     target_format=target_format,
                     preset_name=preset,
                     timeout_seconds=300,
+                    metadata=metadata_for_embedding if metadata_for_embedding else None,
+                    artwork_path=artwork_path,
                 )
 
                 if not conversion_result.success:
@@ -528,6 +570,9 @@ def register_http_api_routes(mcp: FastMCP) -> None:
                         if output_path and output_path.exists():
                             output_path.unlink()
                             logger.debug(f"Cleaned up output file: {output_path}")
+                        if artwork_path and artwork_path.exists():
+                            artwork_path.unlink()
+                            logger.debug(f"Cleaned up artwork file: {artwork_path}")
                         if temp_dir and Path(temp_dir).exists():
                             Path(temp_dir).rmdir()
                             logger.debug(f"Cleaned up temp dir: {temp_dir}")
@@ -558,6 +603,8 @@ def register_http_api_routes(mcp: FastMCP) -> None:
                         source_path.unlink()
                     if output_path and output_path.exists():
                         output_path.unlink()
+                    if artwork_path and artwork_path.exists():
+                        artwork_path.unlink()
                     if temp_dir and Path(temp_dir).exists():
                         Path(temp_dir).rmdir()
                 except Exception as cleanup_error:
