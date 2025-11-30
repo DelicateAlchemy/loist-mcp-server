@@ -24,6 +24,11 @@ from .presets import (
     validate_format,
     validate_preset,
 )
+from .metadata_mapper import (
+    map_metadata_to_ffmpeg_args,
+    get_supported_artwork_formats,
+    validate_metadata_for_format,
+)
 from .ffmpeg_converter import (
     convert_audio,
     ConversionError,
@@ -48,5 +53,9 @@ __all__ = [
     "ConversionError",
     "ConversionTimeoutError",
     "ConversionResult",
+    # Metadata
+    "map_metadata_to_ffmpeg_args",
+    "get_supported_artwork_formats",
+    "validate_metadata_for_format",
 ]
 
