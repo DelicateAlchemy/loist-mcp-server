@@ -1,0 +1,365 @@
+"""
+Download tool for Loist Music Library MCP Server.
+
+Provides download_audio MCP tool for downloading audio tracks in specified formats
+with on-the-fly conversion and metadata embedding.
+"""
+
+import logging
+import uuid
+from typing import Dict, Any, Optional
+from pathlib import Path
+import tempfile
+import time
+
+from .schemas import (
+    AudioMetadata,
+    AudioResources,
+)
+from src.exceptions import ValidationError, ResourceNotFoundError
+from src.error_utils import handle_tool_error
+from src.storage import generate_signed_url, parse_gcs_path, download_audio_file
+from src.converter import (
+    convert_audio,
+    ConversionError,
+    ConversionTimeoutError,
+    validate_format,
+    validate_preset,
+    get_default_preset,
+    get_mime_type,
+    get_file_extension,
+    get_supported_artwork_formats,
+)
+
+# Import database operations
+import sys
+sys.path.append(str(Path(__file__).parent.parent))
+from database import get_audio_metadata_by_id
+
+logger = logging.getLogger(__name__)
+
+
+def download_audio(input_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Download audio track in specified format with conversion.
+
+    This tool downloads an audio track, converts it to the requested format
+    with metadata embedding, and returns a temporary download URL.
+
+    Args:
+        input_data: Dictionary containing:
+            - audioId: UUID of the audio track (required)
+            - format: Target format (mp3, wav, flac, aac, ogg) (required)
+            - preset: Quality preset (optional, defaults to 'high')
+
+    Returns:
+        Dictionary containing:
+            - success: Boolean indicating success
+            - downloadUrl: Temporary signed URL for download
+            - format: Target format used
+            - quality: Quality description (e.g., "320kbps")
+            - originalFormat: Source format
+            - fileSize: File size in bytes
+            - filename: Generated filename
+            - expiresIn: URL expiration time in seconds
+            - error: Error message if failed
+
+    Raises:
+        ValidationError: If input parameters are invalid
+        ResourceNotFoundError: If audio track is not found
+        ConversionError: If audio conversion fails
+    """
+    try:
+        logger.info(f"Download audio request: {input_data}")
+
+        # Extract and validate parameters
+        audio_id = input_data.get("audioId")
+        if not audio_id:
+            raise ValidationError("audioId is required")
+
+        # Validate UUID format
+        try:
+            uuid.UUID(audio_id)
+        except ValueError:
+            raise ValidationError(f"Invalid audioId format: {audio_id}")
+
+        target_format = input_data.get("format")
+        if not target_format:
+            raise ValidationError("format is required")
+
+        target_format = target_format.lower()
+        if not validate_format(target_format):
+            from src.converter import SUPPORTED_FORMATS
+            raise ValidationError(
+                f"Unsupported format '{target_format}'. Supported: {list(SUPPORTED_FORMATS)}"
+            )
+
+        preset = input_data.get("preset")
+        if preset:
+            preset = preset.lower()
+            if not validate_preset(target_format, preset):
+                from src.converter.presets import FORMAT_PRESETS
+                valid_presets = list(FORMAT_PRESETS[target_format].keys())
+                raise ValidationError(
+                    f"Invalid preset '{preset}' for format '{target_format}'. Valid: {valid_presets}"
+                )
+        else:
+            preset = get_default_preset(target_format)
+
+        # Get track metadata from database
+        metadata = get_audio_metadata_by_id(audio_id)
+        if not metadata:
+            raise ResourceNotFoundError(f"Audio track not found: {audio_id}")
+
+        # Get GCS audio path
+        audio_gcs_path = metadata.get("audio_gcs_path")
+        if not audio_gcs_path:
+            raise ResourceNotFoundError(f"Audio file path not found for track: {audio_id}")
+
+        # Check if track is completed
+        if metadata.get("status") != "COMPLETED":
+            raise ValidationError(f"Track {audio_id} is not ready for download (status: {metadata.get('status')})")
+
+        # Get source format from path extension
+        source_ext = Path(audio_gcs_path).suffix.lower().lstrip(".")
+        source_format = _normalize_format(source_ext)
+
+        # Short-circuit check: if same format and default preset, return direct URL
+        if source_format == target_format and preset == get_default_preset(target_format):
+            logger.info(f"Short-circuit: returning direct URL for {audio_id}")
+            try:
+                bucket_name, blob_name = parse_gcs_path(audio_gcs_path)
+                signed_url = generate_signed_url(blob_name, expiration_minutes=15)
+
+                return {
+                    "success": True,
+                    "downloadUrl": signed_url,
+                    "format": target_format,
+                    "quality": "original",
+                    "originalFormat": source_format,
+                    "fileSize": metadata.get("file_size_bytes"),
+                    "filename": _generate_download_filename(metadata, target_format),
+                    "expiresIn": 15 * 60,  # 15 minutes
+                }
+            except Exception as e:
+                logger.warning(f"Short-circuit failed, falling back to conversion: {e}")
+
+        # Perform conversion with metadata embedding
+        logger.info(f"Converting {audio_id} from {source_format} to {target_format} (preset: {preset})")
+
+        # Create temp directory
+        temp_dir = tempfile.mkdtemp(prefix="mcp_download_")
+        source_path = None
+        output_path = None
+        artwork_path = None
+
+        try:
+            # Parse GCS path and download source
+            bucket_name, blob_name = parse_gcs_path(audio_gcs_path)
+            source_filename = f"source_{audio_id}{Path(audio_gcs_path).suffix}"
+            source_path = Path(temp_dir) / source_filename
+
+            logger.debug(f"Downloading source from GCS: {blob_name}")
+            download_audio_file(
+                blob_name=blob_name,
+                destination_path=source_path,
+                timeout=120,
+            )
+
+            # Prepare output path
+            output_ext = get_file_extension(target_format)
+            output_filename = f"converted_{audio_id}{output_ext}"
+            output_path = Path(temp_dir) / output_filename
+
+            # Prepare metadata for embedding
+            metadata_for_embedding = {
+                'title': metadata.get('title'),
+                'artist': metadata.get('artist'),
+                'album': metadata.get('album'),
+                'album_artist': metadata.get('album_artist'),
+                'genre': metadata.get('genre'),
+                'year': metadata.get('year'),
+                'track_number': metadata.get('track_number'),
+                'composer': metadata.get('composer'),
+                'publisher': metadata.get('publisher'),
+                'isrc': metadata.get('isrc'),
+            }
+            # Filter out None values
+            metadata_for_embedding = {k: v for k, v in metadata_for_embedding.items() if v is not None}
+
+            # Prepare artwork if available and format supports it
+            artwork_gcs_path = metadata.get('thumbnail_gcs_path') or metadata.get('artwork_gcs_path')
+            if artwork_gcs_path and get_supported_artwork_formats(target_format):
+                try:
+                    artwork_filename = f"artwork_{audio_id}{Path(artwork_gcs_path).suffix}"
+                    artwork_path = Path(temp_dir) / artwork_filename
+
+                    logger.debug(f"Downloading artwork from GCS: {artwork_gcs_path}")
+                    artwork_bucket, artwork_blob = parse_gcs_path(artwork_gcs_path)
+                    download_audio_file(
+                        blob_name=artwork_blob,
+                        destination_path=artwork_path,
+                        timeout=60,
+                    )
+                    logger.debug(f"Downloaded artwork to: {artwork_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to download artwork {artwork_gcs_path}: {e}")
+                    artwork_path = None
+
+            # Convert audio
+            conversion_result = convert_audio(
+                source_path=source_path,
+                output_path=output_path,
+                target_format=target_format,
+                preset_name=preset,
+                timeout_seconds=300,
+                metadata=metadata_for_embedding if metadata_for_embedding else None,
+                artwork_path=artwork_path,
+            )
+
+            if not conversion_result.success:
+                raise ConversionError(conversion_result.error_message or "Conversion failed")
+
+            # Upload converted file to GCS temp location
+            temp_blob_name = f"temp/downloads/{audio_id}_{int(time.time())}_{target_format}{output_ext}"
+
+            # Import here to avoid circular imports
+            from src.storage import upload_audio_file
+            upload_audio_file(
+                file_path=output_path,
+                blob_name=temp_blob_name,
+                content_type=get_mime_type(target_format),
+            )
+
+            # Generate signed URL for the converted file
+            signed_url = generate_signed_url(temp_blob_name, expiration_minutes=15)
+
+            # Generate quality description
+            from src.converter.presets import get_preset_config
+            preset_config = get_preset_config(target_format, preset)
+            quality_desc = preset_config.estimated_bitrate
+            if quality_desc:
+                quality_desc = f"{quality_desc}kbps"
+            elif preset_config.sample_rate:
+                quality_desc = f"{preset_config.sample_rate}Hz"
+            else:
+                quality_desc = preset
+
+            # Return successful response
+            result = {
+                "success": True,
+                "downloadUrl": signed_url,
+                "format": target_format,
+                "quality": quality_desc,
+                "originalFormat": source_format,
+                "fileSize": conversion_result.output_size_bytes,
+                "filename": _generate_download_filename(metadata, target_format),
+                "expiresIn": 15 * 60,  # 15 minutes
+            }
+
+            logger.info(f"Download prepared: {result['filename']} ({result['fileSize']} bytes)")
+            return result
+
+        finally:
+            # Cleanup temp files
+            try:
+                if source_path and source_path.exists():
+                    source_path.unlink()
+                if output_path and output_path.exists():
+                    output_path.unlink()
+                if artwork_path and artwork_path.exists():
+                    artwork_path.unlink()
+                if temp_dir and Path(temp_dir).exists():
+                    Path(temp_dir).rmdir()
+            except Exception as e:
+                logger.warning(f"Failed to cleanup temp files: {e}")
+
+    except ValidationError as e:
+        logger.warning(f"Validation error in download_audio: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "errorCode": "VALIDATION_ERROR"
+        }
+    except ResourceNotFoundError as e:
+        logger.warning(f"Resource not found in download_audio: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "errorCode": "TRACK_NOT_FOUND"
+        }
+    except ConversionTimeoutError as e:
+        logger.error(f"Conversion timeout in download_audio: {e}")
+        return {
+            "success": False,
+            "error": "Conversion timed out",
+            "errorCode": "CONVERSION_TIMEOUT"
+        }
+    except ConversionError as e:
+        logger.error(f"Conversion error in download_audio: {e}")
+        return {
+            "success": False,
+            "error": f"Conversion failed: {str(e)}",
+            "errorCode": "CONVERSION_FAILED"
+        }
+    except Exception as e:
+        error_response = handle_tool_error(e, "download_audio")
+        logger.error(f"Unexpected error in download_audio: {error_response}")
+        return error_response
+
+
+def _normalize_format(extension: str) -> str:
+    """
+    Normalize file extension to standard format name.
+
+    Args:
+        extension: File extension (without dot)
+
+    Returns:
+        Normalized format name
+    """
+    extension = extension.lower()
+    format_map = {
+        "mp3": "mp3",
+        "wav": "wav",
+        "wave": "wav",
+        "flac": "flac",
+        "m4a": "aac",
+        "aac": "aac",
+        "ogg": "ogg",
+        "oga": "ogg",
+        "opus": "ogg",
+    }
+    return format_map.get(extension, extension)
+
+
+def _generate_download_filename(metadata: Dict[str, Any], target_format: str) -> str:
+    """
+    Generate a safe filename for download from track metadata.
+
+    Args:
+        metadata: Track metadata dictionary
+        target_format: Target format for extension
+
+    Returns:
+        Safe filename string
+    """
+    # Sanitize title and artist
+    title = metadata.get('title', 'Unknown')
+    artist = metadata.get('artist', 'Unknown Artist')
+
+    # Replace unsafe characters
+    unsafe_chars = '<>:"/\\|?*'
+    for char in unsafe_chars:
+        title = title.replace(char, '_')
+        artist = artist.replace(char, '_')
+
+    # Limit lengths
+    title = title[:100] if len(title) > 100 else title
+    artist = artist[:50] if len(artist) > 50 else artist
+
+    # Combine and add extension
+    ext = target_format if target_format != 'aac' else 'm4a'
+    filename = f"{title} - {artist}.{ext}"
+
+    return filename

@@ -25,6 +25,9 @@ from .update_schemas import (
     TrackMetadataUpdate,
 )
 
+# Download/conversion tools
+from .download_tool import download_audio
+
 __all__ = [
     # Task 7
     "process_audio_complete",
@@ -43,4 +46,6 @@ __all__ = [
     "UpdateMetadataError",
     "UpdateErrorCode",
     "TrackMetadataUpdate",
+    # Download tools
+    "download_audio",
 ]
