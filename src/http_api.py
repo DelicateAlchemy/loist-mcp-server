@@ -89,7 +89,7 @@ def register_http_api_routes(mcp: FastMCP) -> None:
 
         try:
             # Call the existing MCP tool function
-            result = await get_metadata_func({"audioId": audio_id})
+            result = await get_metadata_func({"audio_id": audio_id})
 
             if not result.get("success", False):
                 # Tool returned an error - convert to appropriate HTTP status

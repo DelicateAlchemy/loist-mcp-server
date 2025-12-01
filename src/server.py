@@ -2072,7 +2072,7 @@ async def delete_track(request):
 
     try:
         # Call the delete function
-        result = await delete_func({"audioId": audioId})
+        result = await delete_func({"audio_id": audioId})
 
         # Check if it was successful
         if result.get("success"):
