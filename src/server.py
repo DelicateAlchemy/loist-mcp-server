@@ -38,6 +38,13 @@ from src.exceptions import (
     TimeoutError,
     ValidationError,
 )
+
+# Import PlayerConfig schemas for embed URL responses
+from src.tools.schemas import (
+    PlayerConfig,
+    PlayerConfigUrls,
+    PlayerConfigMetadata,
+)
 from src.fastmcp_setup import (
     create_fastmcp_server,
     log_server_startup_info,

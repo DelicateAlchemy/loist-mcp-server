@@ -167,27 +167,29 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
 ```json
 {
   "success": true,
-  "audioId": "550e8400-e29b-41d4-a716-446655440000",
+  "audio_id": "550e8400-e29b-41d4-a716-446655440000",
   "metadata": {
-    "Product": {
-      "Title": "Song Title",
-      "Artist": "Artist Name",
-      "Album": "Album Name",
-      "Year": 2024
+    "product": {
+      "title": "Song Title",
+      "artist": "Artist Name",
+      "album": "Album Name",
+      "year": 2024
     },
-    "Format": {
-      "Duration": 180.5,
-      "Channels": 2,
-      "SampleRate": 44100,
-      "Bitrate": 320,
-      "Format": "MP3"
-    }
+    "format": {
+      "duration": 180.5,
+      "channels": 2,
+      "sample_rate": 44100,
+      "bitrate": 320,
+      "format": "MP3"
+    },
+    "url_embed_link": "https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000"
   },
-  "resourceUris": {
-    "stream": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/stream",
-    "metadata": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/metadata",
-    "thumbnail": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/thumbnail"
-  }
+  "resources": {
+    "audio_url": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/stream",
+    "thumbnail_url": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/thumbnail",
+    "waveform_url": null
+  },
+  "processing_time": 2.45
 }
 ```
 
@@ -207,7 +209,7 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
 **Request Body**:
 ```json
 {
-  "audioId": "550e8400-e29b-41d4-a716-446655440000"
+  "audio_id": "550e8400-e29b-41d4-a716-446655440000"
 }
 ```
 
@@ -215,26 +217,27 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
 ```json
 {
   "success": true,
-  "audioId": "550e8400-e29b-41d4-a716-446655440000",
+  "audio_id": "550e8400-e29b-41d4-a716-446655440000",
   "metadata": {
-    "Product": {
-      "Title": "Song Title",
-      "Artist": "Artist Name",
-      "Album": "Album Name",
-      "Year": 2024
+    "product": {
+      "title": "Song Title",
+      "artist": "Artist Name",
+      "album": "Album Name",
+      "year": 2024
     },
-    "Format": {
-      "Duration": 180.5,
-      "Channels": 2,
-      "SampleRate": 44100,
-      "Bitrate": 320,
-      "Format": "MP3"
-    }
+    "format": {
+      "duration": 180.5,
+      "channels": 2,
+      "sample_rate": 44100,
+      "bitrate": 320,
+      "format": "MP3"
+    },
+    "url_embed_link": "https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000"
   },
-  "resourceUris": {
-    "stream": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/stream",
-    "metadata": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/metadata",
-    "thumbnail": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/thumbnail"
+  "resources": {
+    "audio_url": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/stream",
+    "thumbnail_url": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/thumbnail",
+    "waveform_url": null
   }
 }
 ```
@@ -281,19 +284,24 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
   "success": true,
   "results": [
     {
-      "audioId": "550e8400-e29b-41d4-a716-446655440000",
+      "audio_id": "550e8400-e29b-41d4-a716-446655440000",
       "metadata": {
-        "Product": {
-          "Title": "Hey Jude",
-          "Artist": "The Beatles",
-          "Album": "The Beatles",
-          "Year": 1968
+        "product": {
+          "title": "Hey Jude",
+          "artist": "The Beatles",
+          "album": "Hey Jude",
+          "year": 1968
         },
-        "Format": {
-          "Duration": 431.0,
-          "Format": "MP3"
-        }
+        "format": {
+          "duration": 431.0,
+          "channels": 2,
+          "sample_rate": 44100,
+          "bitrate": 320000,
+          "format": "MP3"
+        },
+        "url_embed_link": "https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000"
       },
+      "score": 0.95
       "score": 0.95
     }
   ],
@@ -582,7 +590,7 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
 **Request Body**:
 ```json
 {
-  "audioId": "550e8400-e29b-41d4-a716-446655440000",
+  "audio_id": "550e8400-e29b-41d4-a716-446655440000",
   "template": "waveform",
   "device": "desktop"
 }
@@ -665,7 +673,7 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
 **Request Body**:
 ```json
 {
-  "audioId": "550e8400-e29b-41d4-a716-446655440000"
+  "audio_id": "550e8400-e29b-41d4-a716-446655440000"
 }
 ```
 
@@ -892,7 +900,7 @@ export const api = {
     apiRequest({
       method: 'POST',
       path: '/mcp/tools/get_audio_metadata',
-      body: { audioId }
+      body: { audio_id: audioId }
     }),
 
   searchLibrary: (query: string, filters?: any, limit = 20, offset = 0, sortBy = 'relevance', sortOrder = 'desc') =>
@@ -913,7 +921,7 @@ export const api = {
     apiRequest({
       method: 'POST',
       path: '/mcp/tools/get_embed_url',
-      body: { audioId, template, device }
+      body: { audio_id: audioId, template, device }
     }),
 
   listEmbedTemplates: () =>
@@ -927,7 +935,7 @@ export const api = {
     apiRequest({
       method: 'POST',
       path: '/mcp/tools/check_waveform_availability',
-      body: { audioId }
+      body: { audio_id: audioId }
     })
 };
 ```
@@ -1129,7 +1137,7 @@ curl -X POST https://loist.io/mcp/tools/search_library \
 # Get metadata
 curl -X POST https://loist.io/mcp/tools/get_audio_metadata \
   -H "Content-Type: application/json" \
-  -d '{"audioId": "550e8400-e29b-41d4-a716-446655440000"}'
+  -d '{"audio_id": "550e8400-e29b-41d4-a716-446655440000"}'
 ```
 
 ---
