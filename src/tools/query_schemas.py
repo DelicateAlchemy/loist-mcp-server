@@ -610,9 +610,14 @@ class DeleteAudioInput(BaseModel):
         description="UUID of the audio track to delete",
         pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
         min_length=36,
-        max_length=36
+        max_length=36,
+        alias="audioId"  # Accept both snake_case and camelCase
     )
     # TODO: Add user_id for authorization when auth is implemented
+
+    model_config = ConfigDict(
+        populate_by_name=True,  # Allow both field name and alias
+    )
     # user_id: Optional[str] = Field(
     #     default=None,
     #     description="User ID for authorization (future feature)",
