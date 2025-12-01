@@ -1301,148 +1301,6 @@
 					"response": []
 				},
 				{
-					"name": "Delete Audio",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							},
-							{
-								"key": "Accept",
-								"value": "application/json, text/event-stream"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"delete_audio\",\n    \"arguments\": {\n      \"audio_id\": \"{{audio_id}}\"\n    }\n  }\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/mcp",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"mcp"
-							]
-						},
-						"description": "Permanently delete an audio track from the database. GCS files are left in place for lifecycle management."
-					},
-					"event": [
-						{
-							"listen": "prerequest",
-							"script": {
-								"type": "text/javascript",
-								"exec": [
-									"// Verify audio_id is available",
-									"const audioId = pm.environment.get('audio_id');",
-									"if (!audioId) {",
-									"    console.warn('\u26a0\ufe0f No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
-									"    console.warn('\u26a0\ufe0f DELETE will fail without a valid audio_id.');",
-									"}"
-								]
-							}
-						},
-						{
-							"listen": "test",
-							"script": {
-								"type": "text/javascript",
-								"exec": [
-									"// Parse JSON-RPC response",
-									"let responseBody = pm.response.text();",
-									"let jsonResponse = null;",
-									"",
-									"if (responseBody.includes('data: ')) {",
-									"    const dataLines = responseBody.split('\\n').filter(line => line.startsWith('data: '));",
-									"    if (dataLines.length > 0) {",
-									"        jsonResponse = JSON.parse(dataLines[dataLines.length - 1].replace('data: ', '').trim());",
-									"    }",
-									"} else {",
-									"    jsonResponse = pm.response.json();",
-									"}",
-									"",
-									"pm.test('Status code is 200', function () {",
-									"    pm.response.to.have.status(200);",
-									"});",
-									"",
-									"pm.test('Response follows JSON-RPC 2.0 format', function () {",
-									"    pm.expect(jsonResponse).to.have.property('jsonrpc', '2.0');",
-									"    pm.expect(jsonResponse).to.have.property('id');",
-									"});",
-									"",
-									"// \u2705 delete_audio is NOW IMPLEMENTED (hard delete with GCS cleanup)",
-									"// Removes: DB record, GCS audio file, waveform SVG, thumbnails",
-									"// This test expects an error until the feature is built",
-									"",
-									"// Check for FastMCP tool error format (isError: true in result)",
-									"const isFastMCPError = jsonResponse.result && jsonResponse.result.isError === true;",
-									"const fastMCPErrorMsg = isFastMCPError && jsonResponse.result.content && jsonResponse.result.content[0] ? jsonResponse.result.content[0].text : '';",
-									"",
-									"if (jsonResponse.error || isFastMCPError) {",
-									"    const errorMsg = jsonResponse.error ? jsonResponse.error.message : fastMCPErrorMsg;",
-									"    console.log('Error (expected - delete not yet implemented):', errorMsg);",
-									"    // Expect errors - feature not yet implemented",
-									"    const isNotImplemented = errorMsg && (",
-									"        errorMsg.includes('cannot import') ||",
-									"        errorMsg.includes('not implemented') ||",
-									"        errorMsg.includes('not found') ||",
-									"        errorMsg.includes('Error calling tool')",
-									"    );",
-									"    pm.test('Delete tool returns expected error (not yet implemented)', function () {",
-									"        // This is EXPECTED to fail until delete functionality is built",
-									"        pm.expect(isNotImplemented).to.be.true;",
-									"    });",
-									"} else {",
-									"    pm.test('Response has result', function () {",
-									"        pm.expect(jsonResponse).to.have.property('result');",
-									"    });",
-									"    ",
-									"    // Extract tool result",
-									"    const result = jsonResponse.result;",
-									"    let toolResult = result;",
-									"    ",
-									"    if (result && result.content && Array.isArray(result.content)) {",
-									"        const textContent = result.content.find(c => c.type === 'text');",
-									"        if (textContent && textContent.text) {",
-									"            try {",
-									"                toolResult = JSON.parse(textContent.text);",
-									"            } catch (e) {",
-									"                toolResult = textContent.text;",
-									"            }",
-									"        }",
-									"    }",
-									"    ",
-									"    pm.test('Delete result indicates success (if implemented)', function () {",
-									"        // NOTE: This will only pass once delete functionality is built",
-									"        const isSuccess = toolResult.success === true || ",
-									"                          toolResult.deleted === true || ",
-									"                          toolResult.status === 'deleted' ||",
-									"                          (typeof toolResult === 'string' && toolResult.toLowerCase().includes('deleted'));",
-									"        // Skip this check if toolResult indicates an error",
-									"        if (toolResult.error || toolResult.success === false) {",
-									"            console.log('\u26a0\ufe0f Delete not yet implemented - skipping success check');",
-									"            pm.expect(true).to.be.true; // Pass anyway",
-									"        } else {",
-									"            pm.expect(isSuccess).to.be.true;",
-									"        }",
-									"    });",
-									"    ",
-									"    console.log('Delete Result:', JSON.stringify(toolResult, null, 2));",
-									"    ",
-									"    // Clear the audio_id since it's been deleted",
-									"    if (toolResult.success || toolResult.deleted) {",
-									"        console.log('\u2705 Audio deleted. Clearing audio_id from environment.');",
-									"        pm.environment.unset('audio_id');",
-									"    }",
-									"}"
-								]
-							}
-						}
-					],
-					"response": []
-				},
-				{
 					"name": "Get Embed URL",
 					"request": {
 						"method": "POST",
@@ -2050,6 +1908,148 @@
 									"    // Store waveform status for reference",
 									"    if (typeof isAvailable === 'boolean') {",
 									"        pm.environment.set('waveform_available', isAvailable.toString());",
+									"    }",
+									"}"
+								]
+							}
+						}
+					],
+					"response": []
+				},
+				{
+					"name": "Delete Audio",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json, text/event-stream"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"delete_audio\",\n    \"arguments\": {\n      \"audio_id\": \"{{audio_id}}\"\n    }\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/mcp",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"mcp"
+							]
+						},
+						"description": "Permanently delete an audio track from the database. GCS files are left in place for lifecycle management."
+					},
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"// Verify audio_id is available",
+									"const audioId = pm.environment.get('audio_id');",
+									"if (!audioId) {",
+									"    console.warn('\u26a0\ufe0f No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
+									"    console.warn('\u26a0\ufe0f DELETE will fail without a valid audio_id.');",
+									"}"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"// Parse JSON-RPC response",
+									"let responseBody = pm.response.text();",
+									"let jsonResponse = null;",
+									"",
+									"if (responseBody.includes('data: ')) {",
+									"    const dataLines = responseBody.split('\\n').filter(line => line.startsWith('data: '));",
+									"    if (dataLines.length > 0) {",
+									"        jsonResponse = JSON.parse(dataLines[dataLines.length - 1].replace('data: ', '').trim());",
+									"    }",
+									"} else {",
+									"    jsonResponse = pm.response.json();",
+									"}",
+									"",
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response follows JSON-RPC 2.0 format', function () {",
+									"    pm.expect(jsonResponse).to.have.property('jsonrpc', '2.0');",
+									"    pm.expect(jsonResponse).to.have.property('id');",
+									"});",
+									"",
+									"// \u2705 delete_audio is NOW IMPLEMENTED (hard delete with GCS cleanup)",
+									"// Removes: DB record, GCS audio file, waveform SVG, thumbnails",
+									"// This test expects an error until the feature is built",
+									"",
+									"// Check for FastMCP tool error format (isError: true in result)",
+									"const isFastMCPError = jsonResponse.result && jsonResponse.result.isError === true;",
+									"const fastMCPErrorMsg = isFastMCPError && jsonResponse.result.content && jsonResponse.result.content[0] ? jsonResponse.result.content[0].text : '';",
+									"",
+									"if (jsonResponse.error || isFastMCPError) {",
+									"    const errorMsg = jsonResponse.error ? jsonResponse.error.message : fastMCPErrorMsg;",
+									"    console.log('Error (expected - delete not yet implemented):', errorMsg);",
+									"    // Expect errors - feature not yet implemented",
+									"    const isNotImplemented = errorMsg && (",
+									"        errorMsg.includes('cannot import') ||",
+									"        errorMsg.includes('not implemented') ||",
+									"        errorMsg.includes('not found') ||",
+									"        errorMsg.includes('Error calling tool')",
+									"    );",
+									"    pm.test('Delete tool returns expected error (not yet implemented)', function () {",
+									"        // This is EXPECTED to fail until delete functionality is built",
+									"        pm.expect(isNotImplemented).to.be.true;",
+									"    });",
+									"} else {",
+									"    pm.test('Response has result', function () {",
+									"        pm.expect(jsonResponse).to.have.property('result');",
+									"    });",
+									"    ",
+									"    // Extract tool result",
+									"    const result = jsonResponse.result;",
+									"    let toolResult = result;",
+									"    ",
+									"    if (result && result.content && Array.isArray(result.content)) {",
+									"        const textContent = result.content.find(c => c.type === 'text');",
+									"        if (textContent && textContent.text) {",
+									"            try {",
+									"                toolResult = JSON.parse(textContent.text);",
+									"            } catch (e) {",
+									"                toolResult = textContent.text;",
+									"            }",
+									"        }",
+									"    }",
+									"    ",
+									"    pm.test('Delete result indicates success (if implemented)', function () {",
+									"        // NOTE: This will only pass once delete functionality is built",
+									"        const isSuccess = toolResult.success === true || ",
+									"                          toolResult.deleted === true || ",
+									"                          toolResult.status === 'deleted' ||",
+									"                          (typeof toolResult === 'string' && toolResult.toLowerCase().includes('deleted'));",
+									"        // Skip this check if toolResult indicates an error",
+									"        if (toolResult.error || toolResult.success === false) {",
+									"            console.log('\u26a0\ufe0f Delete not yet implemented - skipping success check');",
+									"            pm.expect(true).to.be.true; // Pass anyway",
+									"        } else {",
+									"            pm.expect(isSuccess).to.be.true;",
+									"        }",
+									"    });",
+									"    ",
+									"    console.log('Delete Result:', JSON.stringify(toolResult, null, 2));",
+									"    ",
+									"    // Clear the audio_id since it's been deleted",
+									"    if (toolResult.success || toolResult.deleted) {",
+									"        console.log('\u2705 Audio deleted. Clearing audio_id from environment.');",
+									"        pm.environment.unset('audio_id');",
 									"    }",
 									"}"
 								]
