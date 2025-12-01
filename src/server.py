@@ -1784,6 +1784,8 @@ async def check_waveform_availability(audio_id: str) -> dict:
     """
     Check if waveform is available for an audio track.
 
+    DEPRECATED: This tool is deprecated. Use get_embed_url instead.
+
     Verifies waveform generation status and provides access information
     if the waveform exists.
 
@@ -1798,68 +1800,13 @@ async def check_waveform_availability(audio_id: str) -> dict:
         >>> if result["waveform_available"]:
         ...     print(f"Waveform generated at: {result['generated_at']}")
     """
-    try:
-        # Get waveform context
-        waveform_context = await get_waveform_context(audio_id)
+    logger.warning(f"check_waveform_availability is deprecated. Use get_embed_url instead for audio_id: {audio_id}")
 
-        # Validate audio_id exists
-        from database import get_audio_metadata_by_id
-        from src.tools.schemas import ProductMetadata, FormatMetadata, AudioMetadata, PlayerConfig, PlayerConfigUrls, PlayerConfigMetadata # Import Pydantic schemas
-        metadata = get_audio_metadata_by_id(audio_id)
-        if not metadata:
-            return {
-                "success": False,
-                "error": "RESOURCE_NOT_FOUND",
-                "message": f"Audio track with ID '{audio_id}' was not found",
-                "audio_id": audio_id
-            }
+    # Delegate to get_embed_url with waveform template
+    result = await get_embed_url(audio_id, template="waveform", device="auto")
 
-        # Ensure album is always a string for ProductMetadata
-        album_value = metadata.get("album", "")
-        artist_value = metadata.get("artist", "Unknown Artist")
-        title_value = metadata.get("title", "Untitled")
-
-        return {
-            "success": True,
-            "audio_id": audio_id,
-            "waveform_available": waveform_context.get("waveform_available", False),
-            "waveform_url": waveform_context.get("waveform_url"),
-            "generated_at": waveform_context.get("waveform_generated_at"), # Use waveform_generated_at
-            "metadata": AudioMetadata( # Construct AudioMetadata
-                product=ProductMetadata(
-                    title=title_value,
-                    artist=artist_value,
-                    album=album_value,
-                    mbid=None,
-                    genre=[metadata.get("genre")] if metadata.get("genre") else [],
-                    year=metadata.get("year")
-                ),
-                format=FormatMetadata(
-                    duration=metadata.get("duration", 0),
-                    channels=metadata.get("channels", 2),
-                    sample_rate=metadata.get("sample_rate", 44100),
-                    bitrate=metadata.get("bitrate", 0),
-                    format=metadata.get("format", "MP3")
-                ),
-                url_embed_link=f"{config.embed_base_url}/embed/{audio_id}" # Add embed link
-            ).model_dump() # Convert to dictionary for the response
-        }
-
-    except ValidationError as e:
-        return {
-            "success": False,
-            "error": "VALIDATION_ERROR",
-            "message": f"Invalid audio ID format: {str(e)}",
-            "audio_id": audio_id
-        }
-    except Exception as e:
-        logger.error(f"Error checking waveform availability for {audio_id}: {e}")
-        return {
-            "success": False,
-            "error": "INTERNAL_ERROR",
-            "message": "Failed to check waveform availability",
-            "audio_id": audio_id
-        }
+    # Return the same PlayerConfig shape for consistency
+    return result
 
 @mcp.custom_route("/oembed", methods=["GET"])
 async def oembed_endpoint(request):
