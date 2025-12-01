@@ -14,6 +14,36 @@ This document provides a comprehensive list of API endpoints and environment var
 
 ## API Endpoints
 
+### PlayerConfig Response Type
+
+All embed-related MCP tools now return a standardized `PlayerConfig` response shape:
+
+```typescript
+type PlayerConfigUrls = {
+  embed: string;              // Standard embed player URL
+  waveform?: string;          // Waveform player URL (if applicable)
+  artwork?: string;           // Album artwork signed URL
+  waveform_svg?: string;      // Waveform SVG signed URL
+};
+
+type PlayerConfigMetadata = {
+  title: string;
+  artist: string;
+  album?: string;
+  duration_seconds?: number;
+};
+
+type PlayerConfig = {
+  audio_id: string;
+  mode: "simple" | "waveform";
+  device: "desktop" | "mobile" | "auto";
+  context: "embed" | "direct";
+  waveform_available: boolean;
+  urls: PlayerConfigUrls;
+  metadata: PlayerConfigMetadata;
+};
+```
+
 ### Base URL
 
 The base URL depends on your deployment:
@@ -558,20 +588,26 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
 }
 ```
 
-**Response**:
+**Response**: PlayerConfig shape
 ```json
 {
   "success": true,
-  "audioId": "550e8400-e29b-41d4-a716-446655440000",
-  "embedUrl": "https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000/waveform/desktop",
-  "template": "waveform",
+  "audio_id": "550e8400-e29b-41d4-a716-446655440000",
+  "mode": "waveform",
   "device": "desktop",
-  "waveformAvailable": true,
+  "context": "embed",
+  "waveform_available": true,
+  "urls": {
+    "embed": "https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000",
+    "waveform": "https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000/waveform",
+    "artwork": "https://storage.googleapis.com/bucket/artwork.jpg?X-Goog-Signature=...",
+    "waveform_svg": "https://storage.googleapis.com/bucket/waveform.svg?X-Goog-Signature=..."
+  },
   "metadata": {
     "title": "Song Title",
     "artist": "Artist Name",
-    "duration": 180.5,
-    "format": "MP3"
+    "album": "Album Name",
+    "duration_seconds": 180.5
   }
 }
 ```
@@ -616,7 +652,10 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
 
 ---
 
-#### 20. Check Waveform Availability (MCP Tool via HTTP)
+#### 20. Check Waveform Availability (MCP Tool via HTTP) **DEPRECATED**
+
+> **⚠️ DEPRECATED**: This tool is deprecated. Use `get_embed_url` with `template: "waveform"` instead.
+
 ```http
 POST /mcp/tools/check_waveform_availability
 Content-Type: application/json
@@ -630,19 +669,26 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
 }
 ```
 
-**Response**:
+**Response**: Same as `get_embed_url` (PlayerConfig shape)
 ```json
 {
   "success": true,
-  "audioId": "550e8400-e29b-41d4-a716-446655440000",
-  "waveformAvailable": true,
-  "waveformUrl": "https://storage.googleapis.com/...",
-  "generatedAt": "2025-01-15T10:30:00Z",
+  "audio_id": "550e8400-e29b-41d4-a716-446655440000",
+  "mode": "waveform",
+  "device": "auto",
+  "context": "embed",
+  "waveform_available": true,
+  "urls": {
+    "embed": "https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000",
+    "waveform": "https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000/waveform",
+    "artwork": "https://storage.googleapis.com/bucket/artwork.jpg?X-Goog-Signature=...",
+    "waveform_svg": "https://storage.googleapis.com/bucket/waveform.svg?X-Goog-Signature=..."
+  },
   "metadata": {
     "title": "Song Title",
     "artist": "Artist Name",
-    "duration": 180.5,
-    "format": "MP3"
+    "album": "Album Name",
+    "duration_seconds": 180.5
   }
 }
 ```
