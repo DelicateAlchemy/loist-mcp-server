@@ -27,6 +27,8 @@ from .query_schemas import (
     DeleteAudioInput,
     DeleteAudioOutput,
     DeleteException,
+    SearchFacets,
+    FacetData,
 )
 from .schemas import (
     ProductMetadata,
@@ -73,37 +75,40 @@ def format_metadata_response(db_metadata: Dict[str, Any]) -> AudioMetadata:
     Returns:
         AudioMetadata: Formatted metadata following API contract
     """
+    logger.info(f"Formatting metadata response for db_metadata: {db_metadata}")
     # Generate embed URL
     audio_id = db_metadata.get("id")
     embed_url = f"https://loist.io/embed/{audio_id}"
     
     # Format product metadata
     product = ProductMetadata(
-        Artist=db_metadata.get("artist", ""),
-        Title=db_metadata.get("title", "Untitled"),
-        Album=db_metadata.get("album", ""),
-        MBID=None,  # MVP: null
-        Genre=[db_metadata.get("genre")] if db_metadata.get("genre") else [],
-        Year=db_metadata.get("year")
+        artist=db_metadata.get("artist") or "",
+        title=db_metadata.get("title") or "Untitled",
+        album=db_metadata.get("album") or "",
+        mbid=None,  # MVP: null
+        genre=[db_metadata.get("genre")] if db_metadata.get("genre") else [],
+        year=db_metadata.get("year")
     )
     
     # Format technical metadata
     # Handle both "duration" and "duration_seconds" field names for compatibility
     duration = db_metadata.get("duration") or db_metadata.get("duration_seconds", 0.0)
     format_metadata = FormatMetadata(
-        Duration=duration,
-        Channels=db_metadata.get("channels", 2),
-        SampleRate=db_metadata.get("sample_rate", 44100),
-        Bitrate=db_metadata.get("bitrate", 0),
-        Format=db_metadata.get("format", "")
+        duration=duration,
+        channels=db_metadata.get("channels", 2),
+        sample_rate=db_metadata.get("sample_rate", 44100),
+        bitrate=db_metadata.get("bitrate", 0),
+        format=db_metadata.get("format", "")
     )
     
     # Combine into complete metadata
-    return AudioMetadata(
-        Product=product,
-        Format=format_metadata,
-        urlEmbedLink=embed_url
+    audio_metadata = AudioMetadata(
+        product=product,
+        format=format_metadata,
+        url_embed_link=embed_url
     )
+    logger.info(f"Formatted audio metadata: {audio_metadata.model_dump_json(indent=2)}")
+    return audio_metadata
 
 
 def format_resources(audio_id: str, has_thumbnail: bool = False) -> AudioResources:
@@ -118,9 +123,9 @@ def format_resources(audio_id: str, has_thumbnail: bool = False) -> AudioResourc
         AudioResources: Resource URIs
     """
     return AudioResources(
-        audio=f"music-library://audio/{audio_id}/stream",
-        thumbnail=f"music-library://audio/{audio_id}/thumbnail" if has_thumbnail else None,
-        waveform=None  # MVP: null
+        audio_url=f"music-library://audio/{audio_id}/stream",
+        thumbnail_url=f"music-library://audio/{audio_id}/thumbnail" if has_thumbnail else None,
+        waveform_url=None  # MVP: null
     )
 
 
@@ -135,7 +140,7 @@ async def get_audio_metadata(input_data: Dict[str, Any]) -> Dict[str, Any]:
     This is a read-only operation that fetches metadata from the database.
     
     Args:
-        input_data: Dictionary containing audioId
+        input_data: Dictionary containing audio_id
         
     Returns:
         Dictionary with success status and metadata, or error response
@@ -144,8 +149,8 @@ async def get_audio_metadata(input_data: Dict[str, Any]) -> Dict[str, Any]:
         QueryException: For not found or database errors
         
     Example:
-        >>> result = await get_audio_metadata({"audioId": "550e8400-..."})
-        >>> print(result["metadata"]["Product"]["Title"])
+        >>> result = await get_audio_metadata({"audio_id": "550e8400-..."})
+        >>> print(result["metadata"]["product"]["title"])
         "Hey Jude"
     """
     logger.info("Retrieving audio metadata")
@@ -162,7 +167,7 @@ async def get_audio_metadata(input_data: Dict[str, Any]) -> Dict[str, Any]:
                 details={"validation_errors": str(e)}
             )
         
-        audio_id = validated_input.audioId
+        audio_id = validated_input.audio_id
         logger.debug(f"Fetching metadata for audio ID: {audio_id}")
         
         # Fetch from database
@@ -173,14 +178,14 @@ async def get_audio_metadata(input_data: Dict[str, Any]) -> Dict[str, Any]:
             raise QueryException(
                 error_code=QueryErrorCode.RESOURCE_NOT_FOUND,
                 message=f"Audio track with ID '{audio_id}' was not found",
-                details={"audioId": audio_id}
+                details={"audio_id": audio_id}
             )
         except DatabaseOperationError as e:
             logger.error(f"Database error retrieving metadata: {e}")
             raise QueryException(
                 error_code=QueryErrorCode.DATABASE_ERROR,
                 message=f"Failed to retrieve metadata: {str(e)}",
-                details={"audioId": audio_id}
+                details={"audio_id": audio_id}
             )
         
         # Check if result exists (database returns None for not found)
@@ -189,8 +194,12 @@ async def get_audio_metadata(input_data: Dict[str, Any]) -> Dict[str, Any]:
             raise QueryException(
                 error_code=QueryErrorCode.RESOURCE_NOT_FOUND,
                 message=f"Audio track with ID '{audio_id}' was not found",
-                details={"audioId": audio_id}
+                details={"audio_id": audio_id}
             )
+
+        # Ensure album is never None before passing to Pydantic model
+        if db_metadata.get("album") is None:
+            db_metadata["album"] = ""
         
         logger.info(f"Successfully retrieved metadata for {audio_id}")
         
@@ -198,13 +207,13 @@ async def get_audio_metadata(input_data: Dict[str, Any]) -> Dict[str, Any]:
         formatted_metadata = format_metadata_response(db_metadata)
         resources = format_resources(
             audio_id,
-            has_thumbnail=bool(db_metadata.get("thumbnail_path"))
+            has_thumbnail=bool(db_metadata.get("thumbnail_gcs_path"))
         )
         
         # Build response using Pydantic for validation
         response = GetAudioMetadataOutput(
             success=True,
-            audioId=audio_id,
+            audio_id=audio_id,
             metadata=formatted_metadata,
             resources=resources
         )
@@ -272,8 +281,8 @@ async def search_library(input_data: Dict[str, Any]) -> Dict[str, Any]:
         filters = validated_input.filters
         limit = validated_input.limit
         offset = validated_input.offset
-        sort_by = validated_input.sortBy
-        sort_order = validated_input.sortOrder
+        sort_by = validated_input.sort_by
+        sort_order = validated_input.sort_order
 
         logger.debug(f"Searching for: '{query}' with limit={limit}, offset={offset}")
 
@@ -290,8 +299,8 @@ async def search_library(input_data: Dict[str, Any]) -> Dict[str, Any]:
                 'format_filter': filters.get('format', [None])[0] if filters.get('format') else None,
                 # Time-based filters
                 'time_period': filters.get('time', {}).get('period') if filters.get('time') else None,
-                'date_from': filters.get('time', {}).get('dateFrom') if filters.get('time') else None,
-                'date_to': filters.get('time', {}).get('dateTo') if filters.get('time') else None,
+                'date_from': filters.get('time', {}).get('date_from') if filters.get('time') else None,
+                'date_to': filters.get('time', {}).get('date_to') if filters.get('time') else None,
                 'timezone': filters.get('time', {}).get('timezone', 'UTC') if filters.get('time') else 'UTC',
             }
 
@@ -367,7 +376,7 @@ async def search_library(input_data: Dict[str, Any]) -> Dict[str, Any]:
 
                 # Create search result
                 search_result = SearchResult(
-                    audioId=result.get("id"),
+                    audio_id=result.get("id"),
                     metadata=formatted_metadata,
                     score=score
                 )
@@ -413,7 +422,7 @@ async def search_library(input_data: Dict[str, Any]) -> Dict[str, Any]:
             total=total_matches,
             limit=limit,
             offset=offset,
-            hasMore=has_more,
+            has_more=has_more,
             facets=facets
         )
         
@@ -450,14 +459,14 @@ async def delete_audio(input_data: Dict[str, Any]) -> Dict[str, Any]:
     4. Return success (even if some GCS deletions fail)
 
     Args:
-        input_data: Dict containing 'audioId' (UUID string)
+        input_data: Dict containing 'audio_id' (UUID string)
 
     Returns:
-        Success: {'success': True, 'audioId': str, 'deleted': True}
+        Success: {'success': True, 'audio_id': str, 'deleted': True}
         Error: {'success': False, 'error': str, 'message': str, 'details': dict}
 
     Example:
-        >>> result = await delete_audio({"audioId": "550e8400-e29b-41d4-a716-446655440000"})
+        >>> result = await delete_audio({"audio_id": "550e8400-e29b-41d4-a716-446655440000"})
         >>> print(result["deleted"])
         True
     """
@@ -475,7 +484,7 @@ async def delete_audio(input_data: Dict[str, Any]) -> Dict[str, Any]:
                 details={"validation_errors": str(e)}
             )
 
-        audio_id = validated_input.audioId
+        audio_id = validated_input.audio_id
         logger.debug(f"Deleting audio track: {audio_id}")
 
         # Delete from database and get GCS paths
@@ -486,14 +495,14 @@ async def delete_audio(input_data: Dict[str, Any]) -> Dict[str, Any]:
             raise DeleteException(
                 error_code=QueryErrorCode.RESOURCE_NOT_FOUND,
                 message=f"Audio track with the specified ID was not found",
-                details={"audioId": audio_id}
+                details={"audio_id": audio_id}
             )
         except DatabaseOperationError as e:
             logger.error(f"Database error deleting track {audio_id}: {e}")
             raise DeleteException(
                 error_code=QueryErrorCode.DELETE_FAILED,
                 message=f"Failed to delete audio track",
-                details={"audioId": audio_id, "reason": str(e)}
+                details={"audio_id": audio_id, "reason": str(e)}
             )
 
         # Extract GCS paths for cleanup
@@ -542,7 +551,7 @@ async def delete_audio(input_data: Dict[str, Any]) -> Dict[str, Any]:
         # Build success response
         response = DeleteAudioOutput(
             success=True,
-            audioId=audio_id,
+            audio_id=audio_id,
             deleted=True
         )
 

@@ -249,7 +249,7 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
         ...         "url": "https://example.com/song.mp3"
         ...     }
         ... })
-        >>> print(result["audioId"])
+        >>> print(result["audio_id"])
         "550e8400-e29b-41d4-a716-446655440000"
     """
     start_time = time.time()
@@ -295,7 +295,7 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
             pipeline.temp_audio_path = download_from_url(
                 url=str(source.url),
                 headers=source.headers,
-                max_size_mb=options.maxSizeMB,
+                max_size_mb=options.max_size_mb,
                 timeout_seconds=options.timeout,
                 filename_override=getattr(source, 'filename', None)
             )
@@ -319,7 +319,7 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
             raise ProcessAudioException(
                 error_code=ErrorCode.SIZE_EXCEEDED,
                 message=str(e),
-                details={"max_size_mb": options.maxSizeMB}
+                details={"max_size_mb": options.max_size_mb}
             )
         except DownloadTimeoutError as e:
             logger.error(f"Download timeout: {e}")
@@ -365,7 +365,7 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
                     logger.warning("Falling back to original path for validation/extraction")
 
             # Validate audio format if enabled
-            if options.validateFormat:
+            if options.validate_format:
                 # Skip validation if we have a trusted filename override
                 if hasattr(source, 'filename') and source.filename:
                     provided_ext = Path(source.filename).suffix.lower()
@@ -499,7 +499,7 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
             blob = upload_audio_file(
                 source_path=pipeline.temp_audio_path,
                 destination_blob_name=f"audio/{pipeline.audio_id}/{filename}",
-                metadata={"content_type": source.mimeType or f"audio/{metadata_dict.get('format', 'mp3').lower()}"}
+                metadata={"content_type": source.mime_type or f"audio/{metadata_dict.get('format', 'mp3').lower()}"}
             )
             pipeline.gcs_audio_path = f"gs://{blob.bucket.name}/{blob.name}"
             logger.info(f"Uploaded audio to GCS: {pipeline.gcs_audio_path}")
@@ -590,31 +590,31 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
 
         response = ProcessAudioOutput(
             success=True,
-            audioId=pipeline.audio_id,
+            audio_id=pipeline.audio_id,
             metadata=AudioMetadata(
-                Product=ProductMetadata(
-                    Artist=final_artist,
-                    Title=final_title,
-                    Album=final_album,
-                    MBID=None,  # MVP: null
-                    Genre=[metadata_dict.get("genre")] if metadata_dict.get("genre") else [],
-                    Year=metadata_dict.get("year")
+                product=ProductMetadata(
+                    artist=final_artist,
+                    title=final_title,
+                    album=final_album,
+                    mbid=None,  # MVP: null
+                    genre=[metadata_dict.get("genre")] if metadata_dict.get("genre") else [],
+                    year=metadata_dict.get("year")
                 ),
-                Format=FormatMetadata(
-                    Duration=metadata_dict.get("duration", 0),
-                    Channels=metadata_dict.get("channels", 2),
-                    SampleRate=metadata_dict.get("sample_rate", 44100),
-                    Bitrate=metadata_dict.get("bitrate", 0),
-                    Format=metadata_dict.get("format", "")
+                format=FormatMetadata(
+                    duration=metadata_dict.get("duration", 0),
+                    channels=metadata_dict.get("channels", 2),
+                    sample_rate=metadata_dict.get("sample_rate", 44100),
+                    bitrate=metadata_dict.get("bitrate", 0),
+                    format=metadata_dict.get("format", "")
                 ),
-                urlEmbedLink=embed_url
+                url_embed_link=embed_url
             ),
             resources=AudioResources(
-                audio=f"music-library://audio/{pipeline.audio_id}/stream",
-                thumbnail=f"music-library://audio/{pipeline.audio_id}/thumbnail" if pipeline.gcs_artwork_path else None,
-                waveform=None  # MVP: null
+                audio_url=f"music-library://audio/{pipeline.audio_id}/stream",
+                thumbnail_url=f"music-library://audio/{pipeline.audio_id}/thumbnail" if pipeline.gcs_artwork_path else None,
+                waveform_url=None  # MVP: null
             ),
-            processingTime=time.time() - start_time
+            processing_time=time.time() - start_time
         )
         
         processing_time = time.time() - start_time

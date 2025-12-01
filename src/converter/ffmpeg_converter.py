@@ -28,6 +28,7 @@ from .presets import (
 )
 from .metadata_mapper import (
     map_metadata_to_ffmpeg_args,
+    _get_artwork_stream_mapping,
 )
 
 logger = logging.getLogger(__name__)
@@ -148,7 +149,7 @@ def convert_audio(
         f"(preset: {preset_config.name}){metadata_info}{artwork_info}"
     )
     logger.debug(f"FFmpeg command: {' '.join(cmd)}")
-    
+
     try:
         # Run FFmpeg
         result = subprocess.run(
@@ -231,7 +232,6 @@ def _build_ffmpeg_command(
 ) -> list:
     """
     Build FFmpeg command with appropriate arguments.
-
     Args:
         source_path: Input file path
         output_path: Output file path
@@ -240,36 +240,31 @@ def _build_ffmpeg_command(
         target_format: Target format for metadata/artwork handling
         metadata: Optional metadata dictionary to embed
         artwork_path: Optional artwork file path to embed
-
     Returns:
         List of command arguments for subprocess
     """
     cmd = ["ffmpeg"]
 
-    # Overwrite flag (before input)
-    if overwrite:
-        cmd.append("-y")
-    else:
-        cmd.append("-n")
+    # 1. Global options FIRST
+    cmd.append("-y" if overwrite else "-n")
 
-    # Input file
+    # 2. Input files
     cmd.extend(["-i", str(source_path)])
+    if artwork_path and artwork_path.exists():
+        cmd.extend(["-i", str(artwork_path)])
 
-    # Preset-specific encoding arguments
-    cmd.extend(preset_config.ffmpeg_args)
+    # 3. Output options (copy to avoid mutation)
+    cmd.extend(list(preset_config.ffmpeg_args))
 
-    # Add metadata and/or artwork arguments if provided
-    if metadata or artwork_path:
-        try:
-            # Pass empty dict if no metadata but we have artwork
-            metadata_to_pass = metadata or {}
-            metadata_args = map_metadata_to_ffmpeg_args(metadata_to_pass, target_format, artwork_path)
-            cmd.extend(metadata_args)
-        except Exception as e:
-            logger.warning(f"Failed to map metadata/artwork for FFmpeg command: {e}")
-            # Continue without metadata/artwork rather than failing
+    # 4. Metadata
+    if metadata:
+        cmd.extend(map_metadata_to_ffmpeg_args(metadata, target_format, None))
 
-    # Output file
+    # 5. Stream mapping for artwork (only if artwork present)
+    if artwork_path and artwork_path.exists():
+        cmd.extend(_get_artwork_stream_mapping(target_format))
+
+    # 6. Output file LAST
     cmd.append(str(output_path))
 
     return cmd

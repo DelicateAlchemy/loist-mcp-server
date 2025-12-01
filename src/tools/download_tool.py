@@ -48,20 +48,20 @@ def download_audio(input_data: Dict[str, Any]) -> Dict[str, Any]:
 
     Args:
         input_data: Dictionary containing:
-            - audioId: UUID of the audio track (required)
+            - audio_id: UUID of the audio track (required)
             - format: Target format (mp3, wav, flac, aac, ogg) (required)
             - preset: Quality preset (optional, defaults to 'high')
 
     Returns:
         Dictionary containing:
             - success: Boolean indicating success
-            - downloadUrl: Temporary signed URL for download
+            - download_url: Temporary signed URL for download
             - format: Target format used
             - quality: Quality description (e.g., "320kbps")
-            - originalFormat: Source format
-            - fileSize: File size in bytes
+            - original_format: Source format
+            - file_size: File size in bytes
             - filename: Generated filename
-            - expiresIn: URL expiration time in seconds
+            - expires_in: URL expiration time in seconds
             - error: Error message if failed
 
     Raises:
@@ -73,15 +73,15 @@ def download_audio(input_data: Dict[str, Any]) -> Dict[str, Any]:
         logger.info(f"Download audio request: {input_data}")
 
         # Extract and validate parameters
-        audio_id = input_data.get("audioId")
+        audio_id = input_data.get("audio_id")
         if not audio_id:
-            raise ValidationError("audioId is required")
+            raise ValidationError("audio_id is required")
 
         # Validate UUID format
         try:
             uuid.UUID(audio_id)
         except ValueError:
-            raise ValidationError(f"Invalid audioId format: {audio_id}")
+            raise ValidationError(f"Invalid audio_id format: {audio_id}")
 
         target_format = input_data.get("format")
         if not target_format:
@@ -133,13 +133,13 @@ def download_audio(input_data: Dict[str, Any]) -> Dict[str, Any]:
 
                 return {
                     "success": True,
-                    "downloadUrl": signed_url,
+                    "download_url": signed_url,
                     "format": target_format,
                     "quality": "original",
-                    "originalFormat": source_format,
-                    "fileSize": metadata.get("file_size_bytes"),
+                    "original_format": source_format,
+                    "file_size": metadata.get("file_size_bytes"),
                     "filename": _generate_download_filename(metadata, target_format),
-                    "expiresIn": 15 * 60,  # 15 minutes
+                    "expires_in": 15 * 60,  # 15 minutes
                 }
             except Exception as e:
                 logger.warning(f"Short-circuit failed, falling back to conversion: {e}")
@@ -226,9 +226,9 @@ def download_audio(input_data: Dict[str, Any]) -> Dict[str, Any]:
             # Import here to avoid circular imports
             from src.storage import upload_audio_file
             upload_audio_file(
-                file_path=output_path,
-                blob_name=temp_blob_name,
-                content_type=get_mime_type(target_format),
+                source_path=output_path,
+                destination_blob_name=temp_blob_name,
+                metadata={"content-type": get_mime_type(target_format)},
             )
 
             # Generate signed URL for the converted file
@@ -248,16 +248,17 @@ def download_audio(input_data: Dict[str, Any]) -> Dict[str, Any]:
             # Return successful response
             result = {
                 "success": True,
-                "downloadUrl": signed_url,
+                "audio_id": audio_id,
+                "download_url": signed_url,
                 "format": target_format,
                 "quality": quality_desc,
-                "originalFormat": source_format,
-                "fileSize": conversion_result.output_size_bytes,
+                "original_format": source_format,
+                "file_size": conversion_result.output_size_bytes,
                 "filename": _generate_download_filename(metadata, target_format),
-                "expiresIn": 15 * 60,  # 15 minutes
+                "expires_in": 15 * 60,  # 15 minutes
             }
 
-            logger.info(f"Download prepared: {result['filename']} ({result['fileSize']} bytes)")
+            logger.info(f"Download prepared: {result['filename']} ({result['file_size']} bytes)")
             return result
 
         finally:
@@ -279,28 +280,28 @@ def download_audio(input_data: Dict[str, Any]) -> Dict[str, Any]:
         return {
             "success": False,
             "error": str(e),
-            "errorCode": "VALIDATION_ERROR"
+            "error_code": "VALIDATION_ERROR"
         }
     except ResourceNotFoundError as e:
         logger.warning(f"Resource not found in download_audio: {e}")
         return {
             "success": False,
             "error": str(e),
-            "errorCode": "TRACK_NOT_FOUND"
+            "error_code": "TRACK_NOT_FOUND"
         }
     except ConversionTimeoutError as e:
         logger.error(f"Conversion timeout in download_audio: {e}")
         return {
             "success": False,
             "error": "Conversion timed out",
-            "errorCode": "CONVERSION_TIMEOUT"
+            "error_code": "CONVERSION_TIMEOUT"
         }
     except ConversionError as e:
         logger.error(f"Conversion error in download_audio: {e}")
         return {
             "success": False,
             "error": f"Conversion failed: {str(e)}",
-            "errorCode": "CONVERSION_FAILED"
+            "error_code": "CONVERSION_FAILED"
         }
     except Exception as e:
         error_response = handle_tool_error(e, "download_audio")
@@ -344,9 +345,23 @@ def _generate_download_filename(metadata: Dict[str, Any], target_format: str) ->
     Returns:
         Safe filename string
     """
-    # Sanitize title and artist
-    title = metadata.get('title', 'Unknown')
-    artist = metadata.get('artist', 'Unknown Artist')
+    if metadata is None:
+        logger.error("Metadata is None in _generate_download_filename")
+        return "Unknown_Unknown_Artist.unknown"
+
+    # More detailed debugging
+    logger.error(f"DEBUG: metadata type: {type(metadata)}")
+    logger.error(f"DEBUG: metadata keys: {list(metadata.keys()) if isinstance(metadata, dict) else 'Not a dict'}")
+    if isinstance(metadata, dict):
+        for key in ['title', 'artist', 'album']:
+            logger.error(f"DEBUG: {key} = {repr(metadata.get(key))}")
+
+    # Sanitize title and artist (handle None values explicitly)
+    logger.debug(f"Filename generation metadata keys: {list(metadata.keys())}")
+    logger.debug(f"Raw title: {repr(metadata.get('title'))}, artist: {repr(metadata.get('artist'))}")
+    title = str(metadata.get('title') or '').strip() or 'Unknown'
+    artist = str(metadata.get('artist') or '').strip() or 'Unknown Artist'
+    logger.debug(f"Processed title: {repr(title)}, artist: {repr(artist)}")
 
     # Replace unsafe characters
     unsafe_chars = '<>:"/\\|?*'

@@ -40,7 +40,7 @@ async def update_metadata(input_data: Dict[str, Any]) -> Dict[str, Any]:
     
     Args:
         input_data: Dict containing:
-            - audioId: UUID of the track to update
+            - audio_id: UUID of the track to update
             - metadata: Dict with fields to update
     
     Returns:
@@ -54,9 +54,9 @@ async def update_metadata(input_data: Dict[str, Any]) -> Dict[str, Any]:
     logger.info("Processing update_metadata request")
     
     try:
-        # Validate audioId
+        # Validate audio_id
         validated = UpdateMetadataInput(**input_data)
-        audio_id = validated.audioId
+        audio_id = validated.audio_id
         
         # Get metadata from input
         raw_metadata = input_data.get("metadata", {})
@@ -104,8 +104,8 @@ async def update_metadata(input_data: Dict[str, Any]) -> Dict[str, Any]:
         
         return UpdateMetadataOutput(
             success=True,
-            audioId=audio_id,
-            updatedFields=list(update_data.keys()),
+            audio_id=audio_id,
+            updated_fields=list(update_data.keys()),
             metadata=updated_track
         ).model_dump()
         

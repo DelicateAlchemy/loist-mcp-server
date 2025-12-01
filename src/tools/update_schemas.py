@@ -94,7 +94,7 @@ class TrackMetadataUpdate(BaseModel):
 
 class UpdateMetadataInput(BaseModel):
     """Input schema for update_metadata tool."""
-    audioId: str = Field(
+    audio_id: str = Field(
         ...,
         description="UUID of the audio track to update",
         pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
@@ -105,8 +105,8 @@ class UpdateMetadataInput(BaseModel):
 class UpdateMetadataOutput(BaseModel):
     """Success output for update_metadata tool."""
     success: Literal[True]
-    audioId: str = Field(..., description="UUID of the updated track")
-    updatedFields: List[str] = Field(
+    audio_id: str = Field(..., description="UUID of the updated track")
+    updated_fields: List[str] = Field(
         ...,
         description="List of field names that were updated"
     )

@@ -6,7 +6,7 @@ FastMCP best practices and API contract specifications.
 """
 
 from typing import Optional, Dict, List, Literal
-from pydantic import BaseModel, Field, HttpUrl, field_validator
+from pydantic import BaseModel, Field, HttpUrl, field_validator, ConfigDict
 from enum import Enum
 
 
@@ -53,7 +53,7 @@ class AudioSource(BaseModel):
         url: HTTP/HTTPS URL to audio file
         headers: Optional HTTP headers for authentication
         filename: Optional override for filename (inferred from URL if not provided)
-        mimeType: Optional MIME type (detected if not provided)
+        mime_type: Optional MIME type (detected if not provided)
     """
     type: SourceType = Field(
         ...,
@@ -72,7 +72,7 @@ class AudioSource(BaseModel):
         description="Optional filename override",
         max_length=255
     )
-    mimeType: Optional[str] = Field(
+    mime_type: Optional[str] = Field(
         default=None,
         description="Optional MIME type",
         pattern=r"^audio/.*$"
@@ -92,12 +92,12 @@ class ProcessingOptions(BaseModel):
     Processing options for audio ingestion.
 
     Attributes:
-        maxSizeMB: Maximum file size in megabytes (default: 100MB)
+        max_size_mb: Maximum file size in megabytes (default: 100MB)
         timeout: Download timeout in seconds (default: 300s)
-        validateFormat: Whether to validate audio format (default: True)
+        validate_format: Whether to validate audio format (default: True)
         timezone: User's timezone for timestamp interpretation (default: UTC)
     """
-    maxSizeMB: float = Field(
+    max_size_mb: float = Field(
         default=100.0,
         ge=1.0,
         le=500.0,
@@ -109,7 +109,7 @@ class ProcessingOptions(BaseModel):
         le=600,
         description="Download timeout in seconds"
     )
-    validateFormat: bool = Field(
+    validate_format: bool = Field(
         default=True,
         description="Whether to validate audio format"
     )
@@ -131,7 +131,7 @@ class ProcessAudioInput(BaseModel):
                 "url": "https://example.com/audio.mp3"
             },
             "options": {
-                "maxSizeMB": 100
+                "max_size_mb": 100
             }
         }
     """
@@ -153,7 +153,7 @@ class ProcessAudioInput(BaseModel):
                         "url": "https://example.com/song.mp3"
                     },
                     "options": {
-                        "maxSizeMB": 100
+                        "max_size_mb": 100
                     }
                 }
             ]
@@ -167,39 +167,40 @@ class ProcessAudioInput(BaseModel):
 
 class ProductMetadata(BaseModel):
     """Product-level metadata (artist, title, album, etc.)"""
-    Artist: str = Field(default="", description="Artist name")
-    Title: str = Field(default="Untitled", description="Track title")
-    Album: str = Field(default="", description="Album name")
-    MBID: Optional[str] = Field(default=None, description="MusicBrainz ID (null in MVP)")
-    Genre: List[str] = Field(default_factory=list, description="Genre tags")
-    Year: Optional[int] = Field(default=None, ge=1900, le=2100, description="Release year")
+    artist: str = Field(default="", description="Artist name")
+    title: str = Field(default="Untitled", description="Track title")
+    album: Optional[str] = Field(default=None, description="Album name")
+    mbid: Optional[str] = Field(default=None, description="MusicBrainz ID (null in MVP)")
+    genre: List[str] = Field(default_factory=list, description="Genre tags")
+    year: Optional[int] = Field(default=None, ge=1900, le=2100, description="Release year")
 
 
 class FormatMetadata(BaseModel):
     """Technical format metadata (duration, bitrate, etc.)"""
-    Duration: Optional[float] = Field(default=None, ge=0, description="Duration in seconds (may be null if not extracted)")
-    Channels: Optional[int] = Field(default=None, ge=1, le=16, description="Number of audio channels")
-    SampleRate: Optional[int] = Field(default=None, alias="Sample rate", ge=8000, description="Sample rate in Hz")
-    Bitrate: Optional[int] = Field(default=None, ge=0, description="Bitrate in bits per second")
-    Format: str = Field(description="Audio format (e.g., 'MP3', 'FLAC')")
+    duration: Optional[float] = Field(default=None, ge=0, description="Duration in seconds (may be null if not extracted)")
+    channels: Optional[int] = Field(default=None, ge=1, le=16, description="Number of audio channels")
+    sample_rate: Optional[int] = Field(default=None, ge=8000, description="Sample rate in Hz")
+    bitrate: Optional[int] = Field(default=None, ge=0, description="Bitrate in bits per second")
+    format: str = Field(description="Audio format (e.g., 'MP3', 'FLAC')")
 
-    model_config = {
-        "populate_by_name": True  # Allow both "SampleRate" and "Sample rate"
-    }
+    model_config = ConfigDict(
+        populate_by_name=True, # Allow both "SampleRate" and "sample_rate"
+        json_by_alias=True
+    )
 
 
 class AudioMetadata(BaseModel):
     """Complete audio metadata including product and format information"""
-    Product: ProductMetadata
-    Format: FormatMetadata
-    urlEmbedLink: str = Field(description="Embed URL for audio player")
+    product: ProductMetadata
+    format: FormatMetadata
+    url_embed_link: str = Field(description="Embed URL for audio player")
 
 
 class AudioResources(BaseModel):
     """Resource URIs for audio, thumbnail, and waveform"""
-    audio: str = Field(description="URI for audio stream")
-    thumbnail: Optional[str] = Field(default=None, description="URI for thumbnail image")
-    waveform: Optional[str] = Field(default=None, description="URI for waveform (null in MVP)")
+    audio_url: str = Field(description="URI for audio stream")
+    thumbnail_url: Optional[str] = Field(default=None, description="URI for thumbnail image")
+    waveform_url: Optional[str] = Field(default=None, description="URI for waveform (null in MVP)")
 
 
 class ProcessAudioOutput(BaseModel):
@@ -209,48 +210,48 @@ class ProcessAudioOutput(BaseModel):
     Example:
         {
             "success": true,
-            "audioId": "550e8400-e29b-41d4-a716-446655440000",
+            "audio_id": "550e8400-e29b-41d4-a716-446655440000",
             "metadata": {...},
             "resources": {...},
-            "processingTime": 2.45
+            "processing_time": 2.45
         }
     """
     success: Literal[True] = Field(description="Processing success indicator")
-    audioId: str = Field(description="Unique audio track ID (UUID)")
+    audio_id: str = Field(description="Unique audio track ID (UUID)")
     metadata: AudioMetadata = Field(description="Complete audio metadata")
     resources: AudioResources = Field(description="Resource URIs")
-    processingTime: float = Field(ge=0, description="Processing time in seconds")
+    processing_time: float = Field(ge=0, description="Processing time in seconds")
 
     model_config = {
         "json_schema_extra": {
             "examples": [
                 {
                     "success": True,
-                    "audioId": "550e8400-e29b-41d4-a716-446655440000",
+                    "audio_id": "550e8400-e29b-41d4-a716-446655440000",
                     "metadata": {
-                        "Product": {
-                            "Artist": "The Beatles",
-                            "Title": "Hey Jude",
-                            "Album": "Hey Jude",
-                            "MBID": None,
-                            "Genre": ["Rock"],
-                            "Year": 1968
+                        "product": {
+                            "artist": "The Beatles",
+                            "title": "Hey Jude",
+                            "album": "Hey Jude",
+                            "mbid": None,
+                            "genre": ["Rock"],
+                            "year": 1968
                         },
-                        "Format": {
-                            "Duration": 431.0,
-                            "Channels": 2,
-                            "Sample rate": 44100,
-                            "Bitrate": 320000,
-                            "Format": "MP3"
+                        "format": {
+                            "duration": 431.0,
+                            "channels": 2,
+                            "sample_rate": 44100,
+                            "bitrate": 320000,
+                            "format": "MP3"
                         },
-                        "urlEmbedLink": "http://localhost:8080/embed/550e8400-e29b-41d4-a716-446655440000"
+                        "url_embed_link": "http://localhost:8080/embed/550e8400-e29b-41d4-a716-446655440000"
                     },
                     "resources": {
-                        "audio": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/stream",
-                        "thumbnail": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/thumbnail",
-                        "waveform": None
+                        "audio_url": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/stream",
+                        "thumbnail_url": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/thumbnail",
+                        "waveform_url": None
                     },
-                    "processingTime": 2.45
+                    "processing_time": 2.45
                 }
             ]
         }

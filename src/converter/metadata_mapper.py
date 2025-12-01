@@ -86,11 +86,6 @@ def map_metadata_to_ffmpeg_args(
             safe_value = _escape_metadata_value(str(value))
             args.extend(['-metadata', f'{key}={safe_value}'])
 
-    # Add artwork embedding if supported and artwork exists
-    if artwork_path and artwork_path.exists():
-        artwork_args = _get_artwork_ffmpeg_args(target_format, artwork_path)
-        args.extend(artwork_args)
-
     # Format-specific flags
     format_flags = _get_format_specific_flags(target_format)
     args.extend(format_flags)
@@ -112,8 +107,10 @@ def _escape_metadata_value(value: str) -> str:
     Returns:
         Escaped and UTF-8 safe value
     """
+    if value is None:
+        return ""
     if not value:
-        return value
+        return str(value)
 
     # FFmpeg handles UTF-8 well, but we need to be careful with quotes and backslashes
     # Replace backslashes first, then quotes
@@ -132,51 +129,31 @@ def _escape_metadata_value(value: str) -> str:
         return escaped.encode('utf-8', errors='replace').decode('utf-8')
 
 
-def _get_artwork_ffmpeg_args(target_format: str, artwork_path: Path) -> List[str]:
+def _get_artwork_stream_mapping(target_format: str) -> List[str]:
     """
     Get FFmpeg arguments for embedding artwork.
 
     Args:
         target_format: Target audio format
-        artwork_path: Path to artwork image file
 
     Returns:
-        List of FFmpeg arguments for artwork embedding
+        Tuple of (input_args, metadata_args) for FFmpeg
     """
-    args = []
-
-    # Add artwork input
-    args.extend(['-i', str(artwork_path)])
+    metadata_args = []
 
     # Format-specific artwork handling
     if target_format == 'mp3':
         # MP3: Map video stream as attached picture
-        args.extend([
+        metadata_args.extend([
             '-map', '0:a',  # Audio from first input
             '-map', '1:v',  # Video from second input (artwork)
             '-codec:v', 'mjpeg',  # Encode artwork as JPEG
             '-metadata:s:v', 'title=Cover',
             '-metadata:s:v', 'comment=Cover (front)',
         ])
-    elif target_format in ['aac', 'm4a']:
-        # AAC/M4A: iTunes-style cover art
-        args.extend([
-            '-map', '0:a',  # Audio from first input
-            '-map', '1:v',  # Video from second input (artwork)
-            '-codec:v', 'mjpeg',  # Encode artwork as JPEG
-            '-disposition:v', 'attached_pic',  # Mark as attached picture
-        ])
-    elif target_format == 'flac':
-        # FLAC: PICTURE block
-        args.extend([
-            '-map', '0:a',  # Audio from first input
-            '-map', '1:v',  # Video from second input (artwork)
-            '-codec:v', 'mjpeg',  # Encode artwork as JPEG
-            '-disposition:v', 'attached_pic',  # Mark as attached picture
-        ])
-    elif target_format == 'ogg':
-        # OGG: METADATA_BLOCK_PICTURE (player support varies)
-        args.extend([
+    elif target_format in ['aac', 'm4a', 'flac', 'ogg']:
+        # AAC/M4A/FLAC/OGG: iTunes-style cover art
+        metadata_args.extend([
             '-map', '0:a',  # Audio from first input
             '-map', '1:v',  # Video from second input (artwork)
             '-codec:v', 'mjpeg',  # Encode artwork as JPEG
@@ -187,7 +164,7 @@ def _get_artwork_ffmpeg_args(target_format: str, artwork_path: Path) -> List[str
         logger.info(f"Artwork embedding not supported for format: {target_format}")
         return []
 
-    return args
+    return metadata_args
 
 
 def _get_format_specific_flags(target_format: str) -> List[str]:
