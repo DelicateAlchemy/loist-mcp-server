@@ -6,7 +6,7 @@ following best practices from research on read-only APIs.
 """
 
 from typing import Optional, List, Dict, Any, Literal
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 from enum import Enum
 import re
 
@@ -610,14 +610,19 @@ class DeleteAudioInput(BaseModel):
         description="UUID of the audio track to delete",
         pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
         min_length=36,
-        max_length=36,
-        alias="audioId"  # Accept both snake_case and camelCase
+        max_length=36
     )
     # TODO: Add user_id for authorization when auth is implemented
 
-    model_config = ConfigDict(
-        populate_by_name=True,  # Allow both field name and alias
-    )
+    @model_validator(mode='before')
+    @classmethod
+    def handle_field_aliases(cls, values):
+        """Handle both snake_case and camelCase field names for audio_id."""
+        if isinstance(values, dict):
+            # Check for camelCase version and convert to snake_case
+            if 'audioId' in values and 'audio_id' not in values:
+                values['audio_id'] = values.pop('audioId')
+        return values
     # user_id: Optional[str] = Field(
     #     default=None,
     #     description="User ID for authorization (future feature)",
