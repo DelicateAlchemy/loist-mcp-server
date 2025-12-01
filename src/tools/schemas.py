@@ -8,6 +8,7 @@ FastMCP best practices and API contract specifications.
 from typing import Optional, Dict, List, Literal
 from pydantic import BaseModel, Field, HttpUrl, field_validator, ConfigDict
 from enum import Enum
+from pydantic import BaseModel
 
 
 # ============================================================================
@@ -301,6 +302,41 @@ class ProcessAudioError(BaseModel):
             ]
         }
     }
+
+
+# ============================================================================
+# Embed/Player Configuration Schemas
+# ============================================================================
+
+class PlayerConfigUrls(BaseModel):
+    """URLs for different player modes and assets"""
+    embed: str = Field(description="Standard embed player URL")
+    waveform: Optional[str] = Field(default=None, description="Waveform player URL")
+    artwork: Optional[str] = Field(default=None, description="Album artwork URL")
+    waveform_svg: Optional[str] = Field(default=None, description="Waveform SVG URL")
+
+
+class PlayerConfigMetadata(BaseModel):
+    """Simplified metadata for player configuration"""
+    title: str = Field(description="Track title")
+    artist: str = Field(description="Artist name")
+    album: Optional[str] = Field(default=None, description="Album name")
+    duration_seconds: Optional[float] = Field(default=None, ge=0, description="Duration in seconds")
+
+
+class PlayerConfig(BaseModel):
+    """Canonical configuration for audio player embedding
+
+    This type defines the response contract for all embed-related MCP tools.
+    It describes static embed/playback configuration, not runtime UI state.
+    """
+    audio_id: str = Field(description="Unique audio track identifier")
+    mode: Literal["simple", "waveform"] = Field(description="Player mode")
+    device: Literal["desktop", "mobile", "auto"] = Field(description="Target device type")
+    context: Literal["embed", "direct"] = Field(description="Usage context")
+    waveform_available: bool = Field(description="Whether waveform visualization is available")
+    urls: PlayerConfigUrls = Field(description="Player and asset URLs")
+    metadata: PlayerConfigMetadata = Field(description="Track metadata for display")
 
 
 # ============================================================================
