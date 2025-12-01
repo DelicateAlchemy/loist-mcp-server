@@ -1645,27 +1645,55 @@ async def get_embed_url(audio_id: str, template: str = "standard", device: Optio
 
         # Check waveform availability (for waveform template)
         waveform_available = False
+        waveform_svg_url = None
         if template == "waveform":
             try:
                 waveform_context = await get_waveform_context(audio_id)
                 waveform_available = waveform_context.get("waveform_available", False)
+                if waveform_available:
+                    from src.storage.waveform_storage import get_waveform_signed_url
+                    waveform_svg_url = get_waveform_signed_url(audio_id)
             except Exception as e:
                 logger.warning(f"Error checking waveform availability: {e}")
 
+        # Get artwork URL if available
+        artwork_url = None
+        thumbnail_path = metadata.get("thumbnail_gcs_path")
+        if thumbnail_path:
+            try:
+                from src.resources.cache import get_cache
+                cache = get_cache()
+                artwork_url = cache.get(thumbnail_path, url_expiration_minutes=15)
+            except Exception as e:
+                logger.warning(f"Failed to generate signed URL for artwork: {e}")
+
+        # Determine mode based on template
+        mode = "waveform" if template == "waveform" else "simple"
+
+        # Create PlayerConfig response
+        player_config = PlayerConfig(
+            audio_id=audio_id,
+            mode=mode,
+            device=device or "auto",
+            context="embed",  # This tool always provides embed context
+            waveform_available=waveform_available,
+            urls=PlayerConfigUrls(
+                embed=embed_url,
+                waveform=f"{base_url}/waveform" if template == "waveform" else None,
+                artwork=artwork_url,
+                waveform_svg=waveform_svg_url
+            ),
+            metadata=PlayerConfigMetadata(
+                title=metadata.get("title", "Untitled"),
+                artist=metadata.get("artist", "Unknown Artist"),
+                album=metadata.get("album"),
+                duration_seconds=metadata.get("duration", 0)
+            )
+        )
+
         return {
             "success": True,
-            "audio_id": audio_id,
-            "url": embed_url,
-            "template": template,
-            "device": device or "auto",
-            "waveform_available": waveform_available,
-            "waveform_url": f"{base_url}/waveform" if template == "waveform" else None,
-            "metadata": {
-                "title": metadata.get("title", "Untitled"),
-                "artist": metadata.get("artist", "Unknown Artist"),
-                "duration": metadata.get("duration", 0),
-                "format": metadata.get("format", "MP3")
-            }
+            **player_config.model_dump()
         }
 
     except ValidationError as e:
@@ -1776,7 +1804,7 @@ async def check_waveform_availability(audio_id: str) -> dict:
 
         # Validate audio_id exists
         from database import get_audio_metadata_by_id
-        from src.tools.schemas import ProductMetadata, FormatMetadata, AudioMetadata # Import Pydantic schemas
+        from src.tools.schemas import ProductMetadata, FormatMetadata, AudioMetadata, PlayerConfig, PlayerConfigUrls, PlayerConfigMetadata # Import Pydantic schemas
         metadata = get_audio_metadata_by_id(audio_id)
         if not metadata:
             return {
