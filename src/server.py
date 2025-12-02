@@ -38,6 +38,13 @@ from src.exceptions import (
     TimeoutError,
     ValidationError,
 )
+
+# Import PlayerConfig schemas for embed URL responses
+from src.tools.schemas import (
+    PlayerConfig,
+    PlayerConfigUrls,
+    PlayerConfigMetadata,
+)
 from src.fastmcp_setup import (
     create_fastmcp_server,
     log_server_startup_info,
@@ -1645,27 +1652,55 @@ async def get_embed_url(audio_id: str, template: str = "standard", device: Optio
 
         # Check waveform availability (for waveform template)
         waveform_available = False
+        waveform_svg_url = None
         if template == "waveform":
             try:
                 waveform_context = await get_waveform_context(audio_id)
                 waveform_available = waveform_context.get("waveform_available", False)
+                if waveform_available:
+                    from src.storage.waveform_storage import get_waveform_signed_url
+                    waveform_svg_url = get_waveform_signed_url(audio_id)
             except Exception as e:
                 logger.warning(f"Error checking waveform availability: {e}")
 
+        # Get artwork URL if available
+        artwork_url = None
+        thumbnail_path = metadata.get("thumbnail_gcs_path")
+        if thumbnail_path:
+            try:
+                from src.resources.cache import get_cache
+                cache = get_cache()
+                artwork_url = cache.get(thumbnail_path, url_expiration_minutes=15)
+            except Exception as e:
+                logger.warning(f"Failed to generate signed URL for artwork: {e}")
+
+        # Determine mode based on template
+        mode = "waveform" if template == "waveform" else "simple"
+
+        # Create PlayerConfig response
+        player_config = PlayerConfig(
+            audio_id=audio_id,
+            mode=mode,
+            device=device or "auto",
+            context="embed",  # This tool always provides embed context
+            waveform_available=waveform_available,
+            urls=PlayerConfigUrls(
+                embed=embed_url,
+                waveform=f"{base_url}/waveform" if template == "waveform" else None,
+                artwork=artwork_url,
+                waveform_svg=waveform_svg_url
+            ),
+            metadata=PlayerConfigMetadata(
+                title=metadata.get("title", "Untitled"),
+                artist=metadata.get("artist", "Unknown Artist"),
+                album=metadata.get("album"),
+                duration_seconds=metadata.get("duration", 0)
+            )
+        )
+
         return {
             "success": True,
-            "audio_id": audio_id,
-            "url": embed_url,
-            "template": template,
-            "device": device or "auto",
-            "waveform_available": waveform_available,
-            "waveform_url": f"{base_url}/waveform" if template == "waveform" else None,
-            "metadata": {
-                "title": metadata.get("title", "Untitled"),
-                "artist": metadata.get("artist", "Unknown Artist"),
-                "duration": metadata.get("duration", 0),
-                "format": metadata.get("format", "MP3")
-            }
+            **player_config.model_dump()
         }
 
     except ValidationError as e:
@@ -1756,6 +1791,8 @@ async def check_waveform_availability(audio_id: str) -> dict:
     """
     Check if waveform is available for an audio track.
 
+    DEPRECATED: This tool is deprecated. Use get_embed_url instead.
+
     Verifies waveform generation status and provides access information
     if the waveform exists.
 
@@ -1770,68 +1807,13 @@ async def check_waveform_availability(audio_id: str) -> dict:
         >>> if result["waveform_available"]:
         ...     print(f"Waveform generated at: {result['generated_at']}")
     """
-    try:
-        # Get waveform context
-        waveform_context = await get_waveform_context(audio_id)
+    logger.warning(f"check_waveform_availability is deprecated. Use get_embed_url instead for audio_id: {audio_id}")
 
-        # Validate audio_id exists
-        from database import get_audio_metadata_by_id
-        from src.tools.schemas import ProductMetadata, FormatMetadata, AudioMetadata # Import Pydantic schemas
-        metadata = get_audio_metadata_by_id(audio_id)
-        if not metadata:
-            return {
-                "success": False,
-                "error": "RESOURCE_NOT_FOUND",
-                "message": f"Audio track with ID '{audio_id}' was not found",
-                "audio_id": audio_id
-            }
+    # Delegate to get_embed_url with waveform template
+    result = await get_embed_url(audio_id, template="waveform", device="auto")
 
-        # Ensure album is always a string for ProductMetadata
-        album_value = metadata.get("album", "")
-        artist_value = metadata.get("artist", "Unknown Artist")
-        title_value = metadata.get("title", "Untitled")
-
-        return {
-            "success": True,
-            "audio_id": audio_id,
-            "waveform_available": waveform_context.get("waveform_available", False),
-            "waveform_url": waveform_context.get("waveform_url"),
-            "generated_at": waveform_context.get("waveform_generated_at"), # Use waveform_generated_at
-            "metadata": AudioMetadata( # Construct AudioMetadata
-                product=ProductMetadata(
-                    title=title_value,
-                    artist=artist_value,
-                    album=album_value,
-                    mbid=None,
-                    genre=[metadata.get("genre")] if metadata.get("genre") else [],
-                    year=metadata.get("year")
-                ),
-                format=FormatMetadata(
-                    duration=metadata.get("duration", 0),
-                    channels=metadata.get("channels", 2),
-                    sample_rate=metadata.get("sample_rate", 44100),
-                    bitrate=metadata.get("bitrate", 0),
-                    format=metadata.get("format", "MP3")
-                ),
-                url_embed_link=f"{config.embed_base_url}/embed/{audio_id}" # Add embed link
-            ).model_dump() # Convert to dictionary for the response
-        }
-
-    except ValidationError as e:
-        return {
-            "success": False,
-            "error": "VALIDATION_ERROR",
-            "message": f"Invalid audio ID format: {str(e)}",
-            "audio_id": audio_id
-        }
-    except Exception as e:
-        logger.error(f"Error checking waveform availability for {audio_id}: {e}")
-        return {
-            "success": False,
-            "error": "INTERNAL_ERROR",
-            "message": "Failed to check waveform availability",
-            "audio_id": audio_id
-        }
+    # Return the same PlayerConfig shape for consistency
+    return result
 
 @mcp.custom_route("/oembed", methods=["GET"])
 async def oembed_endpoint(request):
@@ -2073,59 +2055,6 @@ async def oembed_discovery(request):
 # ============================================================================
 # HTTP API Routes
 # ============================================================================
-
-
-@mcp.custom_route("/api/tracks/{audioId}", methods=["DELETE"])
-async def delete_track(request):
-    """
-    Delete a track via HTTP API.
-
-    This endpoint provides HTTP access to the delete_audio MCP tool.
-
-    Args:
-        request: Starlette Request object with path parameters
-
-    Returns:
-        JSONResponse: Success (204) or error response
-    """
-    from starlette.responses import JSONResponse
-    from src.tools.query_tools import delete_audio as delete_func
-
-    # Extract audioId from path parameters
-    audioId = request.path_params["audioId"]
-    logger.info(f"DELETE /api/tracks/{audioId} - Delete track request")
-
-    try:
-        # Call the delete function
-        result = await delete_func({"audioId": audioId})
-
-        # Check if it was successful
-        if result.get("success"):
-            logger.info(f"Successfully deleted track: {audioId}")
-            # Return 204 No Content for successful deletion
-            return JSONResponse({}, status_code=204)
-        else:
-            # Return error with appropriate status code
-            error_code = result.get("error", "UNKNOWN_ERROR")
-            if error_code == "RESOURCE_NOT_FOUND":
-                status_code = 404
-            elif error_code == "INVALID_QUERY":
-                status_code = 400
-            else:
-                status_code = 500
-
-            logger.warning(f"Delete failed for track {audioId}: {result.get('message', 'Unknown error')}")
-            return JSONResponse(result, status_code=status_code)
-
-    except Exception as e:
-        logger.exception(f"Unexpected error deleting track {audioId}: {e}")
-        error_response = {
-            "success": False,
-            "error": "INTERNAL_ERROR",
-            "message": "Internal server error during deletion",
-            "details": {"exception_type": type(e).__name__}
-        }
-        return JSONResponse(error_response, status_code=500)
 
 
 @mcp.tool()

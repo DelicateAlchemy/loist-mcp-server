@@ -14,6 +14,36 @@ This document provides a comprehensive list of API endpoints and environment var
 
 ## API Endpoints
 
+### PlayerConfig Response Type
+
+All embed-related MCP tools now return a standardized `PlayerConfig` response shape:
+
+```typescript
+type PlayerConfigUrls = {
+  embed: string;              // Standard embed player URL
+  waveform?: string;          // Waveform player URL (if applicable)
+  artwork?: string;           // Album artwork signed URL
+  waveform_svg?: string;      // Waveform SVG signed URL
+};
+
+type PlayerConfigMetadata = {
+  title: string;
+  artist: string;
+  album?: string;
+  duration_seconds?: number;
+};
+
+type PlayerConfig = {
+  audio_id: string;
+  mode: "simple" | "waveform";
+  device: "desktop" | "mobile" | "auto";
+  context: "embed" | "direct";
+  waveform_available: boolean;
+  urls: PlayerConfigUrls;
+  metadata: PlayerConfigMetadata;
+};
+```
+
 ### Base URL
 
 The base URL depends on your deployment:
@@ -137,27 +167,29 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
 ```json
 {
   "success": true,
-  "audioId": "550e8400-e29b-41d4-a716-446655440000",
+  "audio_id": "550e8400-e29b-41d4-a716-446655440000",
   "metadata": {
-    "Product": {
-      "Title": "Song Title",
-      "Artist": "Artist Name",
-      "Album": "Album Name",
-      "Year": 2024
+    "product": {
+      "title": "Song Title",
+      "artist": "Artist Name",
+      "album": "Album Name",
+      "year": 2024
     },
-    "Format": {
-      "Duration": 180.5,
-      "Channels": 2,
-      "SampleRate": 44100,
-      "Bitrate": 320,
-      "Format": "MP3"
-    }
+    "format": {
+      "duration": 180.5,
+      "channels": 2,
+      "sample_rate": 44100,
+      "bitrate": 320,
+      "format": "MP3"
+    },
+    "url_embed_link": "https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000"
   },
-  "resourceUris": {
-    "stream": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/stream",
-    "metadata": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/metadata",
-    "thumbnail": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/thumbnail"
-  }
+  "resources": {
+    "audio_url": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/stream",
+    "thumbnail_url": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/thumbnail",
+    "waveform_url": null
+  },
+  "processing_time": 2.45
 }
 ```
 
@@ -177,7 +209,7 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
 **Request Body**:
 ```json
 {
-  "audioId": "550e8400-e29b-41d4-a716-446655440000"
+  "audio_id": "550e8400-e29b-41d4-a716-446655440000"
 }
 ```
 
@@ -185,26 +217,27 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
 ```json
 {
   "success": true,
-  "audioId": "550e8400-e29b-41d4-a716-446655440000",
+  "audio_id": "550e8400-e29b-41d4-a716-446655440000",
   "metadata": {
-    "Product": {
-      "Title": "Song Title",
-      "Artist": "Artist Name",
-      "Album": "Album Name",
-      "Year": 2024
+    "product": {
+      "title": "Song Title",
+      "artist": "Artist Name",
+      "album": "Album Name",
+      "year": 2024
     },
-    "Format": {
-      "Duration": 180.5,
-      "Channels": 2,
-      "SampleRate": 44100,
-      "Bitrate": 320,
-      "Format": "MP3"
-    }
+    "format": {
+      "duration": 180.5,
+      "channels": 2,
+      "sample_rate": 44100,
+      "bitrate": 320,
+      "format": "MP3"
+    },
+    "url_embed_link": "https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000"
   },
-  "resourceUris": {
-    "stream": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/stream",
-    "metadata": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/metadata",
-    "thumbnail": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/thumbnail"
+  "resources": {
+    "audio_url": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/stream",
+    "thumbnail_url": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/thumbnail",
+    "waveform_url": null
   }
 }
 ```
@@ -251,19 +284,24 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
   "success": true,
   "results": [
     {
-      "audioId": "550e8400-e29b-41d4-a716-446655440000",
+      "audio_id": "550e8400-e29b-41d4-a716-446655440000",
       "metadata": {
-        "Product": {
-          "Title": "Hey Jude",
-          "Artist": "The Beatles",
-          "Album": "The Beatles",
-          "Year": 1968
+        "product": {
+          "title": "Hey Jude",
+          "artist": "The Beatles",
+          "album": "Hey Jude",
+          "year": 1968
         },
-        "Format": {
-          "Duration": 431.0,
-          "Format": "MP3"
-        }
+        "format": {
+          "duration": 431.0,
+          "channels": 2,
+          "sample_rate": 44100,
+          "bitrate": 320000,
+          "format": "MP3"
+        },
+        "url_embed_link": "https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000"
       },
+      "score": 0.95
       "score": 0.95
     }
   ],
@@ -552,26 +590,32 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
 **Request Body**:
 ```json
 {
-  "audioId": "550e8400-e29b-41d4-a716-446655440000",
+  "audio_id": "550e8400-e29b-41d4-a716-446655440000",
   "template": "waveform",
   "device": "desktop"
 }
 ```
 
-**Response**:
+**Response**: PlayerConfig shape
 ```json
 {
   "success": true,
-  "audioId": "550e8400-e29b-41d4-a716-446655440000",
-  "embedUrl": "https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000/waveform/desktop",
-  "template": "waveform",
+  "audio_id": "550e8400-e29b-41d4-a716-446655440000",
+  "mode": "waveform",
   "device": "desktop",
-  "waveformAvailable": true,
+  "context": "embed",
+  "waveform_available": true,
+  "urls": {
+    "embed": "https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000",
+    "waveform": "https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000/waveform",
+    "artwork": "https://storage.googleapis.com/bucket/artwork.jpg?X-Goog-Signature=...",
+    "waveform_svg": "https://storage.googleapis.com/bucket/waveform.svg?X-Goog-Signature=..."
+  },
   "metadata": {
     "title": "Song Title",
     "artist": "Artist Name",
-    "duration": 180.5,
-    "format": "MP3"
+    "album": "Album Name",
+    "duration_seconds": 180.5
   }
 }
 ```
@@ -616,7 +660,10 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
 
 ---
 
-#### 20. Check Waveform Availability (MCP Tool via HTTP)
+#### 20. Check Waveform Availability (MCP Tool via HTTP) **DEPRECATED**
+
+> **⚠️ DEPRECATED**: This tool is deprecated. Use `get_embed_url` with `template: "waveform"` instead.
+
 ```http
 POST /mcp/tools/check_waveform_availability
 Content-Type: application/json
@@ -626,23 +673,30 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
 **Request Body**:
 ```json
 {
-  "audioId": "550e8400-e29b-41d4-a716-446655440000"
+  "audio_id": "550e8400-e29b-41d4-a716-446655440000"
 }
 ```
 
-**Response**:
+**Response**: Same as `get_embed_url` (PlayerConfig shape)
 ```json
 {
   "success": true,
-  "audioId": "550e8400-e29b-41d4-a716-446655440000",
-  "waveformAvailable": true,
-  "waveformUrl": "https://storage.googleapis.com/...",
-  "generatedAt": "2025-01-15T10:30:00Z",
+  "audio_id": "550e8400-e29b-41d4-a716-446655440000",
+  "mode": "waveform",
+  "device": "auto",
+  "context": "embed",
+  "waveform_available": true,
+  "urls": {
+    "embed": "https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000",
+    "waveform": "https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000/waveform",
+    "artwork": "https://storage.googleapis.com/bucket/artwork.jpg?X-Goog-Signature=...",
+    "waveform_svg": "https://storage.googleapis.com/bucket/waveform.svg?X-Goog-Signature=..."
+  },
   "metadata": {
     "title": "Song Title",
     "artist": "Artist Name",
-    "duration": 180.5,
-    "format": "MP3"
+    "album": "Album Name",
+    "duration_seconds": 180.5
   }
 }
 ```
@@ -846,7 +900,7 @@ export const api = {
     apiRequest({
       method: 'POST',
       path: '/mcp/tools/get_audio_metadata',
-      body: { audioId }
+      body: { audio_id: audioId }
     }),
 
   searchLibrary: (query: string, filters?: any, limit = 20, offset = 0, sortBy = 'relevance', sortOrder = 'desc') =>
@@ -867,7 +921,7 @@ export const api = {
     apiRequest({
       method: 'POST',
       path: '/mcp/tools/get_embed_url',
-      body: { audioId, template, device }
+      body: { audio_id: audioId, template, device }
     }),
 
   listEmbedTemplates: () =>
@@ -881,7 +935,7 @@ export const api = {
     apiRequest({
       method: 'POST',
       path: '/mcp/tools/check_waveform_availability',
-      body: { audioId }
+      body: { audio_id: audioId }
     })
 };
 ```
@@ -1083,7 +1137,7 @@ curl -X POST https://loist.io/mcp/tools/search_library \
 # Get metadata
 curl -X POST https://loist.io/mcp/tools/get_audio_metadata \
   -H "Content-Type: application/json" \
-  -d '{"audioId": "550e8400-e29b-41d4-a716-446655440000"}'
+  -d '{"audio_id": "550e8400-e29b-41d4-a716-446655440000"}'
 ```
 
 ---

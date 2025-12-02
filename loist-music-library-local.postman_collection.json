@@ -642,17 +642,15 @@
 									"    }",
 									"    ",
 									"    pm.test('Process audio result has audio_id', function () {",
-									"        // API returns audioId (camelCase), not audio_id",
-									"        const hasAudioId = toolResult.hasOwnProperty('audioId') || toolResult.hasOwnProperty('audio_id');",
-									"        pm.expect(hasAudioId).to.be.true;",
+									"        // API returns snake_case: audio_id (standardized naming convention)",
+									"        pm.expect(toolResult).to.have.property('audio_id');",
 									"    });",
 									"    ",
-									"    // Chain: Store audio_id for subsequent requests (handle both naming conventions)",
-									"    const audioIdValue = toolResult.audioId || toolResult.audio_id;",
-									"    if (toolResult && audioIdValue) {",
-									"        pm.environment.set('audio_id', audioIdValue);",
-									"        pm.environment.set('last_processed_audio_id', audioIdValue);",
-									"        console.log('\u2705 Stored audio_id for chaining:', audioIdValue);",
+									"    // Chain: Store audio_id for subsequent requests",
+									"    if (toolResult && toolResult.audio_id) {",
+									"        pm.environment.set('audio_id', toolResult.audio_id);",
+									"        pm.environment.set('last_processed_audio_id', toolResult.audio_id);",
+									"        console.log('\u2705 Stored audio_id for chaining:', toolResult.audio_id);",
 									"    }",
 									"    ",
 									"    // Log result summary",
@@ -1032,7 +1030,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"update_metadata\",\n    \"arguments\": {\n      \"audio_id\": \"{{audio_id}}\",\n      \"metadata\": {\n        \"artist\": \"Updated Artist Name\",\n        \"year\": 2024\n      }\n    }\n  }\n}"
+							"raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"update_metadata\",\n    \"arguments\": {\n      \"audio_id\": \"{{audio_id}}\",\n      \"metadata\": {\n        \"artist\": \"The Beatles\",\n        \"year\": 1968\n      }\n    }\n  }\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/mcp",
@@ -1301,148 +1299,6 @@
 					"response": []
 				},
 				{
-					"name": "Delete Audio",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							},
-							{
-								"key": "Accept",
-								"value": "application/json, text/event-stream"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"delete_audio\",\n    \"arguments\": {\n      \"audio_id\": \"{{audio_id}}\"\n    }\n  }\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/mcp",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"mcp"
-							]
-						},
-						"description": "Permanently delete an audio track from the database. GCS files are left in place for lifecycle management."
-					},
-					"event": [
-						{
-							"listen": "prerequest",
-							"script": {
-								"type": "text/javascript",
-								"exec": [
-									"// Verify audio_id is available",
-									"const audioId = pm.environment.get('audio_id');",
-									"if (!audioId) {",
-									"    console.warn('\u26a0\ufe0f No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
-									"    console.warn('\u26a0\ufe0f DELETE will fail without a valid audio_id.');",
-									"}"
-								]
-							}
-						},
-						{
-							"listen": "test",
-							"script": {
-								"type": "text/javascript",
-								"exec": [
-									"// Parse JSON-RPC response",
-									"let responseBody = pm.response.text();",
-									"let jsonResponse = null;",
-									"",
-									"if (responseBody.includes('data: ')) {",
-									"    const dataLines = responseBody.split('\\n').filter(line => line.startsWith('data: '));",
-									"    if (dataLines.length > 0) {",
-									"        jsonResponse = JSON.parse(dataLines[dataLines.length - 1].replace('data: ', '').trim());",
-									"    }",
-									"} else {",
-									"    jsonResponse = pm.response.json();",
-									"}",
-									"",
-									"pm.test('Status code is 200', function () {",
-									"    pm.response.to.have.status(200);",
-									"});",
-									"",
-									"pm.test('Response follows JSON-RPC 2.0 format', function () {",
-									"    pm.expect(jsonResponse).to.have.property('jsonrpc', '2.0');",
-									"    pm.expect(jsonResponse).to.have.property('id');",
-									"});",
-									"",
-									"// \u2705 delete_audio is NOW IMPLEMENTED (hard delete with GCS cleanup)",
-									"// Removes: DB record, GCS audio file, waveform SVG, thumbnails",
-									"// This test expects an error until the feature is built",
-									"",
-									"// Check for FastMCP tool error format (isError: true in result)",
-									"const isFastMCPError = jsonResponse.result && jsonResponse.result.isError === true;",
-									"const fastMCPErrorMsg = isFastMCPError && jsonResponse.result.content && jsonResponse.result.content[0] ? jsonResponse.result.content[0].text : '';",
-									"",
-									"if (jsonResponse.error || isFastMCPError) {",
-									"    const errorMsg = jsonResponse.error ? jsonResponse.error.message : fastMCPErrorMsg;",
-									"    console.log('Error (expected - delete not yet implemented):', errorMsg);",
-									"    // Expect errors - feature not yet implemented",
-									"    const isNotImplemented = errorMsg && (",
-									"        errorMsg.includes('cannot import') ||",
-									"        errorMsg.includes('not implemented') ||",
-									"        errorMsg.includes('not found') ||",
-									"        errorMsg.includes('Error calling tool')",
-									"    );",
-									"    pm.test('Delete tool returns expected error (not yet implemented)', function () {",
-									"        // This is EXPECTED to fail until delete functionality is built",
-									"        pm.expect(isNotImplemented).to.be.true;",
-									"    });",
-									"} else {",
-									"    pm.test('Response has result', function () {",
-									"        pm.expect(jsonResponse).to.have.property('result');",
-									"    });",
-									"    ",
-									"    // Extract tool result",
-									"    const result = jsonResponse.result;",
-									"    let toolResult = result;",
-									"    ",
-									"    if (result && result.content && Array.isArray(result.content)) {",
-									"        const textContent = result.content.find(c => c.type === 'text');",
-									"        if (textContent && textContent.text) {",
-									"            try {",
-									"                toolResult = JSON.parse(textContent.text);",
-									"            } catch (e) {",
-									"                toolResult = textContent.text;",
-									"            }",
-									"        }",
-									"    }",
-									"    ",
-									"    pm.test('Delete result indicates success (if implemented)', function () {",
-									"        // NOTE: This will only pass once delete functionality is built",
-									"        const isSuccess = toolResult.success === true || ",
-									"                          toolResult.deleted === true || ",
-									"                          toolResult.status === 'deleted' ||",
-									"                          (typeof toolResult === 'string' && toolResult.toLowerCase().includes('deleted'));",
-									"        // Skip this check if toolResult indicates an error",
-									"        if (toolResult.error || toolResult.success === false) {",
-									"            console.log('\u26a0\ufe0f Delete not yet implemented - skipping success check');",
-									"            pm.expect(true).to.be.true; // Pass anyway",
-									"        } else {",
-									"            pm.expect(isSuccess).to.be.true;",
-									"        }",
-									"    });",
-									"    ",
-									"    console.log('Delete Result:', JSON.stringify(toolResult, null, 2));",
-									"    ",
-									"    // Clear the audio_id since it's been deleted",
-									"    if (toolResult.success || toolResult.deleted) {",
-									"        console.log('\u2705 Audio deleted. Clearing audio_id from environment.');",
-									"        pm.environment.unset('audio_id');",
-									"    }",
-									"}"
-								]
-							}
-						}
-					],
-					"response": []
-				},
-				{
 					"name": "Get Embed URL",
 					"request": {
 						"method": "POST",
@@ -1537,22 +1393,27 @@
 									"        }",
 									"    }",
 									"    ",
-									"    pm.test('Embed URL result has url field', function () {",
+									"    pm.test('Embed URL result has PlayerConfig structure', function () {",
 									"        pm.expect(toolResult).to.be.an('object');",
-									"        pm.expect(toolResult).to.have.property('url');",
 									"        pm.expect(toolResult).to.have.property('success');",
 									"        pm.expect(toolResult).to.have.property('audio_id');",
+									"        pm.expect(toolResult).to.have.property('mode');",
+									"        pm.expect(toolResult).to.have.property('device');",
+									"        pm.expect(toolResult).to.have.property('context');",
+									"        pm.expect(toolResult).to.have.property('waveform_available');",
+									"        pm.expect(toolResult).to.have.property('urls');",
+									"        pm.expect(toolResult).to.have.property('metadata');",
 									"    });",
 									"    ",
 									"    pm.test('Embed URL is valid format', function () {",
-									"        const embedUrl = toolResult.url || toolResult.embed_url || toolResult.embedUrl;",
+									"        const embedUrl = toolResult.urls && toolResult.urls.embed;",
 									"        if (embedUrl) {",
 									"            pm.expect(embedUrl).to.match(/^https?:\\/\\//);",
 									"        }",
 									"    });",
 									"    ",
 									"    // Store embed_url for oEmbed testing",
-									"    const embedUrl = toolResult.url || toolResult.embed_url || toolResult.embedUrl;",
+									"    const embedUrl = toolResult.urls && toolResult.urls.embed;",
 									"    if (embedUrl) {",
 									"        pm.environment.set('embed_url', embedUrl);",
 									"        console.log('\u2705 Stored embed_url for oEmbed testing:', embedUrl);",
@@ -1661,16 +1522,21 @@
 									"        }",
 									"    }",
 									"    ",
-									"    pm.test('Waveform embed URL has url field', function () {",
+									"    pm.test('Waveform embed URL has PlayerConfig structure', function () {",
 									"        pm.expect(toolResult).to.be.an('object');",
-									"        pm.expect(toolResult).to.have.property('url');",
 									"        pm.expect(toolResult).to.have.property('success');",
-									"        pm.expect(toolResult).to.have.property('template', 'waveform');",
+									"        pm.expect(toolResult).to.have.property('audio_id');",
+									"        pm.expect(toolResult).to.have.property('mode', 'waveform');",
+									"        pm.expect(toolResult).to.have.property('device', 'desktop');",
+									"        pm.expect(toolResult).to.have.property('context', 'embed');",
+									"        pm.expect(toolResult).to.have.property('waveform_available');",
+									"        pm.expect(toolResult).to.have.property('urls');",
+									"        pm.expect(toolResult).to.have.property('metadata');",
 									"    });",
 									"    ",
 									"    pm.test('Waveform URL includes waveform path', function () {",
-									"        const embedUrl = toolResult.url || toolResult.embed_url || toolResult.embedUrl || '';",
-									"        // Waveform template URLs typically include 'waveform' in path",
+									"        const embedUrl = toolResult.urls && toolResult.urls.embed || '';",
+									"        // Waveform mode URLs include 'waveform' in path",
 									"        pm.expect(embedUrl.toLowerCase()).to.include('waveform');",
 									"    });",
 									"    ",
@@ -2022,15 +1888,16 @@
 									"        }",
 									"    }",
 									"    ",
-									"    pm.test('Waveform availability has expected fields', function () {",
+									"    pm.test('Waveform availability has PlayerConfig structure', function () {",
 									"        pm.expect(toolResult).to.be.an('object');",
-									"        // API returns success/error response - waveform availability may fail due to missing data",
 									"        pm.expect(toolResult).to.have.property('success');",
 									"        pm.expect(toolResult).to.have.property('audio_id');",
-									"        // If successful, should have waveform_available field",
-									"        if (toolResult.success) {",
-									"            pm.expect(toolResult).to.have.property('waveform_available');",
-									"        }",
+									"        pm.expect(toolResult).to.have.property('mode', 'waveform');",
+									"        pm.expect(toolResult).to.have.property('device', 'auto');",
+									"        pm.expect(toolResult).to.have.property('context', 'embed');",
+									"        pm.expect(toolResult).to.have.property('waveform_available');",
+									"        pm.expect(toolResult).to.have.property('urls');",
+									"        pm.expect(toolResult).to.have.property('metadata');",
 									"    });",
 									"    ",
 									"    // Log waveform status",
@@ -2041,6 +1908,130 @@
 									"    // Store waveform status for reference",
 									"    if (typeof isAvailable === 'boolean') {",
 									"        pm.environment.set('waveform_available', isAvailable.toString());",
+									"    }",
+									"}"
+								]
+							}
+						}
+					],
+					"response": []
+				},
+				{
+					"name": "Delete Audio",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json, text/event-stream"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"delete_audio\",\n    \"arguments\": {\n      \"audio_id\": \"{{audio_id}}\"\n    }\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/mcp",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"mcp"
+							]
+						},
+						"description": "Permanently delete an audio track from the database. GCS files are left in place for lifecycle management."
+					},
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"// Verify audio_id is available",
+									"const audioId = pm.environment.get('audio_id');",
+									"if (!audioId) {",
+									"    console.warn('\u26a0\ufe0f No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
+									"    console.warn('\u26a0\ufe0f DELETE will fail without a valid audio_id.');",
+									"}"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"// Parse JSON-RPC response",
+									"let responseBody = pm.response.text();",
+									"let jsonResponse = null;",
+									"",
+									"if (responseBody.includes('data: ')) {",
+									"    const dataLines = responseBody.split('\\n').filter(line => line.startsWith('data: '));",
+									"    if (dataLines.length > 0) {",
+									"        jsonResponse = JSON.parse(dataLines[dataLines.length - 1].replace('data: ', '').trim());",
+									"    }",
+									"} else {",
+									"    jsonResponse = pm.response.json();",
+									"}",
+									"",
+									"pm.test('Status code is 200', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response follows JSON-RPC 2.0 format', function () {",
+									"    pm.expect(jsonResponse).to.have.property('jsonrpc', '2.0');",
+									"    pm.expect(jsonResponse).to.have.property('id');",
+									"});",
+									"",
+									"// \u2705 delete_audio is NOW IMPLEMENTED (hard delete with GCS cleanup)",
+									"// Removes: DB record, GCS audio file, waveform SVG, thumbnails",
+									"",
+									"// Check for FastMCP tool error format (isError: true in result)",
+									"const isFastMCPError = jsonResponse.result && jsonResponse.result.isError === true;",
+									"const fastMCPErrorMsg = isFastMCPError && jsonResponse.result.content && jsonResponse.result.content[0] ? jsonResponse.result.content[0].text : '';",
+									"",
+									"if (jsonResponse.error || isFastMCPError) {",
+									"    const errorMsg = jsonResponse.error ? jsonResponse.error.message : fastMCPErrorMsg;",
+									"    console.log('Error:', errorMsg);",
+									"    pm.test('Delete tool returns expected error', function () {",
+									"        pm.expect(true).to.be.false; // Force fail if error is returned unexpectedly",
+									"    });",
+									"} else {",
+									"    pm.test('Response has result', function () {",
+									"        pm.expect(jsonResponse).to.have.property('result');",
+									"    });",
+									"    ",
+									"    // Extract tool result",
+									"    const result = jsonResponse.result;",
+									"    let toolResult = result;",
+									"    ",
+									"    if (result && result.content && Array.isArray(result.content)) {",
+									"        const textContent = result.content.find(c => c.type === 'text');",
+									"        if (textContent && textContent.text) {",
+									"            try {",
+									"                toolResult = JSON.parse(textContent.text);",
+									"            } catch (e) {",
+									"                toolResult = textContent.text;",
+									"            }",
+									"        }",
+									"    }",
+									"    ",
+									"    pm.test('Delete result indicates success', function () {",
+									"        pm.expect(toolResult.success).to.be.true;",
+									"        pm.expect(toolResult.deleted).to.be.true;",
+									"        pm.expect(toolResult).to.have.property('audio_id');",
+									"    });",
+									"    ",
+									"    console.log('Delete Result:', JSON.stringify(toolResult, null, 2));",
+									"    ",
+									"    // Clear the audio_id since it's been deleted",
+									"    if (toolResult.success || toolResult.deleted) {",
+									"        console.log('\u2705 Audio deleted. Clearing audio_id from environment.');",
+									"        pm.environment.unset('audio_id');",
 									"    }",
 									"}"
 								]
@@ -2328,6 +2319,174 @@
 					"response": []
 				},
 				{
+					"name": "Get Audio Stream (HTTP API)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/tracks/{{audio_id}}/stream",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"tracks",
+								"{{audio_id}}",
+								"stream"
+							]
+						},
+						"description": "Get a signed GCS URL for streaming audio file via HTTP API. Returns a 302 redirect to the signed URL. Supports HTTP Range requests."
+					},
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"const audioId = pm.environment.get('audio_id');",
+									"if (!audioId) {",
+									"    console.warn('\u26a0\ufe0f No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
+									"}"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status code is 302 Redirect', function () {",
+									"    pm.response.to.have.status(302);",
+									"});",
+									"",
+									"pm.test('Location header points to a signed GCS URL', function () {",
+									"    const location = pm.response.headers.get('Location');",
+									"    pm.expect(location).to.match(/^https:\\/\\/storage\\.googleapis\\.com\\/.*sig=/);",
+									"});",
+									"",
+									"console.log('Audio Stream Redirect URL:', pm.response.headers.get('Location'));"
+								]
+							}
+						}
+					],
+					"response": []
+				},
+				{
+					"name": "Get Audio Stream (HTTP API)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/tracks/{{audio_id}}/stream",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"tracks",
+								"{{audio_id}}",
+								"stream"
+							]
+						},
+						"description": "Get a signed GCS URL for streaming audio file via HTTP API. Returns a 302 redirect to the signed URL. Supports HTTP Range requests."
+					},
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"const audioId = pm.environment.get('audio_id');",
+									"if (!audioId) {",
+									"    console.warn('\u26a0\ufe0f No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
+									"}"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status code is 302 Redirect', function () {",
+									"    pm.response.to.have.status(302);",
+									"});",
+									"",
+									"pm.test('Location header points to a signed GCS URL', function () {",
+									"    const location = pm.response.headers.get('Location');",
+									"    pm.expect(location).to.match(/^https:\\/\\/storage\\.googleapis\\.com\\/.*sig=/);",
+									"});",
+									"",
+									"console.log('Audio Stream Redirect URL:', pm.response.headers.get('Location'));"
+								]
+							}
+						}
+					],
+					"response": []
+				},
+				{
+					"name": "Get Thumbnail (HTTP API)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/tracks/{{audio_id}}/thumbnail",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"tracks",
+								"{{audio_id}}",
+								"thumbnail"
+							]
+						},
+						"description": "Get a signed GCS URL for a track thumbnail via HTTP API. Returns a 302 redirect to the signed URL. Returns 404 if no thumbnail is available."
+					},
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"const audioId = pm.environment.get('audio_id');",
+									"if (!audioId) {",
+									"    console.warn('\u26a0\ufe0f No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
+									"}"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status code is 302 Redirect', function () {",
+									"    const status = pm.response.code;",
+									"    // Allow 404 if no thumbnail is present for the audio_id",
+									"    pm.expect(status).to.be.oneOf([302, 404]);",
+									"});",
+									"",
+									"if (pm.response.code === 302) {",
+									"    pm.test('Location header points to a signed GCS URL', function () {",
+									"        const location = pm.response.headers.get('Location');",
+									"        pm.expect(location).to.match(/^https:\\/\\/storage\\.googleapis\\.com\\/.*sig=/);",
+									"    });",
+									"    console.log('Thumbnail Redirect URL:', pm.response.headers.get('Location'));",
+									"} else if (pm.response.code === 404) {",
+									"    pm.test('Thumbnail not found response', function () {",
+									"        pm.expect(pm.response.json().success).to.be.false;",
+									"        pm.expect(pm.response.json().message).to.include('Thumbnail not available');",
+									"    });",
+									"    console.log('Thumbnail not available for this audio ID.');",
+									"}"
+								]
+							}
+						}
+					],
+					"response": []
+				},
+				{
 					"name": "Download Audio Track - MP3",
 					"request": {
 						"method": "GET",
@@ -2566,6 +2725,45 @@
 						},
 						"description": "Delete an audio track via HTTP API. Removes database record and cleans up associated GCS files (audio, thumbnail, waveform). Returns 204 No Content on success."
 					},
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"const audioId = pm.environment.get('audio_id');",
+									"if (!audioId) {",
+									"    console.warn('\u26a0\ufe0f No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
+									"}"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status code is 204 No Content for successful deletion', function () {",
+									"    const status = pm.response.code;",
+									"    pm.expect(status).to.be.oneOf([204, 404]); // Allow 404 if already deleted or not found",
+									"});",
+									"",
+									"if (pm.response.code === 204) {",
+									"    console.log('\u2705 Audio track deleted successfully.');",
+									"    pm.environment.unset('audio_id'); // Clear audio_id as it's been deleted",
+									"} else if (pm.response.code === 404) {",
+									"    console.log('\ud83d\udea8 Expected 404: Audio track not found (might have been deleted already or never existed).');",
+									"    pm.expect(pm.response.json().success).to.be.false;",
+									"    pm.expect(pm.response.json().message).to.include('not found');",
+									"} else {",
+									"    pm.test('Deletion failed with unexpected status', function () {",
+									"        pm.expect.fail('Expected 204 or 404, but got ' + pm.response.code);",
+									"    });",
+									"}"
+								]
+							}
+						}
+					],
 					"response": []
 				},
 				{
