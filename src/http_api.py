@@ -23,8 +23,7 @@ from src.error_utils import handle_tool_error
 
 # Import the MCP tools and resources we'll be wrapping
 from src.services import audio_service
-from src.resources.audio_stream import get_audio_stream_resource
-from src.resources.thumbnail import get_thumbnail_resource
+from src.services import streaming_service
 
 # Import converter and storage modules for download endpoint
 from src.converter import (
@@ -152,40 +151,50 @@ def register_http_api_routes(mcp: FastMCP) -> None:
 
 
     @mcp.custom_route("/api/tracks/{audioId}/stream", methods=["GET"])
-    async def get_track_stream(request: Request) -> JSONResponse:
+    async def get_track_stream(request: Request) -> Response:
         """
         Get signed streaming URL for an audio track.
+        Redirects the client to a signed GCS URL for efficient streaming.
         """
         audio_id = request.path_params.get("audioId")
-        if not audio_id:
-            return JSONResponse({"success": False, "message": "Audio ID is required"}, status_code=400)
         try:
-            uri = f"music-library://audio/{audio_id}/stream"
-            result = await get_audio_stream_resource(uri)
-            # This logic is flawed and will be fixed in the next refactoring phase
-            if not result.get("uri"):
-                 return JSONResponse({"success": False, "message": "Stream not available"}, status_code=404)
-            return JSONResponse({"success": True, "url": result["uri"], "mimeType": result["mimeType"]}, status_code=200)
+            uuid.UUID(audio_id)
+        except (ValueError, AttributeError):
+            return JSONResponse({"success": False, "message": "Invalid audio ID format"}, status_code=400)
+
+        try:
+            details = await streaming_service.get_audio_stream_details(audio_id)
+            # Redirect to the signed URL. The client's browser/player will handle the stream.
+            # GCS correctly handles HTTP Range requests on signed URLs.
+            return RedirectResponse(url=details["signed_url"], status_code=302)
+        except ResourceNotFoundError as e:
+            return JSONResponse({"success": False, "message": str(e)}, status_code=404)
         except Exception as e:
-            return JSONResponse(handle_tool_error(e, "get_audio_stream"), status_code=500)
+            logger.exception(f"Failed to get stream URL for {audio_id}: {e}")
+            return JSONResponse({"success": False, "message": "Internal server error"}, status_code=500)
+
 
     @mcp.custom_route("/api/tracks/{audioId}/thumbnail", methods=["GET"])
-    async def get_track_thumbnail(request: Request) -> JSONResponse:
+    async def get_track_thumbnail(request: Request) -> Response:
         """
         Get signed URL for track thumbnail/artwork.
+        Redirects the client to a signed GCS URL.
         """
         audio_id = request.path_params.get("audioId")
-        if not audio_id:
-            return JSONResponse({"success": False, "message": "Audio ID is required"}, status_code=400)
         try:
-            uri = f"music-library://audio/{audio_id}/thumbnail"
-            result = await get_thumbnail_resource(uri)
-            # This logic is flawed and will be fixed in the next refactoring phase
-            if not result.get("uri"):
-                 return JSONResponse({"success": False, "message": "Thumbnail not available"}, status_code=404)
-            return JSONResponse({"success": True, "url": result["uri"], "mimeType": result["mimeType"]}, status_code=200)
+            uuid.UUID(audio_id)
+        except (ValueError, AttributeError):
+            return JSONResponse({"success": False, "message": "Invalid audio ID format"}, status_code=400)
+
+        try:
+            details = await streaming_service.get_thumbnail_details(audio_id)
+            return RedirectResponse(url=details["signed_url"], status_code=302)
+        except ResourceNotFoundError as e:
+            return JSONResponse({"success": False, "message": str(e)}, status_code=404)
         except Exception as e:
-            return JSONResponse(handle_tool_error(e, "get_thumbnail"), status_code=500)
+            logger.exception(f"Failed to get thumbnail URL for {audio_id}: {e}")
+            return JSONResponse({"success": False, "message": "Internal server error"}, status_code=500)
+
 
     @mcp.custom_route("/api/tracks/{audioId}/download", methods=["GET"])
     async def download_audio(request: Request) -> Response:
