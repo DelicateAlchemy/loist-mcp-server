@@ -413,7 +413,7 @@ class SearchLibraryInput(BaseModel):
 # ============================================================================
 
 # Reuse Product and Format metadata from process_audio schemas
-from .schemas import ProductMetadata, FormatMetadata, AudioMetadata, AudioResources
+from src.schemas.metadata import ProductMetadata, FormatMetadata, AudioMetadata, AudioResources
 
 
 class GetAudioMetadataOutput(BaseModel):
