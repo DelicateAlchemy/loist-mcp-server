@@ -22,8 +22,7 @@ from src.exceptions import ValidationError, ResourceNotFoundError
 from src.error_utils import handle_tool_error
 
 # Import the MCP tools and resources we'll be wrapping
-from src.tools.query_tools import get_audio_metadata as get_metadata_func
-from src.tools.query_tools import search_library as search_func
+from src.services import audio_service
 from src.resources.audio_stream import get_audio_stream_resource
 from src.resources.thumbnail import get_thumbnail_resource
 
@@ -50,21 +49,50 @@ def register_http_api_routes(mcp: FastMCP) -> None:
     """
 
     @mcp.custom_route("/api/tracks/{audioId}", methods=["GET"])
-    async def get_track(request: Request) -> JSONResponse:
+    async def get_track(request: Request) -> Response:
         """
         Get metadata for a specific audio track.
         """
         audio_id = request.path_params.get("audioId")
-        if not audio_id:
-            return JSONResponse({"success": False, "message": "Audio ID is required"}, status_code=400)
         try:
-            result = await get_metadata_func({"audio_id": audio_id})
-            if not result.get("success", False):
-                status_code = 404 if "not found" in result.get("message", "").lower() else 500
-                return JSONResponse(result, status_code=status_code)
-            return JSONResponse(result, status_code=200)
+            uuid.UUID(audio_id)
+        except (ValueError, AttributeError):
+            return JSONResponse({"success": False, "message": "Invalid audio ID format"}, status_code=400)
+
+        try:
+            service_result = await audio_service.get_audio_metadata(audio_id)
+            
+            # The service returns a dict with Pydantic models, need to convert to JSON-serializable
+            response_data = {
+                "success": True,
+                "audio_id": service_result["audio_id"],
+                "metadata": service_result["metadata"].model_dump(),
+                "resources": service_result["resources"].model_dump(),
+            }
+
+            # Create a JSON response to calculate ETag and then set headers
+            response = JSONResponse(response_data)
+            
+            # ETag based on content hash
+            import hashlib
+            etag = hashlib.md5(response.body).hexdigest()
+            response.headers["ETag"] = f'"{etag}"'
+            
+            # Cache for 1 hour, but require re-validation
+            response.headers["Cache-Control"] = "public, max-age=3600, must-revalidate"
+
+            # Check for If-None-Match header from client
+            if request.headers.get("if-none-match") == f'"{etag}"':
+                return Response(status_code=304)
+
+            return response
+
+        except ResourceNotFoundError as e:
+            return JSONResponse({"success": False, "message": str(e)}, status_code=404)
         except Exception as e:
-            return JSONResponse(handle_tool_error(e, "get_audio_metadata"), status_code=500)
+            logger.exception(f"Unexpected error getting track {audio_id}: {e}")
+            return JSONResponse({"success": False, "message": "Internal server error"}, status_code=500)
+
 
     @mcp.custom_route("/api/search", methods=["GET"])
     async def search_tracks(request: Request) -> JSONResponse:
@@ -74,23 +102,54 @@ def register_http_api_routes(mcp: FastMCP) -> None:
         query = request.query_params.get("q")
         if not query or not query.strip():
             return JSONResponse({"success": False, "message": "Search query (q) is required"}, status_code=400)
+
         try:
             limit = int(request.query_params.get("limit", "20"))
             offset = int(request.query_params.get("offset", "0"))
-            input_data = {
-                "query": query.strip(),
-                "filters": {"genre": [request.query_params.get("genre")]} if request.query_params.get("genre") else None,
-                "limit": max(1, min(limit, 100)),
-                "offset": max(0, offset),
-                "sortBy": request.query_params.get("sortBy", "relevance"),
-                "sortOrder": request.query_params.get("sortOrder", "desc"),
-            }
-            result = await search_func(input_data)
-            if not result.get("success", False):
-                return JSONResponse(result, status_code=500)
-            return JSONResponse(result, status_code=200)
+            limit = max(1, min(limit, 100))
+            offset = max(0, offset)
+        except ValueError:
+            return JSONResponse({"success": False, "message": "Invalid limit or offset"}, status_code=400)
+
+        # Basic filter implementation, can be expanded
+        filters = {}
+        if genre := request.query_params.get("genre"):
+            filters["genre"] = [g.strip() for g in genre.split(",")]
+
+        try:
+            service_result = await audio_service.search_audio_library(
+                query=query.strip(), limit=limit, offset=offset, filters=filters
+            )
+            
+            # Convert Pydantic models to dicts for JSON response
+            service_result['results'] = [r.model_dump() for r in service_result['results']]
+            if service_result['facets']:
+                service_result['facets'] = service_result['facets'].model_dump()
+
+            response_data = {"success": True, **service_result}
+            response = JSONResponse(response_data)
+
+            # Add pagination headers
+            response.headers['X-Total-Count'] = str(service_result['total'])
+            
+            # Build Link header
+            base_url = str(request.url).split('?')[0] + f"?q={query.strip()}"
+            links = []
+            if service_result['has_more']:
+                next_offset = offset + limit
+                links.append(f'<{base_url}&limit={limit}&offset={next_offset}>; rel="next"')
+            if offset > 0:
+                prev_offset = max(0, offset - limit)
+                links.append(f'<{base_url}&limit={limit}&offset={prev_offset}>; rel="prev"')
+            if links:
+                response.headers['Link'] = ", ".join(links)
+
+            return response
+
         except Exception as e:
-            return JSONResponse(handle_tool_error(e, "search_library"), status_code=500)
+            logger.exception(f"Search failed for query '{query}': {e}")
+            return JSONResponse({"success": False, "message": "An internal error occurred during search."}, status_code=500)
+
 
     @mcp.custom_route("/api/tracks/{audioId}/stream", methods=["GET"])
     async def get_track_stream(request: Request) -> JSONResponse:
