@@ -2057,59 +2057,6 @@ async def oembed_discovery(request):
 # ============================================================================
 
 
-@mcp.custom_route("/api/tracks/{audioId}", methods=["DELETE"])
-async def delete_track(request):
-    """
-    Delete a track via HTTP API.
-
-    This endpoint provides HTTP access to the delete_audio MCP tool.
-
-    Args:
-        request: Starlette Request object with path parameters
-
-    Returns:
-        JSONResponse: Success (204) or error response
-    """
-    from starlette.responses import JSONResponse
-    from src.tools.query_tools import delete_audio as delete_func
-
-    # Extract audioId from path parameters
-    audioId = request.path_params["audioId"]
-    logger.info(f"DELETE /api/tracks/{audioId} - Delete track request")
-
-    try:
-        # Call the delete function
-        result = await delete_func({"audio_id": audioId})
-
-        # Check if it was successful
-        if result.get("success"):
-            logger.info(f"Successfully deleted track: {audioId}")
-            # Return 204 No Content for successful deletion
-            return JSONResponse({}, status_code=204)
-        else:
-            # Return error with appropriate status code
-            error_code = result.get("error", "UNKNOWN_ERROR")
-            if error_code == "RESOURCE_NOT_FOUND":
-                status_code = 404
-            elif error_code == "INVALID_QUERY":
-                status_code = 400
-            else:
-                status_code = 500
-
-            logger.warning(f"Delete failed for track {audioId}: {result.get('message', 'Unknown error')}")
-            return JSONResponse(result, status_code=status_code)
-
-    except Exception as e:
-        logger.exception(f"Unexpected error deleting track {audioId}: {e}")
-        error_response = {
-            "success": False,
-            "error": "INTERNAL_ERROR",
-            "message": "Internal server error during deletion",
-            "details": {"exception_type": type(e).__name__}
-        }
-        return JSONResponse(error_response, status_code=500)
-
-
 @mcp.tool()
 def download_audio(input_data: dict) -> dict:
     """

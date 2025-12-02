@@ -264,4 +264,25 @@ def register_http_api_routes(mcp: FastMCP) -> None:
             return JSONResponse({"success": False, "message": "Unexpected download error"}, status_code=500)
 
 
+    @mcp.custom_route("/api/tracks/{audioId}", methods=["DELETE"])
+    async def delete_track(request: Request) -> Response:
+        """
+        Delete a track via HTTP API.
+        """
+        audio_id = request.path_params.get("audioId")
+        try:
+            uuid.UUID(audio_id)
+        except (ValueError, AttributeError):
+            return JSONResponse({"success": False, "message": "Invalid audio ID format"}, status_code=400)
+
+        try:
+            await audio_service.delete_audio_track_and_files(audio_id)
+            return Response(status_code=204)
+        except ResourceNotFoundError as e:
+            return JSONResponse({"success": False, "message": str(e)}, status_code=404)
+        except Exception as e:
+            logger.exception(f"Failed to delete track {audio_id}: {e}")
+            return JSONResponse({"success": False, "message": "Internal server error"}, status_code=500)
+
+
 __all__ = ["register_http_api_routes"]
