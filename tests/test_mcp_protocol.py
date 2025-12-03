@@ -12,3 +12,10 @@ async def test_mcp_handshake():
         assert init_result is not None
         assert init_result.serverInfo is not None
         assert init_result.serverInfo.name == "Music Library MCP"
+
+@pytest.mark.asyncio
+async def test_mcp_tools_list():
+    """Test the tools/list method"""
+    async with Client("http://localhost:8080/mcp") as client:
+        tools = await client.list_tools()
+        assert len(tools) == 12
