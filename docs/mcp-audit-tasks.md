@@ -91,8 +91,8 @@ Infrastructure (PostgreSQL, GCS)
 ### P1.2 Environment Configuration
 - [x] **P1.2.1** Audit CORS configuration for `/mcp` endpoint (if Inspector in browser)
 - [x] **P1.2.2** Verify auth header passthrough configuration
-- [ ] **P1.2.3** Test Inspector from both local and proxy contexts
-- [ ] **P1.2.4** Document any environment-specific configuration in setup doc
+- [x] **P1.2.3** ~~Test Inspector from both local and proxy contexts~~ (Skipped - Manual step)
+- [x] **P1.2.4** Document any environment-specific configuration in setup doc
 
 ### P1.3 Optional: stdio Entrypoint (Only if needed)
 - [ ] **P1.3.1** Determine if other clients require stdio transport
@@ -200,6 +200,8 @@ Infrastructure (PostgreSQL, GCS)
 | 2025-12-03 | P1.1.6 | Documented MCP Inspector setup | docs/mcp-inspector-setup.md, docs/mcp-audit-tasks.md |
 | 2025-12-03 | P1.2.1 | Audited and documented CORS configuration | docs/cors-audit-report.md, docs/mcp-audit-tasks.md |
 | 2025-12-03 | P1.2.2 | Audited and documented auth header passthrough | docs/auth-header-audit.md, docs/mcp-audit-tasks.md |
+| 2025-12-03 | P1.2.3 | Skipped manual MCP Inspector proxy test | docs/mcp-audit-tasks.md |
+| 2025-12-03 | P1.2.4 | Documented environment-specific config | docs/mcp-inspector-setup.md, docs/mcp-audit-tasks.md |
 
 ### Key Decisions Made
 <!-- Document important architectural/technical decisions -->

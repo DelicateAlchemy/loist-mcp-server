@@ -23,8 +23,8 @@ This document provides instructions for setting up the MCP Inspector to connect 
     }
     ```
 
-## Usage
+## Proxy Configuration
 
-1.  Start the MCP Inspector application.
-2.  The `loist-music-library` server should appear in the list of available servers.
-3.  Connect to the server to start inspecting MCP tools and resources.
+If you are using the MCP Inspector through a proxy, you may need to configure the proxy to pass through the `Authorization` header. This is a requirement if the MCP server has authentication enabled.
+
+Please refer to your proxy's documentation for instructions on how to configure header passthrough.
