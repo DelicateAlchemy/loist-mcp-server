@@ -94,12 +94,12 @@ Infrastructure (PostgreSQL, GCS)
 - [x] **P1.2.3** ~~Test Inspector from both local and proxy contexts~~ (Skipped - Manual step)
 - [x] **P1.2.4** Document any environment-specific configuration in setup doc
 
-### P1.3 Optional: stdio Entrypoint (Only if needed)
-- [ ] **P1.3.1** Determine if other clients require stdio transport
-- [ ] **P1.3.2** If yes: Create `server_stdio.py` with `transport="stdio"`
-- [ ] **P1.3.3** If yes: Wire to same server definition as HTTP entrypoint
-- [ ] **P1.3.4** If yes: Test stdio mode with a compatible client
-- [ ] **P1.3.5** Document stdio usage in `docs/mcp-transports.md`
+### P1.3 Optional: stdio Entrypoint (Not needed at this time)
+- [x] **P1.3.1** ~~Determine if other clients require stdio transport~~ (Skipped - Not required for Inspector)
+- [x] **P1.3.2** ~~If yes: Create `server_stdio.py` with `transport="stdio"`~~ (Skipped)
+- [x] **P1.3.3** ~~If yes: Wire to same server definition as HTTP entrypoint~~ (Skipped)
+- [x] **P1.3.4** ~~If yes: Test stdio mode with a compatible client~~ (Skipped)
+- [x] **P1.3.5** ~~Document stdio usage in `docs/mcp-transports.md`~~ (Skipped)
 
 ---
 
@@ -202,6 +202,7 @@ Infrastructure (PostgreSQL, GCS)
 | 2025-12-03 | P1.2.2 | Audited and documented auth header passthrough | docs/auth-header-audit.md, docs/mcp-audit-tasks.md |
 | 2025-12-03 | P1.2.3 | Skipped manual MCP Inspector proxy test | docs/mcp-audit-tasks.md |
 | 2025-12-03 | P1.2.4 | Documented environment-specific config | docs/mcp-inspector-setup.md, docs/mcp-audit-tasks.md |
+| 2025-12-03 | P1.3 | Skipped optional stdio entrypoint | docs/mcp-audit-tasks.md |
 
 ### Key Decisions Made
 <!-- Document important architectural/technical decisions -->
