@@ -106,7 +106,7 @@ Infrastructure (PostgreSQL, GCS)
 ## 🧪 Phase 2: Protocol Testing & Validation [MEDIUM PRIORITY]
 
 ### P2.1 MCP Protocol Tests
-- [ ] **P2.1.1** Install FastMCP client for testing: `pip install mcp --break-system-packages`
+- [x] **P2.1.1** Install FastMCP client for testing: `pip install mcp --break-system-packages`
 - [ ] **P2.1.2** Create test file `tests/test_mcp_protocol.py`
 - [ ] **P2.1.3** Implement test: MCP handshake (`initialize` → `initialized`)
 - [ ] **P2.1.4** Implement test: `tools/list` returns expected 12 tools
@@ -203,6 +203,7 @@ Infrastructure (PostgreSQL, GCS)
 | 2025-12-03 | P1.2.3 | Skipped manual MCP Inspector proxy test | docs/mcp-audit-tasks.md |
 | 2025-12-03 | P1.2.4 | Documented environment-specific config | docs/mcp-inspector-setup.md, docs/mcp-audit-tasks.md |
 | 2025-12-03 | P1.3 | Skipped optional stdio entrypoint | docs/mcp-audit-tasks.md |
+| 2025-12-03 | P2.1.1 | Installed FastMCP client for testing | docs/mcp-audit-tasks.md |
 
 ### Key Decisions Made
 <!-- Document important architectural/technical decisions -->
