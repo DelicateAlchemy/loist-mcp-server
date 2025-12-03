@@ -72,7 +72,7 @@ Infrastructure (PostgreSQL, GCS)
 
 ### P1.1 Setup MCP Inspector with Streamable HTTP
 - [x] **P1.1.1** Verify server is running: `curl http://localhost:8080/health/ready`
-- [ ] **P1.1.2** Create MCP Inspector configuration file at `~/.mcp-inspector/config.json`:
+- [x] **P1.1.2** Create MCP Inspector configuration file at `~/.mcp-inspector/config.json`:
   ```json
   {
     "mcpServers": {
@@ -195,6 +195,7 @@ Infrastructure (PostgreSQL, GCS)
 | Date | Task ID | Summary | Files Changed |
 |------|---------|---------|---------------|
 | 2025-12-03 | P1.1.1 | Verified server is running via readiness probe | docs/mcp-audit-tasks.md |
+| 2025-12-03 | P1.1.2 | Created MCP Inspector config file | N/A (user home dir) |
 
 ### Key Decisions Made
 <!-- Document important architectural/technical decisions -->
