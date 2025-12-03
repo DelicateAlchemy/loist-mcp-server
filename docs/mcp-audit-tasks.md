@@ -108,7 +108,7 @@ Infrastructure (PostgreSQL, GCS)
 ### P2.1 MCP Protocol Tests
 - [x] **P2.1.1** Install FastMCP client for testing: `pip install mcp --break-system-packages`
 - [x] **P2.1.2** Create test file `tests/test_mcp_protocol.py`
-- [ ] **P2.1.3** Implement test: MCP handshake (`initialize` → `initialized`)
+- [x] **P2.1.3** Implement test: MCP handshake (`initialize` → `initialized`)
 - [ ] **P2.1.4** Implement test: `tools/list` returns expected 12 tools
 - [ ] **P2.1.5** Implement test: `tools/call` for `health_check` (happy path)
 - [ ] **P2.1.6** Implement test: `tools/call` error handling (invalid tool)
@@ -205,6 +205,7 @@ Infrastructure (PostgreSQL, GCS)
 | 2025-12-03 | P1.3 | Skipped optional stdio entrypoint | docs/mcp-audit-tasks.md |
 | 2025-12-03 | P2.1.1 | Installed FastMCP client for testing | docs/mcp-audit-tasks.md |
 | 2025-12-03 | P2.1.2 | Created MCP protocol test file | tests/test_mcp_protocol.py, docs/mcp-audit-tasks.md |
+| 2025-12-03 | P2.1.3 | Implemented MCP handshake test | tests/test_mcp_protocol.py, docs/mcp-audit-tasks.md |
 
 ### Key Decisions Made
 <!-- Document important architectural/technical decisions -->
