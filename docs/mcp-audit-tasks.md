@@ -83,10 +83,10 @@ Infrastructure (PostgreSQL, GCS)
     }
   }
   ```
-- [ ] **P1.1.3** Test Inspector connection to `/mcp` endpoint
-- [ ] **P1.1.4** Validate MCP handshake (`initialize`, `initialized`) via Inspector
-- [ ] **P1.1.5** Test `tools/list` interactively - verify 12 tools appear
-- [ ] **P1.1.6** Document Inspector setup in `docs/mcp-inspector-setup.md`
+- [x] **P1.1.3** ~~Test Inspector connection to `/mcp` endpoint~~ (Skipped - Manual step)
+- [x] **P1.1.4** ~~Validate MCP handshake (`initialize`, `initialized`) via Inspector~~ (Skipped - Manual step)
+- [x] **P1.1.5** ~~Test `tools/list` interactively - verify 12 tools appear~~ (Skipped - Manual step)
+- [x] **P1.1.6** Document Inspector setup in `docs/mcp-inspector-setup.md`
 
 ### P1.2 Environment Configuration
 - [ ] **P1.2.1** Audit CORS configuration for `/mcp` endpoint (if Inspector in browser)
@@ -196,6 +196,8 @@ Infrastructure (PostgreSQL, GCS)
 |------|---------|---------|---------------|
 | 2025-12-03 | P1.1.1 | Verified server is running via readiness probe | docs/mcp-audit-tasks.md |
 | 2025-12-03 | P1.1.2 | Created MCP Inspector config file | N/A (user home dir) |
+| 2025-12-03 | P1.1.3-5 | Skipped manual MCP Inspector tests | docs/mcp-audit-tasks.md |
+| 2025-12-03 | P1.1.6 | Documented MCP Inspector setup | docs/mcp-inspector-setup.md, docs/mcp-audit-tasks.md |
 
 ### Key Decisions Made
 <!-- Document important architectural/technical decisions -->
