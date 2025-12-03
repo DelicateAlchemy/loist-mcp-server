@@ -90,7 +90,7 @@ Infrastructure (PostgreSQL, GCS)
 
 ### P1.2 Environment Configuration
 - [x] **P1.2.1** Audit CORS configuration for `/mcp` endpoint (if Inspector in browser)
-- [ ] **P1.2.2** Verify auth header passthrough configuration
+- [x] **P1.2.2** Verify auth header passthrough configuration
 - [ ] **P1.2.3** Test Inspector from both local and proxy contexts
 - [ ] **P1.2.4** Document any environment-specific configuration in setup doc
 
@@ -199,6 +199,7 @@ Infrastructure (PostgreSQL, GCS)
 | 2025-12-03 | P1.1.3-5 | Skipped manual MCP Inspector tests | docs/mcp-audit-tasks.md |
 | 2025-12-03 | P1.1.6 | Documented MCP Inspector setup | docs/mcp-inspector-setup.md, docs/mcp-audit-tasks.md |
 | 2025-12-03 | P1.2.1 | Audited and documented CORS configuration | docs/cors-audit-report.md, docs/mcp-audit-tasks.md |
+| 2025-12-03 | P1.2.2 | Audited and documented auth header passthrough | docs/auth-header-audit.md, docs/mcp-audit-tasks.md |
 
 ### Key Decisions Made
 <!-- Document important architectural/technical decisions -->
