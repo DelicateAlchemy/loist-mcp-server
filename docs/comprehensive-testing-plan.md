@@ -111,32 +111,40 @@ if not result.get("success", False):  # ❌ This field doesn't exist!
 
 ### MCP Inspector Overview
 
-The MCP Inspector is a **UI-based tool** for testing MCP (Model Context Protocol) servers. It provides a graphical interface to interact with MCP tools and resources, similar to Postman but for MCP protocol.
+The MCP Inspector is a **browser-based UI tool** for testing MCP (Model Context Protocol) servers. It provides a web interface to interact with MCP tools and resources, with configuration entirely through the browser UI.
 
 ### Setup Instructions
 
 #### 1. Install MCP Inspector
 
-The MCP Inspector is available as a downloadable application. Check the [MCP Inspector documentation](https://github.com/modelcontextprotocol/inspector) for installation instructions.
+**2025 Recommended Method**: No global installation needed - run on-demand via npx:
 
-#### 2. Create Configuration File
-
-Create `~/.mcp-inspector/config.json`:
-
-```json
-{
-  "mcpServers": {
-    "loist-music-library": {
-      "type": "streamable-http",
-      "url": "http://localhost:8080/mcp"
-    }
-  }
-}
+```bash
+npx @modelcontextprotocol/inspector
 ```
+
+**Prerequisites**: Node.js 18+
+
+This launches a local web server (typically on `localhost:6274`) with a browser-based interface.
+
+#### 2. Server Connection Configuration
+
+In the Inspector's web UI connection panel, specify:
+
+- **Transport**: Choose `HTTP streaming` (for your FastMCP server)
+- **Server URL**: `http://localhost:8080/mcp`
+- **Environment variables**: Add any needed env vars for your server
+
+**Note**: Configuration is entirely UI-based and ephemeral - no config files needed for basic usage.
 
 #### 3. Proxy Configuration (if needed)
 
-If using the inspector through a proxy, ensure the proxy passes through the `Authorization` header if authentication is enabled.
+For corporate environments with proxies:
+
+- **Localhost bypass**: Most corporate proxies don't intercept `127.0.0.1` traffic
+- **Header passthrough**: Ensure proxy forwards `Authorization`, `Content-Type` headers unchanged
+- **Long-lived connections**: Proxy must support long-lived HTTP connections (no short idle timeouts)
+- **Recommendation**: Use `127.0.0.1` addresses to avoid proxy issues entirely
 
 #### 4. Start Local Server
 
@@ -150,7 +158,11 @@ curl http://localhost:8080/health/ready
 
 #### 5. Launch MCP Inspector
 
-Run the MCP Inspector application and connect to the "loist-music-library" server.
+```bash
+npx @modelcontextprotocol/inspector
+```
+
+Then open the provided localhost URL in your browser and configure the connection to your server.
 
 ### MCP Tools to Test
 
@@ -215,6 +227,63 @@ Run the MCP Inspector application and connect to the "loist-music-library" serve
 
 ---
 
+## 2.5 Newman CLI vs Postman Desktop for HTTP API Testing
+
+### Testing Tool Comparison
+
+#### Postman Desktop (Primary Recommendation)
+- ✅ **Interactive GUI** - Perfect for exploring and debugging API responses
+- ✅ **Session Management** - Handles complex auth flows and cookie management
+- ✅ **Visual Debugging** - Easy inspection of request/response cycles
+- ✅ **Collection Runner** - Batch execution with visual results
+- ⚠️ **Manual Process** - Requires manual execution and observation
+
+#### Newman CLI (Automation & CI/CD)
+- ✅ **Headless Execution** - `newman run collection.json --environment env.json`
+- ✅ **CI/CD Integration** - Machine-friendly output formats (JSON, JUnit, HTML)
+- ✅ **Exit Codes** - Pass/fail status for automated pipelines
+- ✅ **HTTP/SSE Coverage** - Can test REST endpoints and simple streaming
+- ⚠️ **Limited MCP Support** - Cannot drive full MCP protocol (stdio/SSE transports)
+- ⚠️ **No Visual Debugging** - Harder to troubleshoot complex issues
+
+### Recommended Testing Strategy
+
+#### Phase 1: Interactive Testing (Postman Desktop)
+Use Postman Desktop for initial API exploration and debugging:
+- Manual endpoint testing
+- Session management setup
+- Error condition investigation
+- Collection development and refinement
+
+#### Phase 2: Automated Testing (Newman CLI)
+Use Newman for regression testing and CI/CD:
+```bash
+# Run collection with environment
+newman run loist-music-library-local.postman_collection.json \
+  --environment postman-env-staging.json \
+  --reporters json,html,junit \
+  --reporter-json-export results.json
+
+# Exit code indicates pass/fail
+echo "Exit code: $?"
+```
+
+#### When to Use Each Tool
+
+**Use Postman Desktop when:**
+- First-time API exploration
+- Debugging complex request/response cycles
+- Setting up authentication and sessions
+- Inspecting large or complex responses
+
+**Use Newman CLI when:**
+- Running automated regression tests
+- CI/CD pipeline integration
+- Performance benchmarking
+- Generating test reports
+
+---
+
 ## 3. Download Endpoint Deep Testing
 
 ### Current Implementation Status
@@ -241,16 +310,24 @@ The download endpoint (`GET /api/tracks/{audioId}/download`) is already properly
 - [ ] Missing format parameter (default behavior)
 
 #### Performance Tests
-- [ ] Large file downloads (100MB+)
-- [ ] Concurrent download requests
+- [ ] Large file downloads (100MB+) - Verify FFmpeg stays within memory budgets
+- [ ] Concurrent download requests (limit concurrency to avoid CPU/RAM oversubscription)
 - [ ] Download interruption handling
-- [ ] Memory usage during conversion
+- [ ] Memory usage monitoring during conversion
+
+#### FFmpeg Large File Handling
+- [ ] **Memory Management**: Ensure FFmpeg streams processing (not loading entire files into RAM)
+- [ ] **Preset Selection**: Use simpler presets for large files to reduce CPU/RAM usage
+- [ ] **Process Limits**: Run FFmpeg as child process with timeouts and resource caps
+- [ ] **Temp File Strategy**: Use disk-based temp files, ensure cleanup on success/failure
+- [ ] **URL Expiration**: Generate signed URLs with generous expiration for long conversions
 
 #### Error Handling
 - [ ] GCS access failures
-- [ ] FFmpeg conversion errors
+- [ ] FFmpeg conversion errors (timeouts, resource limits)
 - [ ] Invalid source audio format
 - [ ] Temporary file cleanup on errors
+- [ ] Process termination on timeouts
 
 ---
 
@@ -270,11 +347,23 @@ The download endpoint (`GET /api/tracks/{audioId}/download`) is already properly
 
 ### Required Fixes
 
-#### For `/api/tracks/{audioId}/stream`:
-1. Fix error handling to check correct fields
-2. Implement Range request support (`Accept-Ranges: bytes`)
-3. Add proper streaming headers (`Content-Type`, `Content-Length`)
-4. Consider proxy streaming vs signed URL redirect
+#### For `/api/tracks/{audioId}/stream` (HTTP Range Request Implementation):
+
+1. **Fix Error Handling**: Remove incorrect `result.get("success", False)` check - MCP resources don't return this field
+
+2. **Implement Standards-Compliant Range Requests**:
+   ```python
+   # Accept Range: bytes=start-end header
+   # Return 206 Partial Content with:
+   # Content-Range: bytes start-end/total-size
+   # Accept-Ranges: bytes (on all responses)
+   ```
+
+3. **GCS Byte-Range Reads**: Use GCS client APIs or signed URLs with Range header passthrough to fetch only requested slices
+
+4. **Streaming Response**: Pass GCS stream directly to HTTP response (no full buffering)
+
+5. **Performance**: Choose 256-1024 KiB chunk sizes, ensure CORS exposes Content-Range
 
 #### For `/api/tracks/{audioId}/thumbnail`:
 1. Fix error handling to check correct fields
@@ -333,10 +422,27 @@ Use the `process_audio_complete` MCP tool or HTTP endpoint to upload test audio 
 - [ ] Response formats match documented schemas
 
 ### Performance Requirements
-- [ ] API response times < 500ms for metadata operations
-- [ ] Search queries complete < 2s for typical datasets
-- [ ] Streaming starts within 1s
-- [ ] Downloads maintain consistent throughput
+
+#### API Response Times (Realistic 2025 Targets)
+- [ ] **Metadata Operations**: p50 < 50-100ms, p95 < 200-300ms (local/nearby DB)
+- [ ] **GCS-Involved Operations**: p95 < 200-600ms (signed URL generation, audio probing)
+- [ ] **Search Queries**: p50 < tens of milliseconds with proper GIN indexes
+- [ ] **Streaming Startup**: First playable byte < 500-800ms in typical conditions
+
+#### Search Performance
+- [ ] Full-text search scales to millions of rows with proper indexing
+- [ ] Result ranking and pagination keeps response sizes manageable
+- [ ] Heavy queries ("common terms") use limits to prevent large result sets
+
+#### Streaming Performance
+- [ ] Initial Range response headers within 100-300ms
+- [ ] Chunked reads (256-1024 KiB) balance seek latency and network overhead
+- [ ] Memory-efficient streaming (no full file buffering)
+
+#### Download Performance
+- [ ] FFmpeg conversions stay within predictable CPU/memory budgets
+- [ ] Concurrent conversion limits prevent resource oversubscription
+- [ ] Signed URL expirations accommodate conversion duration
 
 ### Bug Fixes Verified
 - [ ] Stream endpoint error handling fixed
@@ -399,15 +505,18 @@ After testing completion, update the following documentation:
 ## 9. Risk Assessment
 
 ### High Risk Items
-- **Streaming endpoint bugs**: May cause silent failures in production
-- **MCP Inspector compatibility**: Tool may have version compatibility issues
-- **Large file handling**: Downloads may fail with big files
+- **Streaming endpoint bugs**: May cause silent failures in production (fixed MCP error checking)
+- **HTTP Range request implementation**: Complex GCS byte-range reads required
+- **Large file FFmpeg handling**: Memory/CPU budget management critical
+- **Corporate proxy issues**: MCP Inspector may fail through corporate proxies
 
 ### Mitigation Strategies
-- Test with multiple audio file sizes
-- Have backup testing methods if Inspector fails
-- Monitor server logs during testing
-- Prepare rollback procedures
+- **Localhost Development**: Use `127.0.0.1` to bypass corporate proxy issues
+- **GCS Byte-Range Testing**: Implement and test Range requests thoroughly
+- **FFmpeg Resource Limits**: Set per-job timeouts and concurrency caps
+- **Fallback Testing**: Use direct HTTP API testing if MCP Inspector fails
+- **Monitor Resources**: Track CPU/memory during large file conversions
+- **Signed URL Management**: Ensure URLs don't expire during long conversions
 
 ---
 
