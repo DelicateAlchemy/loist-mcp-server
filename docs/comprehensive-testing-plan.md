@@ -309,19 +309,6 @@ The download endpoint (`GET /api/tracks/{audioId}/download`) is already properly
 - [ ] Unsupported audio ID
 - [ ] Missing format parameter (default behavior)
 
-#### Performance Tests
-- [ ] Large file downloads (100MB+) - Verify FFmpeg stays within memory budgets
-- [ ] Concurrent download requests (limit concurrency to avoid CPU/RAM oversubscription)
-- [ ] Download interruption handling
-- [ ] Memory usage monitoring during conversion
-
-#### FFmpeg Large File Handling
-- [ ] **Memory Management**: Ensure FFmpeg streams processing (not loading entire files into RAM)
-- [ ] **Preset Selection**: Use simpler presets for large files to reduce CPU/RAM usage
-- [ ] **Process Limits**: Run FFmpeg as child process with timeouts and resource caps
-- [ ] **Temp File Strategy**: Use disk-based temp files, ensure cleanup on success/failure
-- [ ] **URL Expiration**: Generate signed URLs with generous expiration for long conversions
-
 #### Error Handling
 - [ ] GCS access failures
 - [ ] FFmpeg conversion errors (timeouts, resource limits)
@@ -401,7 +388,6 @@ Use the `process_audio_complete` MCP tool or HTTP endpoint to upload test audio 
 - [ ] MP3 audio file (various bitrates)
 - [ ] WAV audio file (uncompressed)
 - [ ] FLAC audio file (lossless)
-- [ ] Large audio file (100MB+) for performance testing
 - [ ] Audio with metadata (ID3 tags, album art)
 
 ---
@@ -430,7 +416,6 @@ Use the `process_audio_complete` MCP tool or HTTP endpoint to upload test audio 
 - [ ] **Streaming Startup**: First playable byte < 500-800ms in typical conditions
 
 #### Search Performance
-- [ ] Full-text search scales to millions of rows with proper indexing
 - [ ] Result ranking and pagination keeps response sizes manageable
 - [ ] Heavy queries ("common terms") use limits to prevent large result sets
 
@@ -438,11 +423,6 @@ Use the `process_audio_complete` MCP tool or HTTP endpoint to upload test audio 
 - [ ] Initial Range response headers within 100-300ms
 - [ ] Chunked reads (256-1024 KiB) balance seek latency and network overhead
 - [ ] Memory-efficient streaming (no full file buffering)
-
-#### Download Performance
-- [ ] FFmpeg conversions stay within predictable CPU/memory budgets
-- [ ] Concurrent conversion limits prevent resource oversubscription
-- [ ] Signed URL expirations accommodate conversion duration
 
 ### Bug Fixes Verified
 - [ ] Stream endpoint error handling fixed
@@ -507,16 +487,12 @@ After testing completion, update the following documentation:
 ### High Risk Items
 - **Streaming endpoint bugs**: May cause silent failures in production (fixed MCP error checking)
 - **HTTP Range request implementation**: Complex GCS byte-range reads required
-- **Large file FFmpeg handling**: Memory/CPU budget management critical
 - **Corporate proxy issues**: MCP Inspector may fail through corporate proxies
 
 ### Mitigation Strategies
 - **Localhost Development**: Use `127.0.0.1` to bypass corporate proxy issues
 - **GCS Byte-Range Testing**: Implement and test Range requests thoroughly
-- **FFmpeg Resource Limits**: Set per-job timeouts and concurrency caps
 - **Fallback Testing**: Use direct HTTP API testing if MCP Inspector fails
-- **Monitor Resources**: Track CPU/memory during large file conversions
-- **Signed URL Management**: Ensure URLs don't expire during long conversions
 
 ---
 

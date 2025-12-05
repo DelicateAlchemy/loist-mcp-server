@@ -59,6 +59,7 @@ The Music Library MCP Server has a solid MVP foundation with core audio processi
 - Semantic search capabilities
 - Advanced filters (tempo, key, energy level)
 - Saved search templates
+- Scalability to millions of records with optimized indexing
 
 **Use Cases**:
 - "Show me all rock songs from the 80s"
@@ -160,6 +161,24 @@ The Music Library MCP Server has a solid MVP foundation with core audio processi
 - Quality enhancement
 - Audio cleanup and restoration
 - Advanced format support
+
+### Robust Large File Handling
+**Priority**: Medium | **Phase**: Future (Phase 2-3)
+
+**Current State**: ✅ Basic support
+- FFmpeg conversion is functional for small to medium files.
+
+**Future Enhancement**:
+- **Efficient Memory/CPU Management**: Implement streaming processing in FFmpeg to handle large files (e.g., 100MB+) without loading them entirely into memory.
+- **Resource Limiting**: Run FFmpeg as a child process with strict timeouts and resource caps to prevent oversubscription.
+- **Concurrency Management**: Limit the number of concurrent conversion jobs.
+- **Reliable Temp File Strategy**: Use a robust disk-based temporary file strategy with guaranteed cleanup on success or failure.
+- **Intelligent URL Expiration**: Ensure signed URLs for GCS have an expiration time that accommodates potentially long conversion times for large files.
+- **Interruption Handling**: Gracefully handle and recover from download/conversion interruptions.
+
+**Use Cases**:
+- Processing and serving large audio files like podcasts, DJ mixes, or high-resolution tracks.
+- Ensuring server stability under heavy conversion load.
 
 ---
 
