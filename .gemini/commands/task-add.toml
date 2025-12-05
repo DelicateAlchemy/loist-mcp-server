@@ -1,0 +1,23 @@
+# Invoked as: /task:add <description>
+
+description = "Add a new discovered task to the tracker"
+
+prompt = """
+
+Add a new task to `docs/MCP-AUDIT-TASKS.md`:
+
+Task to add: $ARGUMENTS
+
+1. Open the file
+
+2. Find the "## 🔍 Discovered Tasks" section
+
+3. Add a new line: `- [STATUS: pending] $ARGUMENTS`
+
+4. Save the file
+
+5. Confirm the addition
+
+Note: Discovered tasks should be reviewed periodically and integrated into the appropriate phase if they're substantial.
+
+"""

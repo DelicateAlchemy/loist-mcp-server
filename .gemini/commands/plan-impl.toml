@@ -1,0 +1,57 @@
+# Invoked as: /plan:impl
+
+description = "Continue implementing the MCP audit plan from where we left off"
+
+prompt = """
+
+You are continuing implementation of the MCP Server Audit recommendations.
+
+1. **Restore Context**:
+
+   - Read `docs/MCP-AUDIT-TASKS.md` completely
+
+   - Read the Rolling Summary to understand completed work
+
+   - Check the Session Log for the last session's stopping point
+
+2. **Find Next Task**:
+
+   - Locate the first unchecked task (`- [STATUS: pending]`)
+
+   - If in the middle of a subtask sequence, continue there
+
+3. **State Intent**:
+
+   🎯 Intent: [action] because [reason]
+
+   Files affected: [list]
+
+   Expected outcome: [outcome]
+
+4. **Execute**:
+
+   - Implement ONE task
+
+   - Test/verify the change
+
+   - Mark complete with `- [STATUS: done]`
+
+   - Update Rolling Summary
+
+5. **Continue or Stop**:
+
+   - Ask if you should continue to the next task
+
+   - If stopping, update the Session Log with current state
+
+Remember the critical rules from the task tracker:
+
+- ONE task at a time
+
+- Always verify before marking done
+
+- Use Docker, never local venv
+
+- Save costs - use local PostgreSQL, not Cloud SQL
+
+"""

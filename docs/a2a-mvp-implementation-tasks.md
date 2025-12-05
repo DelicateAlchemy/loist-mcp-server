@@ -1,19 +1,27 @@
-# A2A MVP Implementation Task List (Revised)
+# A2A MVP Implementation Planning Document
 
-**Context:** This task list implements the minimal viable A2A integration for the Loist Music Library MCP Server. Based on A2A v0.3 (July 2025), this focuses on core discoverability and basic agent coordination without over-engineering.
+## ⚠️ **STATUS: PLANNING DOCUMENT - NOT IMPLEMENTED**
 
-**Database Requirements Summary:**
+**Important:** This document contains **design and planning work only**. No A2A implementation code has been built. The ✅ checkmarks below represent **completed design decisions**, not completed code implementation.
+
+**Context:** This planning document outlines the minimal viable A2A integration design for the Loist Music Library MCP Server. Based on A2A v0.3 (July 2025), this focuses on core discoverability and basic agent coordination without over-engineering.
+
+**A2A-Ready Design Note:** Current MCP tool design is already A2A-compatible with typed schemas, idempotent reads, and explicit side effects. A2A builds on existing MCP capabilities rather than requiring major redesigns.
+
+**See also**: [`mcp-audit-tasks.md`](../mcp-audit-tasks.md) for detailed research findings on tool granularity, A2A compatibility, and operational tools best practices.
+
+**Database Requirements (Planned):**
 - ✅ **Existing**: `audio_tracks` table stores processed audio metadata
-- ➕ **New**: `a2a_tasks` table for A2A task coordination (separate from audio processing)
-- 📋 **Migration**: `003_add_a2a_tasks.sql` needs revision for A2A compliance
-- 🔗 **Integration**: A2A tasks create/update `audio_tracks` records when processing completes
+- 📝 **Planned**: `a2a_tasks` table for A2A task coordination (separate from audio processing)
+- 📋 **Migration**: `003_add_a2a_tasks.sql` exists but has not been applied
+- 🔗 **Integration**: A2A tasks would create/update `audio_tracks` records when processing completes
 
-**Architecture Overview:**
+**Architecture Overview (Planned):**
 - **MCP Server**: Existing FastMCP implementation with audio processing tools (stdio)
-- **A2A Layer**: Agent Card discovery + JSON-RPC 2.0 task coordination API
-- **Bridge Pattern**: Separate FastAPI app for A2A HTTP endpoints delegating to MCP tools
+- **A2A Layer**: Agent Card discovery + JSON-RPC 2.0 task coordination API (not implemented)
+- **Bridge Pattern**: Separate FastAPI app for A2A HTTP endpoints delegating to MCP tools (not implemented)
 - 
-**Success Criteria:**
+**Success Criteria (for future implementation):**
 - Agent Card accessible at `/.well-known/agent.json` (A2A v0.3 compliant)
 - Task creation via JSON-RPC 2.0 `tasks/send` method
 - Task status polling via JSON-RPC 2.0 `tasks/get` method
@@ -84,17 +92,26 @@
 **Implementation Steps**:
 1. Create Agent Card JSON structure following A2A v0.3 spec
 2. Define agent identity (ID, name, version, description)
-3. Specify skills array with 3 core capabilities:
-   - process_audio (with input schema)
-   - search_library
-   - get_embed_url
-4. Add serviceEndpoint with JSON-RPC protocol
-5. Include authentication configuration
-6. Save as `/.well-known/agent.json`
-7. Create FastAPI route to serve the Agent Card
-8. Add CORS headers for cross-origin access
-9. Implement response caching for performance
-10. Update OpenAPI documentation
+3. Specify skills array with 4-6 core business capabilities (not all 12 MCP tools):
+   - ✅ `process_audio_complete` - Main ingestion capability
+   - ✅ `search_library` - Primary query capability
+   - ✅ `get_audio_metadata` - Lightweight metadata retrieval
+   - ✅ `update_metadata` - Edit capability
+   - ✅ `delete_audio` - Removal capability
+   - ✅ `get_embed_url` - Embed generation (if agents need it)
+4. Exclude operational/monitoring tools (HTTP-only, not MCP tools):
+   - ❌ `health_check` - Use HTTP endpoint instead
+   - ❌ `get_waveform_metrics_tool` - Use HTTP endpoint instead
+   - ❌ `get_circuit_breaker_status` - Use HTTP endpoint instead
+   - ❌ `check_waveform_availability` - Deprecated, to be removed
+   - ❌ `list_embed_templates` - Utility, not core workflow
+5. Add serviceEndpoint with JSON-RPC protocol
+6. Include authentication configuration (bearer token)
+7. Save as `/.well-known/agent.json`
+8. Create FastAPI route to serve the Agent Card
+9. Add CORS headers for cross-origin access
+10. Implement response caching for performance
+11. Update OpenAPI documentation
 
 **Agent Card Structure** (A2A v0.3 compliant):
 ```json
@@ -106,20 +123,38 @@
 
   "skills": [
     {
-      "name": "process_audio",
-      "description": "Process audio file and extract metadata",
+      "name": "process_audio_complete",
+      "description": "Process audio file from URL and extract complete metadata",
       "inputSchema": {
         "type": "object",
         "properties": {
-          "audio_url": {"type": "string"},
-          "extract_waveform": {"type": "boolean"}
+          "source": {
+            "type": "object",
+            "properties": {
+              "type": {"type": "string", "enum": ["http_url"]},
+              "url": {"type": "string"}
+            }
+          },
+          "options": {"type": "object"}
         },
-        "required": ["audio_url"]
+        "required": ["source"]
       }
     },
     {
       "name": "search_library",
-      "description": "Search processed music library"
+      "description": "Search processed music library with filters"
+    },
+    {
+      "name": "get_audio_metadata",
+      "description": "Get track metadata by ID"
+    },
+    {
+      "name": "update_metadata",
+      "description": "Update track metadata"
+    },
+    {
+      "name": "delete_audio",
+      "description": "Delete track from library"
     },
     {
       "name": "get_embed_url",
@@ -334,7 +369,13 @@ ADD COLUMN a2a_task_id VARCHAR(36) REFERENCES a2a_tasks(task_id);
 
 **Goal**: Extract core processing logic into shared functions used by both MCP and A2A
 
-**Context**: Avoid code duplication by creating a shared business logic layer that both MCP tools (stdio) and A2A endpoints (HTTP) can call.
+**Context**: Avoid code duplication by creating a shared business logic layer that both MCP tools (stdio transport) and A2A endpoints (HTTP transport) can call. Separate apps are required due to fundamental transport differences: MCP uses stdio for local tool execution, A2A uses HTTP for agent coordination.
+
+**Bridge Pattern Rationale**:
+- **MCP Transport**: stdio (standard input/output streams) - designed for IDEs and LLMs to call tools locally
+- **A2A Transport**: HTTP with JSON-RPC - designed for agent-to-agent discovery and task coordination
+- **Why Separate Apps**: Transport protocols are fundamentally incompatible; MCP stdio doesn't support HTTP routing, A2A HTTP doesn't support stdio streams
+- **Shared Logic**: Both transports call the same business functions to ensure identical behavior
 
 **Input Requirements**:
 - Current MCP tool implementations
@@ -902,51 +943,53 @@ ADD COLUMN a2a_task_id VARCHAR(36) REFERENCES a2a_tasks(task_id);
 
 ## Key Revisions Made
 
-**Based on detailed feedback and A2A v0.3 research - restructured into 10 manageable LLM agent tasks (~200k tokens each):**
+## 📋 **Design Work Completed (Planning Phase)**
 
-### ✅ Task-Based Structure
-- **10 focused tasks** instead of phases with time estimates
+**Based on detailed feedback and A2A v0.3 research - this document contains completed DESIGN work, not implementation:**
+
+### 📝 **Planning & Design Structure**
+- **10 focused tasks** outlined for future implementation
 - **Clear dependencies** between tasks
 - **Specific validation criteria** for each task completion
-- **Self-contained** implementation chunks for LLM agents
+- **Self-contained** implementation chunks for future development
 
-### ✅ Fixed Agent Card Structure (Task 2)
-- Changed from `capabilities` object to `skills` array
+### 📋 **Agent Card Design (Task 2)**
+- Designed `skills` array instead of `capabilities` object
 - Added `serviceEndpoint` with `protocols: ["json-rpc"]`
 - Added proper `authentication` object
-- Updated to A2A v0.3 compliant format
+- Specified A2A v0.3 compliant format
 
-### ✅ Added JSON-RPC 2.0 Implementation (Task 4)
-- Changed from REST `POST /tasks` to `POST /a2a/v1/rpc`
-- Added `tasks/send` and `tasks/get` methods with examples
-- Proper JSON-RPC 2.0 request/response format
-- Message parsing utilities (Task 6)
+### 📋 **JSON-RPC API Design (Task 4)**
+- Planned `POST /a2a/v1/rpc` endpoint instead of REST
+- Designed `tasks/send` and `tasks/get` methods with examples
+- Specified JSON-RPC 2.0 request/response format
+- Planned message parsing utilities (Task 6)
 
-### ✅ Simplified Database Schema (Task 3)
-- Removed over-engineered fields (`retry_count`, `type`, etc.)
-- Added A2A-compliant fields (`messages`, `artifacts`)
-- Used A2A state names (`submitted`, `working`, `completed`, `failed`, `cancelled`)
+### 📋 **Database Schema Design (Task 3)**
+- Designed simplified schema without over-engineering
+- Planned A2A-compliant fields (`messages`, `artifacts`)
+- Specified A2A state names (`submitted`, `working`, `completed`, `failed`, `cancelled`)
 
-### ✅ Bridge Pattern Architecture (Task 5)
-- Shared business logic layer to avoid code duplication
-- MCP (stdio) and A2A (HTTP) both call same functions
-- Separate FastAPI app for A2A endpoints
+### 📋 **Bridge Pattern Design (Task 5)**
+- Designed shared business logic layer to avoid code duplication
+- Planned MCP (stdio) and A2A (HTTP) integration
+- Specified separate FastAPI app architecture
 
-### ✅ Added Missing Components
-- **Message Parsing** (Task 6): Extract URLs from A2A message format
-- **Processing Integration** (Task 7): Connect A2A to audio processing
-- **Dual Server Deployment** (Task 8): Docker Compose for both MCP and A2A
-- **Agent Discovery Documentation** (Task 9): How others find and use the service
+### 📋 **Component Integration Design**
+- **Message Parsing** (Task 6): Designed URL extraction from A2A message format
+- **Processing Integration** (Task 7): Planned A2A to audio processing connection
+- **Dual Server Deployment** (Task 8): Designed Docker Compose for both MCP and A2A
+- **Agent Discovery Documentation** (Task 9): Planned how others find and use the service
 
-### ✅ Comprehensive Testing (Task 10)
-- A2A compliance validation
-- End-to-end integration testing
-- MVP completion checklist
-- Clear stop point criteria for Phase 2
+### 📋 **Testing Strategy Design (Task 10)**
+- Designed A2A compliance validation approach
+- Planned end-to-end integration testing
+- Created MVP completion checklist
+- Established clear stop point criteria for Phase 2
 
-### ✅ Removed Time/Day Estimates
-- No more "2-3 days" or "1 hour" estimates
-- Focus on deliverable completion, not time spent
+### 📋 **Implementation Planning**
+- Removed time/day estimates from planning
+- Focused on deliverable completion criteria
 - Each task measured by validation criteria
 
-**Result**: 10 focused, manageable tasks that an LLM agent can complete in single coding sessions, each with clear inputs, outputs, and validation criteria. Production-ready A2A MVP that matches real implementations.
+**Status**: This document contains comprehensive A2A MVP design work ready for future implementation. All planning is complete, but no code has been implemented.

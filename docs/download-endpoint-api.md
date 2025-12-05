@@ -19,6 +19,33 @@ The download endpoint provides on-the-fly audio format conversion with metadata 
 
 **Testing**: Verified with real audio files, metadata correctly embedded, error responses working properly.
 
+## Protocol Access Methods
+
+The download functionality is available through two primary methods: the canonical MCP JSON-RPC protocol for agentic use and a direct HTTP GET endpoint for convenience, particularly for browser-based downloads.
+
+### MCP JSON-RPC (Canonical)
+
+The `download_audio` tool is the canonical way to access this functionality for programmatic and agentic workflows. It returns a signed URL to the converted file.
+
+```json
+{
+  "name": "download_audio",
+  "description": "Download audio track in specified format with conversion",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "audioId": { "type": "string" },
+      "format": { "type": "string", "enum": ["mp3", "wav", "flac", "aac", "ogg"] }
+    },
+    "required": ["audioId", "format"]
+  }
+}
+```
+
+### HTTP REST API (Convenience Wrapper)
+
+For direct browser downloads, a `GET /api/tracks/{audioId}/download` endpoint is provided. This endpoint directly serves the file with appropriate `Content-Disposition` headers, making it easy to integrate with web frontends. This endpoint is a convenience wrapper around the same core logic used by the MCP tool.
+
 ## HTTP API Endpoint
 
 ### `GET /api/tracks/{audioId}/download`

@@ -4,6 +4,33 @@
 
 The `process_audio_complete` MCP tool orchestrates the complete audio processing pipeline for the Loist Music Library MCP Server. It handles downloading, metadata extraction, storage, and database persistence in a single atomic operation.
 
+## Protocol Access Methods
+
+The canonical and recommended way to use the `process_audio_complete` tool is through the **MCP JSON-RPC protocol**. This is ideal for agentic workflows and programmatic integration where complex, stateful operations are required.
+
+### MCP JSON-RPC (Canonical)
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "tools/call",
+  "params": {
+    "name": "process_audio_complete",
+    "arguments": {
+      "source": {
+        "type": "http_url",
+        "url": "https://example.com/audio.mp3"
+      }
+    }
+  },
+  "id": 1
+}
+```
+
+### HTTP REST API
+
+Currently, there is no direct HTTP REST convenience wrapper for `process_audio_complete` due to its complex, long-running nature. All interaction with this tool should be done via the MCP protocol.
+
 ## Pipeline Stages
 
 The tool executes the following stages in sequence:

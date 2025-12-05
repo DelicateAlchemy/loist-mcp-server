@@ -909,54 +909,6 @@ def detect_platform(request) -> str:
     return 'generic'
 
 
-async def get_waveform_context(audio_id: str) -> dict:
-    """
-    Get waveform context for audio track (used by waveform embed endpoints).
-
-    Retrieves waveform metadata and generates signed URL if available.
-
-    Args:
-        audio_id: UUID of the audio track
-
-    Returns:
-        dict: Waveform context with keys:
-            - waveform_url: Signed URL to waveform SVG (or None)
-            - waveform_available: Boolean indicating if waveform exists
-            - waveform_generated_at: ISO timestamp when waveform was generated (or None)
-    """
-    try:
-        # Import required functions
-        from database.operations import get_waveform_metadata
-        from src.storage.waveform_storage import get_waveform_signed_url
-
-        # Get waveform metadata
-        metadata = get_waveform_metadata(audio_id)
-
-        if metadata and metadata.get('waveform_gcs_path'):
-            try:
-                # Generate signed URL for waveform
-                waveform_url = get_waveform_signed_url(audio_id)
-                logger.debug(f"Waveform URL generated for audio_id: {audio_id}")
-                return {
-                    'waveform_url': waveform_url,
-                    'waveform_available': True,
-                    'waveform_generated_at': metadata.get('waveform_generated_at')
-                }
-            except Exception as e:
-                logger.warning(f"Failed to generate waveform signed URL for {audio_id}: {e}")
-                # Continue with waveform_available=False
-
-    except Exception as e:
-        logger.warning(f"Error retrieving waveform context for {audio_id}: {e}")
-
-    # Return empty context if waveform unavailable
-    return {
-        'waveform_url': None,
-        'waveform_available': False,
-        'waveform_generated_at': None
-    }
-
-
 # ============================================================================
 # Task 10: HTML5 Audio Player Embed Page
 # ============================================================================
@@ -1162,6 +1114,7 @@ async def embed_page(request):
             # Get waveform context for minimal waveform template
             # Note: get_waveform_context handles exceptions gracefully and returns default context
             logger.info("Getting waveform context for minimal template rendering")
+            from src.tools.embed_tools import get_waveform_context
             waveform_context = await get_waveform_context(audio_id)
             logger.info(f"Waveform context retrieved: available={waveform_context.get('waveform_available', False)}")
             
@@ -1608,116 +1561,9 @@ async def embed_waveform_auto(request):
 async def get_embed_url(audio_id: str, template: str = "standard", device: Optional[str] = None) -> dict:
     """
     Generate embed URL for audio track with template selection.
-
-    Returns embed URL with template and device-specific endpoint selection.
-
-    Args:
-        audio_id: UUID of the audio track
-        template: Template type ("standard" or "waveform")
-        device: Device type override ("mobile", "desktop", or None for auto-detection)
-
-    Returns:
-        dict: Embed information including URL, template type, and device detection
-
-    Example:
-        >>> result = await get_embed_url("550e8400-e29b-41d4-a716-446655440000", "waveform")
-        >>> print(result["embed_url"])
-        "https://example.com/embed/550e8400-e29b-41d4-a716-446655440000/waveform"
     """
-    try:
-        # Validate audio_id exists
-        from database import get_audio_metadata_by_id
-        metadata = get_audio_metadata_by_id(audio_id)
-        if not metadata:
-            return {
-                "success": False,
-                "error": "RESOURCE_NOT_FOUND",
-                "message": f"Audio track with ID '{audio_id}' was not found",
-                "audio_id": audio_id
-            }
-
-        # Build base embed URL
-        base_url = f"{config.embed_base_url}/embed/{audio_id}"
-
-        # Determine template endpoint
-        if template == "waveform":
-            embed_url = f"{base_url}/waveform"
-            # Add device-specific endpoint if specified
-            if device == "mobile":
-                embed_url = f"{base_url}/waveform/mobile"
-            elif device == "desktop":
-                embed_url = f"{base_url}/waveform/desktop"
-        else:
-            embed_url = base_url
-
-        # Check waveform availability (for waveform template)
-        waveform_available = False
-        waveform_svg_url = None
-        if template == "waveform":
-            try:
-                waveform_context = await get_waveform_context(audio_id)
-                waveform_available = waveform_context.get("waveform_available", False)
-                if waveform_available:
-                    from src.storage.waveform_storage import get_waveform_signed_url
-                    waveform_svg_url = get_waveform_signed_url(audio_id)
-            except Exception as e:
-                logger.warning(f"Error checking waveform availability: {e}")
-
-        # Get artwork URL if available
-        artwork_url = None
-        thumbnail_path = metadata.get("thumbnail_gcs_path")
-        if thumbnail_path:
-            try:
-                from src.resources.cache import get_cache
-                cache = get_cache()
-                artwork_url = cache.get(thumbnail_path, url_expiration_minutes=15)
-            except Exception as e:
-                logger.warning(f"Failed to generate signed URL for artwork: {e}")
-
-        # Determine mode based on template
-        mode = "waveform" if template == "waveform" else "simple"
-
-        # Create PlayerConfig response
-        player_config = PlayerConfig(
-            audio_id=audio_id,
-            mode=mode,
-            device=device or "auto",
-            context="embed",  # This tool always provides embed context
-            waveform_available=waveform_available,
-            urls=PlayerConfigUrls(
-                embed=embed_url,
-                waveform=f"{base_url}/waveform" if template == "waveform" else None,
-                artwork=artwork_url,
-                waveform_svg=waveform_svg_url
-            ),
-            metadata=PlayerConfigMetadata(
-                title=metadata.get("title", "Untitled"),
-                artist=metadata.get("artist", "Unknown Artist"),
-                album=metadata.get("album"),
-                duration_seconds=metadata.get("duration", 0)
-            )
-        )
-
-        return {
-            "success": True,
-            **player_config.model_dump()
-        }
-
-    except ValidationError as e:
-        return {
-            "success": False,
-            "error": "VALIDATION_ERROR",
-            "message": f"Invalid audio ID format: {str(e)}",
-            "audio_id": audio_id
-        }
-    except Exception as e:
-        logger.error(f"Error generating embed URL for {audio_id}: {e}")
-        return {
-            "success": False,
-            "error": "INTERNAL_ERROR",
-            "message": "Failed to generate embed URL",
-            "audio_id": audio_id
-        }
+    from src.tools.embed_tools import get_embed_url_logic
+    return await get_embed_url_logic(audio_id, template, device)
 
 
 @mcp.tool()
@@ -1790,30 +1636,10 @@ async def list_embed_templates() -> dict:
 async def check_waveform_availability(audio_id: str) -> dict:
     """
     Check if waveform is available for an audio track.
-
     DEPRECATED: This tool is deprecated. Use get_embed_url instead.
-
-    Verifies waveform generation status and provides access information
-    if the waveform exists.
-
-    Args:
-        audio_id: UUID of the audio track
-
-    Returns:
-        dict: Waveform availability and access information
-
-    Example:
-        >>> result = await check_waveform_availability("550e8400-e29b-41d4-a716-446655440000")
-        >>> if result["waveform_available"]:
-        ...     print(f"Waveform generated at: {result['generated_at']}")
     """
-    logger.warning(f"check_waveform_availability is deprecated. Use get_embed_url instead for audio_id: {audio_id}")
-
-    # Delegate to get_embed_url with waveform template
-    result = await get_embed_url(audio_id, template="waveform", device="auto")
-
-    # Return the same PlayerConfig shape for consistency
-    return result
+    from src.tools.embed_tools import check_waveform_availability_logic
+    return await check_waveform_availability_logic(audio_id)
 
 @mcp.custom_route("/oembed", methods=["GET"])
 async def oembed_endpoint(request):
@@ -2095,6 +1921,303 @@ def download_audio(input_data: dict) -> dict:
     """
     from src.tools.download_tool import download_audio as download_audio_func
     return download_audio_func(input_data)
+
+
+# ============================================================================
+# MCP Prompts
+# ============================================================================
+
+@mcp.prompt(name="ingest_from_url", description="Guide through audio ingestion workflow")
+def ingest_from_url(audio_url: str = "https://example.com/audio.mp3") -> list[dict]:
+    """
+    Provide guidance for ingesting audio content from a URL.
+
+    This prompt helps users understand the complete audio ingestion workflow,
+    including metadata extraction, storage, and embed URL generation.
+    """
+    return [
+        {
+            "role": "user",
+            "content": {
+                "type": "text",
+                "text": f"""## Audio Ingestion Workflow
+
+**Step 1: Prepare Your Audio URL**
+- Ensure the URL is publicly accessible and stable
+- Supported formats: MP3, FLAC, WAV, M4A, OGG, AAC
+- Maximum file size: 100MB (configurable)
+
+**Step 2: Use the process_audio_complete Tool**
+```json
+{{
+  "source": {{
+    "type": "http_url",
+    "url": "{audio_url}",
+    "headers": {{
+      "Authorization": "Bearer your-token-if-needed"
+    }}
+  }},
+  "options": {{
+    "max_size_mb": 100,
+    "timeout": 300,
+    "validate_format": true
+  }}
+}}
+```
+
+**Step 3: What Happens Next**
+1. Audio file is downloaded and validated
+2. Metadata is extracted (artist, title, album, genre, etc.)
+3. Audio and artwork are uploaded to Google Cloud Storage
+4. Complete metadata is saved to the database
+5. Embed URLs are generated for sharing
+
+**Step 4: Use the Results**
+- **audio_id**: Unique identifier for the track
+- **embed_url**: Ready-to-use player embed URL
+- **metadata**: Complete track information for display
+
+**Example Success Response:**
+```json
+{{
+  "audio_id": "550e8400-e29b-41d4-a716-446655440000",
+  "metadata": {{
+    "product": {{
+      "artist": "Extracted Artist Name",
+      "title": "Extracted Track Title",
+      "album": "Extracted Album Name"
+    }}
+  }},
+  "resources": {{
+    "embed_url": "https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000"
+  }}
+}}
+```
+
+**Troubleshooting:**
+- If download fails: Check URL accessibility and network connectivity
+- If format unsupported: Verify file format and codec compatibility
+- If size exceeded: Reduce file size or increase max_size_mb limit"""
+            }
+        }
+    ]
+
+
+@mcp.prompt(name="search_and_refine", description="Guide through library search with filters")
+def search_and_refine(query: str = "artist name", genre: str = "", year_min: int = 1900, year_max: int = 2025) -> list[dict]:
+    """
+    Provide guidance for searching and refining audio library results.
+
+    This prompt helps users construct effective searches with filters,
+    sorting options, and pagination strategies.
+    """
+    return [
+        {
+            "role": "user",
+            "content": {
+                "type": "text",
+                "text": f"""## Audio Library Search Guide
+
+**Basic Search:**
+```json
+{{
+  "query": "{query}",
+  "limit": 20,
+  "offset": 0
+}}
+```
+
+**Advanced Search with Filters:**
+```json
+{{
+  "query": "{query}",
+  "filters": {{
+    "genre": {f'["{genre}"]' if genre else '["Rock", "Electronic", "Jazz"]'},
+    "year": {{
+      "min": {year_min},
+      "max": {year_max}
+    }},
+    "artist": ["Artist Name"],
+    "album": ["Album Title"]
+  }},
+  "limit": 10,
+  "sort_by": "relevance",
+  "sort_order": "desc"
+}}
+```
+
+**Search Strategies:**
+
+1. **Text Search**: Searches across title, artist, album, genre, composer, publisher
+2. **Genre Filtering**: Use exact genre names (case-sensitive)
+3. **Year Range**: Filter by release year range
+4. **Artist/Album**: Exact or partial matches
+
+**Sorting Options:**
+- `relevance`: Best matches first (recommended)
+- `title`: Alphabetical by track title
+- `artist`: Alphabetical by artist name
+- `year`: Chronological by release year
+- `created_at`: Most recently added first
+
+**Pagination:**
+- Use `limit` (1-100) to control page size
+- Use `offset` to navigate through results
+- Check `total` in response for total matches
+
+**Search Tips:**
+- Use specific terms for better results
+- Combine filters for precise targeting
+- Start broad, then refine with filters
+- Use artist names for focused searches
+
+**Example Response Structure:**
+```json
+{{
+  "results": [
+    {{
+      "audio_id": "uuid-here",
+      "metadata": {{
+        "product": {{
+          "title": "Track Title",
+          "artist": "Artist Name",
+          "album": "Album Name",
+          "genre": ["Genre"],
+          "year": 2023
+        }}
+      }},
+      "score": 0.95,
+      "resources": {{
+        "embed_url": "https://loist.io/embed/uuid-here"
+      }}
+    }}
+  ],
+  "total": 42,
+  "limit": 10,
+  "offset": 0
+}}
+```"""
+            }
+        }
+    ]
+
+
+@mcp.prompt(name="batch_edit_metadata", description="Guide through multi-track metadata updates")
+def batch_edit_metadata(search_query: str = "artist name", update_field: str = "genre", update_value: str = "New Genre") -> list[dict]:
+    """
+    Provide guidance for batch editing metadata across multiple tracks.
+
+    This prompt helps users perform bulk metadata updates by demonstrating
+    the search-and-update workflow pattern.
+    """
+    return [
+        {
+            "role": "user",
+            "content": {
+                "type": "text",
+                "text": f"""## Batch Metadata Editing Workflow
+
+**Step 1: Search for Tracks to Update**
+```json
+{{
+  "query": "{search_query}",
+  "limit": 50,
+  "sort_by": "relevance"
+}}
+```
+
+**Step 2: Review Results**
+- Check the returned tracks match your intended updates
+- Note the `audio_id` values for tracks you want to update
+- Verify the current metadata values
+
+**Step 3: Update Individual Tracks**
+For each track you want to update:
+```json
+{{
+  "audio_id": "track-uuid-here",
+  "metadata": {{
+    "{update_field}": "{update_value}"
+  }}
+}}
+```
+
+**Common Batch Update Scenarios:**
+
+**Scenario 1: Fix Artist Name**
+```json
+{{
+  "audio_id": "uuid-here",
+  "metadata": {{
+    "artist": "Corrected Artist Name"
+  }}
+}}
+```
+
+**Scenario 2: Update Genre Classification**
+```json
+{{
+  "audio_id": "uuid-here",
+  "metadata": {{
+    "genre": "{update_value}"
+  }}
+}}
+```
+
+**Scenario 3: Add Missing Album Information**
+```json
+{{
+  "audio_id": "uuid-here",
+  "metadata": {{
+    "album": "Album Title"
+  }}
+}}
+```
+
+**Scenario 4: Correct Release Year**
+```json
+{{
+  "audio_id": "uuid-here",
+  "metadata": {{
+    "year": 2023
+  }}
+}}
+```
+
+**Step 4: Verify Updates**
+After updating, search again to confirm changes:
+```json
+{{
+  "query": "{search_query}",
+  "limit": 10
+}}
+```
+
+**JSON Merge Patch Semantics:**
+- **Omit a field** → leave unchanged
+- **Provide a value** → update to new value
+- **Set to null** → remove field (if supported)
+
+**Validation Rules:**
+- `title`: Cannot be empty if provided
+- `year`: Must be 1800-2100 if provided
+- `genre`: Max 100 characters
+- Other fields: Max 500 characters
+
+**Best Practices:**
+1. **Test on one track first** before batch updates
+2. **Use specific search queries** to target exact tracks
+3. **Verify changes** after updates
+4. **Work in small batches** (10-20 tracks) for safety
+5. **Keep backups** of important metadata changes
+
+**Error Handling:**
+- `RESOURCE_NOT_FOUND`: Track doesn't exist
+- `VALIDATION_ERROR`: Invalid data provided
+- `DATABASE_ERROR`: Database operation failed"""
+            }
+        }
+    ]
 
 
 def create_mcp_tools():

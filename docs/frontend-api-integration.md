@@ -44,6 +44,22 @@ type PlayerConfig = {
 };
 ```
 
+#### Understanding the `context` Field
+
+The `context` field indicates the intended usage pattern for the player:
+
+- **`"embed"`**: The player is intended for **iframe embedding** in external platforms (Notion, Coda, WordPress, etc.) or third-party websites. This is the default context returned by `get_embed_url` MCP tool.
+  - Use when: Embedding the player in an iframe on another website
+  - Example: `<iframe src="https://loist.io/embed/{audioId}"></iframe>`
+  - The player is optimized for constrained iframe environments
+
+- **`"direct"`**: The player is intended for **direct browser access** where users navigate directly to the embed URL.
+  - Use when: Users click a share link and view the player in a full browser window
+  - Example: User clicks `https://loist.io/embed/{audioId}` in a browser
+  - The player has full browser context and can use additional features
+
+**Note**: Currently, all MCP tools return `context: "embed"` as they are designed for programmatic embed URL generation. The `context` field is included for future extensibility and to clearly communicate the intended usage pattern to API consumers.
+
 ### Base URL
 
 The base URL depends on your deployment:
@@ -597,6 +613,9 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
 ```
 
 **Response**: PlayerConfig shape
+
+**Note**: The `context` field indicates the intended usage pattern. `get_embed_url` returns `context: "embed"` by default, indicating the URL is optimized for iframe embedding. The same URL can also be used for direct browser access, but the `context` field helps API consumers understand the primary use case.
+
 ```json
 {
   "success": true,
@@ -700,6 +719,266 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
   }
 }
 ```
+
+---
+
+## MCP Resources (Audio Streaming & Artwork)
+
+### Overview
+
+The Loist Music Library exposes audio content through MCP resources, not direct HTTP endpoints. These resources provide secure, signed URLs for streaming audio and accessing artwork. All resources use in-memory caching and expire after 15 minutes for security.
+
+### Audio Streaming Resource
+
+**Resource URI**: `music-library://audio/{audio_id}/stream`
+
+**Purpose**: Provides signed GCS URL for audio streaming with range request support for seeking.
+
+**How to Access**:
+```javascript
+// Via MCP protocol (recommended for MCP clients)
+const streamUri = `music-library://audio/${audioId}/stream`;
+const resource = await mcpClient.readResource(streamUri);
+
+// Via HTTP API
+const response = await fetch(`${API_BASE_URL}/mcp/resources/`, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${VITE_API_BEARER_TOKEN}` // if auth enabled
+  },
+  body: JSON.stringify({
+    uri: `music-library://audio/${audioId}/stream`
+  })
+});
+
+const resource = await response.json();
+const streamUrl = resource.uri; // Signed GCS URL
+```
+
+**Response**:
+```json
+{
+  "uri": "https://storage.googleapis.com/bucket/audio.mp3?X-Goog-Signature=...",
+  "mimeType": "audio/mpeg",
+  "text": null,
+  "blob": null
+}
+```
+
+**Usage in HTML5 Audio**:
+```html
+<audio controls preload="metadata">
+  <source src="https://storage.googleapis.com/bucket/audio.mp3?X-Goog-Signature=..." type="audio/mpeg">
+  Your browser does not support the audio element.
+</audio>
+```
+
+**Important Notes**:
+- URLs expire after **15 minutes** for security
+- Supports HTTP Range requests for seeking (`Accept-Ranges: bytes`)
+- First request: ~50-100ms (database lookup + URL generation)
+- Cached requests: ~5-10ms (cache hit)
+- Supported formats: MP3, FLAC, WAV, M4A, OGG, AAC
+
+---
+
+### Artwork/Thumbnail Resource
+
+**Resource URI**: `music-library://audio/{audio_id}/thumbnail`
+
+**Purpose**: Provides signed GCS URL for album artwork/thumbnail images.
+
+**How to Access**:
+```javascript
+// Via MCP protocol
+const thumbnailUri = `music-library://audio/${audioId}/thumbnail`;
+const resource = await mcpClient.readResource(thumbnailUri);
+
+// Via HTTP API
+const response = await fetch(`${API_BASE_URL}/mcp/resources/`, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${VITE_API_BEARER_TOKEN}` // if auth enabled
+  },
+  body: JSON.stringify({
+    uri: `music-library://audio/${audioId}/thumbnail`
+  })
+});
+
+const resource = await response.json();
+if (resource.uri) {
+  // Artwork exists
+  const artworkUrl = resource.uri; // Signed GCS URL
+} else {
+  // No artwork available
+}
+```
+
+**Response** (when artwork exists):
+```json
+{
+  "uri": "https://storage.googleapis.com/bucket/artwork.jpg?X-Goog-Signature=...",
+  "mimeType": "image/jpeg",
+  "text": null,
+  "blob": null
+}
+```
+
+**Response** (when no artwork exists):
+```json
+{
+  "uri": null,
+  "mimeType": "image/jpeg",
+  "text": null,
+  "blob": null
+}
+```
+
+**Usage in HTML**:
+```html
+<img src="https://storage.googleapis.com/bucket/artwork.jpg?X-Goog-Signature=..."
+     alt="Album artwork"
+     style="max-width: 300px; max-height: 300px;">
+```
+
+**Important Notes**:
+- URLs expire after **15 minutes** for security
+- Recommended client cache: 24 hours (`Cache-Control: public, max-age=86400`)
+- Size: 600x600px (if available)
+- Format: JPEG (if embedded artwork exists)
+
+---
+
+### Metadata Resource
+
+**Resource URI**: `music-library://audio/{audio_id}/metadata`
+
+**Purpose**: Returns complete track metadata as JSON.
+
+**How to Access**:
+```javascript
+// Via MCP protocol
+const metadataUri = `music-library://audio/${audioId}/metadata`;
+const resource = await mcpClient.readResource(metadataUri);
+const metadata = JSON.parse(resource.text);
+
+// Via HTTP API
+const response = await fetch(`${API_BASE_URL}/mcp/resources/`, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${VITE_API_BEARER_TOKEN}` // if auth enabled
+  },
+  body: JSON.stringify({
+    uri: `music-library://audio/${audioId}/metadata`
+  })
+});
+
+const resource = await response.json();
+const metadata = JSON.parse(resource.text);
+```
+
+**Response**:
+```json
+{
+  "uri": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/metadata",
+  "mimeType": "application/json",
+  "text": "{\"id\": \"550e8400-...\", \"Product\": {...}, \"Format\": {...}, \"urlEmbedLink\": \"...\", \"resources\": {...}}",
+  "blob": null
+}
+```
+
+**Complete Metadata Structure**:
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "Product": {
+    "Artist": "The Beatles",
+    "Title": "Hey Jude",
+    "Album": "Hey Jude",
+    "MBID": null,
+    "Genre": ["Rock"],
+    "Year": 1968
+  },
+  "Format": {
+    "Duration": 431.0,
+    "Channels": 2,
+    "SampleRate": 44100,
+    "Bitrate": 320000,
+    "Format": "MP3"
+  },
+  "urlEmbedLink": "https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000",
+  "resources": {
+    "audio": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/stream",
+    "thumbnail": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/thumbnail"
+  }
+}
+```
+
+**Important Notes**:
+- Response time: ~20-50ms (database lookup only)
+- Recommended client cache: 1 hour (`Cache-Control: public, max-age=3600`)
+- MBID field is null (no fingerprinting in MVP)
+
+---
+
+### Resource Access Patterns
+
+#### Recommended Integration Flow
+
+```javascript
+// 1. Get PlayerConfig from get_embed_url (contains artwork URL)
+const embedConfig = await getEmbedUrl(audioId, 'waveform', 'desktop');
+
+// 2. Access audio stream via MCP resource
+const streamResource = await mcpClient.readResource(embedConfig.resources.audio);
+const streamUrl = streamResource.uri;
+
+// 3. Access artwork via MCP resource (or use PlayerConfig.urls.artwork)
+const thumbnailResource = await mcpClient.readResource(embedConfig.resources.thumbnail);
+const artworkUrl = thumbnailResource.uri || '/default-artwork.png';
+
+// 4. Use in HTML5 player
+const audioElement = new Audio(streamUrl);
+const imgElement = new Image();
+imgElement.src = artworkUrl;
+```
+
+#### Error Handling
+
+```javascript
+try {
+  const resource = await mcpClient.readResource(uri);
+  if (resource.uri) {
+    // Resource available
+    return resource.uri;
+  } else {
+    // Resource not available (e.g., no artwork)
+    return defaultValue;
+  }
+} catch (error) {
+  if (error.code === 'ResourceNotFoundError') {
+    // Audio track doesn't exist
+    throw new Error('Audio track not found');
+  }
+  throw error;
+}
+```
+
+#### Performance Considerations
+
+- **Caching**: Resources are cached server-side (13.5 min TTL)
+- **Batch Requests**: Request multiple resources in parallel
+- **Prefetching**: Request resources before they're needed
+- **URL Expiration**: Plan for 15-minute URL expiration
+
+### Related Documentation
+
+For complete technical details, see:
+- **[MCP Resources API](./mcp-resources-api.md)**: Comprehensive resource documentation with examples
+- **[Embed Player Guide](./embed-player-guide.md)**: Player integration and embedding patterns
 
 ---
 

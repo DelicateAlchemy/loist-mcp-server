@@ -10,6 +10,38 @@ The Loist Music Library MCP Server provides three query tools for managing audio
 
 The first two tools are read-only operations that query the PostgreSQL database. The delete tool permanently removes tracks from the database.
 
+## Protocol Access Methods
+
+There are two ways to use the query tools: via the canonical MCP JSON-RPC protocol or through convenience HTTP REST endpoints.
+
+### MCP JSON-RPC (Canonical)
+
+The primary and recommended way to use these tools is through the **MCP JSON-RPC protocol**. This is ideal for agentic workflows and programmatic integration.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "tools/call",
+  "params": {
+    "name": "get_audio_metadata",
+    "arguments": {
+      "audioId": "550e8400-e29b-41d4-a716-446655440000"
+    }
+  },
+  "id": 1
+}
+```
+
+### HTTP REST API (Convenience Wrapper)
+
+For direct use in web frontends or simple scripts, the server provides standard HTTP REST endpoints that wrap the MCP tools.
+
+-   `GET /api/tracks/{audioId}` (wraps `get_audio_metadata`)
+-   `GET /api/search` (wraps `search_library`)
+-   `DELETE /api/tracks/{audioId}` (wraps `delete_audio`)
+
+These endpoints are provided for convenience and are only available when the server is running in HTTP transport mode. For detailed documentation on these, see the "HTTP REST API Endpoints" section at the end of this document.
+
 ---
 
 ## Tool 1: get_audio_metadata

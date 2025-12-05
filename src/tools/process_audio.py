@@ -30,6 +30,8 @@ from .schemas import (
     ProcessAudioError,
     ProcessAudioException,
     ErrorCode,
+)
+from src.schemas.metadata import (
     ProductMetadata,
     FormatMetadata,
     AudioMetadata,

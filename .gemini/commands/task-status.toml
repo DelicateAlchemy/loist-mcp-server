@@ -1,0 +1,37 @@
+# Invoked as: /task:status
+
+description = "Show current task progress and what's next"
+
+prompt = """
+
+Read `docs/MCP-AUDIT-TASKS.md` and provide a status report:
+
+1. **Progress Summary**:
+
+   - Count completed tasks (lines with `- [STATUS: done]`)
+
+   - Count remaining tasks (lines with `- [STATUS: pending]`)
+
+   - Calculate percentage complete
+
+2. **Current Phase**:
+
+   - Which phase are we in? (P1, P2, P3, or P4)
+
+   - How many tasks remain in current phase?
+
+3. **Next Task**:
+
+   - Show the next uncompleted task ID and description
+
+4. **Recent Activity**:
+
+   - Show the last 3 entries from the Rolling Summary
+
+5. **Blockers**:
+
+   - List any items in the "Blockers & Issues" section
+
+Format as a concise status report.
+
+"""

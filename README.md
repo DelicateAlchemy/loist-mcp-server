@@ -108,6 +108,94 @@ The server implements a layered architecture with clear separation of concerns:
 └─────────────────┘
 ```
 
+## Protocol and API Access
+
+The server provides two primary methods of interaction: the canonical MCP JSON-RPC protocol for core tooling and standard HTTP endpoints for operational monitoring and convenience wrappers.
+
+> For a detailed explanation of the design philosophy, see the new [MCP Server Architecture](docs/mcp-architecture.md) document.
+
+### Canonical Protocol: MCP JSON-RPC
+
+The canonical and recommended way to interact with the server's core business logic is through the **MCP JSON-RPC protocol**. This is designed for agentic workflows and programmatic tool use. Communication happens over the configured transport (stdio, HTTP, or SSE).
+
+You interact with the server by sending JSON-RPC 2.0 requests to the `/mcp` endpoint (in HTTP/SSE mode) using two main methods:
+
+-   `tools/list`: To discover all available core business tools.
+-   `tools/call`: To execute a specific tool with arguments.
+
+#### Core Business Tools (via MCP)
+
+These are the primary tools available through the MCP protocol:
+- `process_audio_complete`
+- `get_audio_metadata`
+- `update_metadata`
+- `delete_audio`
+- `search_library`
+- `download_audio`
+- `get_embed_url`
+
+#### Usage Examples
+
+Here are some `curl` examples for interacting with the MCP server over HTTP.
+
+##### List Available Tools
+
+```bash
+curl -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
+```
+
+##### Call a Tool: `process_audio_complete`
+
+```bash
+curl -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc":"2.0",
+    "id":2,
+    "method":"tools/call",
+    "params":{
+      "name":"process_audio_complete",
+      "arguments":{"source":{"type":"http_url","url":"https://example.com/track.mp3"}}
+    }
+  }'
+```
+
+##### Call a Tool: `search_library`
+
+```bash
+curl -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc":"2.0",
+    "id":3,
+    "method":"tools/call",
+    "params":{
+      "name":"search_library",
+      "arguments":{"query":"rock"}
+    }
+  }'
+```
+
+### Operational & REST Endpoints (HTTP-Only)
+
+For operational monitoring and simple REST-based access, the server exposes standard HTTP endpoints. These are **not** MCP tools and should be accessed directly.
+
+#### Operational Endpoints
+-   **`GET /health/ready`**, **`/health/live`**: Return the health status of the server. Essential for Cloud Run and other container orchestration platforms.
+-   **`get_waveform_metrics_tool`**: Provides metrics on waveform generation.
+-   **`get_circuit_breaker_status`**: Shows the status of internal circuit breakers.
+
+#### REST API Endpoints
+
+For convenience, especially for web frontends, a set of RESTful endpoints are provided as wrappers around some MCP tool functionality.
+
+- `GET /api/tracks/{audioId}` - Get track metadata
+- `GET /api/search?q=<query>` - Search tracks with filters
+- `GET /api/tracks/{audioId}/stream` - Get signed streaming URL
+- `GET /api/tracks/{audioId}/thumbnail` - Get signed thumbnail URL
+
 ### Key Architectural Improvements
 
 #### Repository Pattern Implementation
@@ -179,32 +267,64 @@ The project follows a structured development workflow with comprehensive testing
 
 ### Testing Strategy
 
-The project implements a multi-layer testing approach:
+The project implements a multi-layer testing approach with comprehensive pytest infrastructure.
 
-#### Unit Testing
-```bash
-# Run all unit tests
-pytest tests/test_*.py -v
+📚 **[Complete Testing Setup Guide](docs/testing-setup.md)** - Detailed testing documentation and setup instructions.
 
-# Run with coverage
-pytest --cov=src --cov-report=html
-```
+#### Quick Start
 
-#### Integration Testing
-```bash
-# Database integration tests
-pytest tests/test_*_integration.py -v
+1. **Install development dependencies**:
+   ```bash
+   pip install -r requirements-dev.txt
+   ```
 
-# Performance benchmarks
-pytest tests/test_database_operations_integration.py::TestBatchOperations -v
-```
+2. **Start database service**:
+   ```bash
+   docker-compose up -d postgres
+   ```
+
+3. **Run tests**:
+   ```bash
+   # Using helper script (recommended)
+   ./scripts/run-tests.sh
+
+   # Or directly with pytest
+   pytest tests/ -v
+   ```
 
 #### Test Categories
+
+- **Unit Tests**: `pytest -m unit` (fast, no external dependencies)
+- **Integration Tests**: `pytest -m integration` (requires database)
+- **Database Tests**: `pytest -m requires_db` (requires PostgreSQL running)
+- **GCS Tests**: `pytest -m requires_gcs` (requires GCS credentials)
+
+#### Test Execution
+
+**Important**: Tests run **locally** (not in Docker container). The database service runs in Docker.
+
+```bash
+# All tests
+pytest tests/ -v
+
+# Unit tests only (fast, no database)
+pytest -m unit -v
+
+# Integration tests (requires database)
+pytest -m integration -v
+
+# With coverage
+pytest --cov=src --cov-report=html tests/
+```
+
+#### Test Infrastructure
+
 - **85%+ Coverage**: Comprehensive unit and integration tests
 - **Performance Testing**: Automated regression detection
 - **Exception Testing**: Unified framework validation
 - **Repository Testing**: Dependency injection and mocking
 - **Full-Text Search Testing**: Index validation, query accuracy, performance, and relevance testing
+- **Auto-Markers**: Automatic test categorization based on file/function patterns
 
 #### Security Scanning
 ```bash
@@ -809,6 +929,7 @@ Production/Staging Deployment
 - [Pre-PR Testing Guide](docs/pre-pr-testing-guide.md) - Local testing before pull requests
 - [Cloud Run Deployment](docs/cloud-run-deployment.md) - Production deployment details
 - [Security Scanning](docs/security-scanning.md) - Security scanning and vulnerability management
+- [Product Roadmap](docs/roadmap.md) - Future enhancements and planned features
 
 ### Running Workflows
 
@@ -1198,58 +1319,7 @@ Access-Control-Allow-Methods: GET, POST, OPTIONS
 Access-Control-Allow-Headers: Authorization, Content-Type, Range, ...
 ```
 
-## API Documentation
 
-### Health Check
-
-**Tool:** `health_check`
-
-Returns the current status of the server.
-
-**Returns:**
-```json
-{
-  "status": "healthy",
-  "service": "Music Library MCP",
-  "version": "0.1.0"
-}
-```
-
-## HTTP REST API
-
-The MCP server exposes HTTP REST API endpoints for direct frontend integration when running in HTTP transport mode.
-
-### Quick Start
-
-```bash
-# Start server in HTTP mode
-docker-compose up
-
-# Server available at http://localhost:8080
-# MCP endpoint: http://localhost:8080/mcp
-# REST API: http://localhost:8080/api/*
-```
-
-### Available Endpoints
-
-- `GET /api/tracks/{audioId}` - Get track metadata
-- `GET /api/search?q=<query>` - Search tracks with filters
-- `GET /api/tracks/{audioId}/stream` - Get signed streaming URL
-- `GET /api/tracks/{audioId}/thumbnail` - Get signed thumbnail URL
-
-### Example Usage
-
-```javascript
-// Search for tracks
-const response = await fetch('/api/search?q=beatles&limit=10');
-const result = await response.json();
-
-// Get track metadata
-const track = await fetch('/api/tracks/550e8400-e29b-41d4-a716-446655440000');
-const trackData = await track.json();
-```
-
-📚 **Complete API Documentation**: See [`docs/query-tools-api.md`](docs/query-tools-api.md#http-rest-api-endpoints)
 
 ## Multi-User SaaS Support
 

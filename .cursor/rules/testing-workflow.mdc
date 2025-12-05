@@ -1,0 +1,301 @@
+# Testing Workflow Rules
+
+**Critical rules for AI agents writing and running tests in this codebase.**
+
+## Test Execution Environment
+
+### ALWAYS Use Local Pytest Execution
+
+**For development testing, ALWAYS run pytest locally**:
+- Install dev dependencies: `pip install -r requirements-dev.txt`
+- Start database service: `docker-compose up -d postgres`
+- Run tests: `pytest tests/ -v`
+
+**NEVER assume pytest is installed in Docker container**:
+- Dockerfile doesn't install pytest (production image only)
+- Use local Python environment for testing
+- Database service runs in Docker, tests run locally
+
+### Docker Services for Testing
+
+**Database service (PostgreSQL)**:
+- Runs in Docker: `docker-compose up -d postgres`
+- Exposed on: `localhost:5432`
+- Credentials: `loist_user` / `dev_password` / `loist_mvp`
+- Tests connect to `localhost:5432` (Docker exposed port)
+
+**MCP Server service**:
+- Runs in Docker: `docker-compose up -d mcp-server`
+- Used for integration testing, not for running pytest
+- Does NOT have pytest installed
+
+## Writing Tests
+
+### Test File Organization
+
+- **Unit tests**: `tests/unit/test_*.py` (fast, isolated, no external dependencies)
+- **Integration tests**: `tests/integration/test_*.py` (component interactions)
+- **General tests**: `tests/test_*.py` (mixed categories)
+
+### Test Markers (Auto-Assigned)
+
+**DON'T manually add markers** - `conftest.py` auto-assigns based on:
+- **File path patterns**: Database tests (`test_database_*.py`, `test_*_integration.py`)
+- **Function name patterns**: GCS tests (functions with `gcs` in name)
+- **Patterns**: Slow tests (functions with `performance`, `stress`, `load` in name)
+
+**DO use markers** for explicit categorization when needed:
+- `@pytest.mark.unit` - Fast, isolated tests
+- `@pytest.mark.integration` - Component interaction tests
+- `@pytest.mark.slow` - Long-running tests (>1 second)
+- `@pytest.mark.requires_db` - Tests requiring database (auto-assigned)
+- `@pytest.mark.requires_gcs` - Tests requiring GCS (auto-assigned)
+
+### Database Tests
+
+**REQUIREMENTS**:
+- Docker Compose PostgreSQL service running: `docker-compose up -d postgres`
+- Environment variables set (or use defaults):
+  - `DB_HOST=localhost`
+  - `DB_PORT=5432`
+  - `DB_NAME=loist_mvp`
+  - `DB_USER=loist_user`
+  - `DB_PASSWORD=dev_password`
+
+**PATTERNS**:
+```python
+@pytest.fixture
+def db_pool():
+    """Fixture to create a test database pool."""
+    if not is_db_configured():
+        pytest.skip("Database not configured")
+    # ... create pool ...
+    yield pool
+    # ... cleanup ...
+```
+
+**CHECK**: Use `is_db_configured()` helper before running database tests
+
+### GCS Tests
+
+**REQUIREMENTS**:
+- `GOOGLE_APPLICATION_CREDENTIALS` environment variable set
+- Or use mocks for unit tests
+
+**PATTERNS**:
+```python
+@pytest.mark.requires_gcs
+def test_gcs_operation():
+    """Test GCS operation."""
+    # Test code here
+```
+
+### Unit Tests (No External Dependencies)
+
+**PATTERNS**:
+```python
+def test_validation_logic():
+    """Test validation without external dependencies."""
+    from unittest.mock import Mock, patch
+    
+    # Use mocks for external dependencies
+    mock_repo = Mock()
+    result = function_under_test(mock_repo)
+    assert result is not None
+```
+
+## Running Tests
+
+### Basic Commands
+
+```bash
+# All tests
+pytest tests/ -v
+
+# Unit tests only (fast, no database)
+pytest -m unit -v
+
+# Integration tests (requires database)
+pytest -m integration -v
+
+# Database tests (requires PostgreSQL running)
+pytest -m requires_db -v
+
+# Specific file
+pytest tests/test_exceptions.py -v
+
+# With coverage
+pytest --cov=src --cov-report=html tests/
+```
+
+### Database Setup Before Running Tests
+
+```bash
+# 1. Start database service
+docker-compose up -d postgres
+
+# 2. Verify connection (optional)
+docker-compose exec postgres psql -U loist_user -d loist_mvp -c "SELECT 1"
+
+# 3. Run database tests
+pytest -m requires_db -v
+```
+
+### Test Execution Checklist
+
+**Before running tests**:
+1. ✅ Install dev dependencies: `pip install -r requirements-dev.txt`
+2. ✅ Start database (if needed): `docker-compose up -d postgres`
+3. ✅ Set environment variables (if needed): `export DB_HOST=localhost ...`
+4. ✅ Run tests: `pytest tests/ -v`
+
+## Dependencies
+
+### Production Dependencies (`requirements.txt`)
+- **Does NOT include pytest** - Production image doesn't need testing tools
+- Includes: FastMCP, PostgreSQL drivers, GCS clients, etc.
+
+### Development Dependencies (`requirements-dev.txt`)
+- **Includes pytest and all testing tools**
+- Install with: `pip install -r requirements-dev.txt`
+- Required before running tests locally
+
+## PYTHONPATH
+
+**Local testing**: No PYTHONPATH needed (pytest.ini and conftest.py handle imports)
+**Docker testing**: Set `PYTHONPATH=/app/src:/app` (if running in container)
+
+## Test Fixtures
+
+### Available Fixtures (from conftest.py)
+
+- `db_pool` - Database connection pool (requires PostgreSQL running)
+- `sample_audio_metadata` - Standardized test data
+- `mock_repository` - Mock repository for unit tests
+- Auto-assigned markers based on file/function patterns
+
+### Using Fixtures
+
+```python
+def test_with_database(db_pool):
+    """Test using database fixture."""
+    with db_pool.get_connection() as conn:
+        # Test code here
+        pass
+
+def test_with_sample_data(sample_audio_metadata):
+    """Test using sample data fixture."""
+    assert sample_audio_metadata["title"] is not None
+```
+
+## Common Patterns
+
+### Unit Test Pattern
+
+```python
+from unittest.mock import Mock, patch
+
+def test_unit_functionality():
+    """Unit test with mocked dependencies."""
+    mock_dependency = Mock()
+    mock_dependency.method.return_value = "expected"
+    
+    result = function_under_test(mock_dependency)
+    assert result == "expected"
+    mock_dependency.method.assert_called_once()
+```
+
+### Integration Test Pattern
+
+```python
+def test_integration_with_database(db_pool):
+    """Integration test with real database."""
+    if not is_db_configured():
+        pytest.skip("Database not configured")
+    
+    with db_pool.get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1")
+            result = cur.fetchone()
+            assert result[0] == 1
+```
+
+### Async Test Pattern
+
+```python
+import pytest
+
+@pytest.mark.asyncio
+async def test_async_functionality():
+    """Test async functionality."""
+    result = await async_function()
+    assert result is not None
+```
+
+## Troubleshooting
+
+### Tests Fail with Import Errors
+
+**Problem**: `ModuleNotFoundError` or import errors
+**Solution**: 
+- Check PYTHONPATH (usually not needed, pytest.ini handles it)
+- Verify you're in project root directory
+- Check that `src/` directory exists
+
+### Database Tests Fail
+
+**Problem**: `OperationalError` or connection refused
+**Solution**:
+1. Check PostgreSQL is running: `docker-compose ps postgres`
+2. Start if needed: `docker-compose up -d postgres`
+3. Verify connection: `docker-compose exec postgres psql -U loist_user -d loist_mvp`
+4. Check environment variables: `echo $DB_HOST`
+
+### Pytest Not Found
+
+**Problem**: `pytest: command not found`
+**Solution**:
+- Install dev dependencies: `pip install -r requirements-dev.txt`
+- Or install pytest directly: `pip install pytest`
+
+### Coverage Not Working
+
+**Problem**: Coverage reports empty or missing
+**Solution**:
+- Install coverage plugin: `pip install pytest-cov`
+- Run with coverage: `pytest --cov=src tests/`
+- Check coverage config in `pytest.ini`
+
+## CI/CD Testing
+
+**Cloud Build** runs tests differently:
+- Uses `python:3.11-slim` container (not Docker Compose)
+- Installs dependencies: `pip install -r requirements.txt` + test dependencies
+- Sets `PYTHONPATH=/workspace/src:/workspace`
+- Runs: `python -m pytest -m "not (requires_db or requires_gcs or slow or requires_tools)"`
+
+**For local development**, use the local testing approach above.
+
+## Quick Reference
+
+```bash
+# Setup
+pip install -r requirements-dev.txt
+docker-compose up -d postgres
+
+# Run all tests
+pytest tests/ -v
+
+# Run unit tests only
+pytest -m unit -v
+
+# Run with coverage
+pytest --cov=src --cov-report=html tests/
+
+# Run specific test
+pytest tests/test_exceptions.py::TestExceptionHandling::test_validation_error -v
+```
+
+---
+
+**Remember**: Tests run **locally**, database runs in **Docker**. Never assume pytest is in the Docker container.

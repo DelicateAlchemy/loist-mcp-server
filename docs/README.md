@@ -67,6 +67,7 @@ Guides for developers contributing to the project.
   - **[Environment Variables](environment-variables.md)**: A complete reference for all environment variables.
   - **[Environment Audit 2025](environment-audit-2025.md)**: An audit of the environment configuration against best practices.
   - **[Development Cost Optimization](development-cost-optimization.md)**: How to minimize cloud costs during development.
+  - **[Product Roadmap](roadmap.md)**: Future enhancements and planned features.
 
 ## 🔒 Security
 
