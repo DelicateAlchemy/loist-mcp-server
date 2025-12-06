@@ -100,20 +100,24 @@
 ## 🚀 Phase 1: Environment Setup & Preparation [HIGH PRIORITY]
 
 ### P1.1 Environment Setup & Configuration
-- [STATUS: pending] **P1.1.1** Verify Docker Compose is running:
+- [STATUS: done] **P1.1.1** Verify Docker Compose is running:
   ```bash
   docker-compose up -d
   docker-compose ps  # Verify containers are running
   ```
-- [STATUS: pending] **P1.1.2** Verify server health:
+  - ✅ Docker containers verified running and healthy
+- [STATUS: done] **P1.1.2** Verify server health:
   ```bash
   curl http://localhost:8080/health/ready
   curl http://localhost:8080/health/database
   ```
+  - ✅ All health endpoints returning 200 OK
 - [STATUS: done] **P1.1.3** Set up testing approach:
   - **Option A (CLI)**: Use curl commands provided in each test
   - **Option B (Newman)**: Use `newman run loist-music-library-local.postman_collection.json --environment postman-env-local.json`
   - **Option C (Manual)**: Use Postman GUI (agent generates curl commands for you)
+  - ✅ Newman v6.2.1 installed and working
+  - ✅ Collection compatibility fixed for Newman execution
 - [STATUS: done] **P1.1.4** Set environment variables (export for curl, or create Postman/Newman env file):
   ```bash
   export BASE_URL="http://localhost:8080"
@@ -121,7 +125,7 @@
   export AUDIO_SOURCE_URL="<fresh-url-expires-1hr>"  # See Environment Variables section
   ```
   - ✅ Created `postman-env-local.json` with all required variables
-  - ✅ Newman installed globally for automated testing
+  - ✅ Newman environment file validated and working
 - [STATUS: pending] **P1.1.5** Get real test audio ID from database:
   ```bash
   # CLI command (requires manual execution or script)
