@@ -310,8 +310,8 @@
 								"type": "text/javascript",
 								"exec": [
 									"// Parse response body (handles both JSON and SSE formats)",
-									"let responseBody = pm.response.text();",
-									"let jsonResponse = null;",
+									"var responseBody = pm.response.text();",
+									"var jsonResponse = null;",
 									"",
 									"// Handle Server-Sent Events (SSE) format",
 									"if (responseBody.includes('data: ')) {",

@@ -110,28 +110,30 @@
   curl http://localhost:8080/health/ready
   curl http://localhost:8080/health/database
   ```
-- [STATUS: pending] **P1.1.3** Set up testing approach:
+- [STATUS: done] **P1.1.3** Set up testing approach:
   - **Option A (CLI)**: Use curl commands provided in each test
   - **Option B (Newman)**: Use `newman run loist-music-library-local.postman_collection.json --environment postman-env-local.json`
   - **Option C (Manual)**: Use Postman GUI (agent generates curl commands for you)
-- [STATUS: pending] **P1.1.4** Set environment variables (export for curl, or create Postman/Newman env file):
+- [STATUS: done] **P1.1.4** Set environment variables (export for curl, or create Postman/Newman env file):
   ```bash
   export BASE_URL="http://localhost:8080"
   export AUDIO_ID="<get-from-db>"  # See P1.1.5
   export AUDIO_SOURCE_URL="<fresh-url-expires-1hr>"  # See Environment Variables section
   ```
+  - ✅ Created `postman-env-local.json` with all required variables
+  - ✅ Newman installed globally for automated testing
 - [STATUS: pending] **P1.1.5** Get real test audio ID from database:
   ```bash
   # CLI command (requires manual execution or script)
   # Use -t flag for tuples-only output (cleaner for parsing)
-  docker-compose exec postgres psql -t -U postgres -d loist_music_library -c "SELECT audio_id FROM audio_tracks LIMIT 1;" | tr -d ' '
+  docker-compose exec postgres psql -t -U loist_user -d loist_mvp -c "SELECT id FROM audio_tracks LIMIT 1;" | tr -d ' '
   # Or use existing audio_id from environment if available
   # Example output: ca3f7741-3d32-445f-b837-f1ea92a79ac4
   ```
 - [STATUS: pending] **P1.1.6** Get audio ID with thumbnail (for thumbnail endpoint tests):
   ```bash
   # Use -t flag for tuples-only output
-  docker-compose exec postgres psql -t -U postgres -d loist_music_library -c "SELECT audio_id FROM audio_tracks WHERE thumbnail_gcs_path IS NOT NULL LIMIT 1;" | tr -d ' '
+  docker-compose exec postgres psql -t -U loist_user -d loist_mvp -c "SELECT id FROM audio_tracks WHERE thumbnail_gcs_path IS NOT NULL LIMIT 1;" | tr -d ' '
   ```
 
 ### P1.2 Test Data Preparation
