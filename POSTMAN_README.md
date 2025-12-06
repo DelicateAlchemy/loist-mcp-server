@@ -49,11 +49,12 @@ In the top-right corner of the Postman window, select the environment you just c
 
 ### Automatic MCP Session Initialization
 
-The collection includes a **collection-level pre-request script** that automatically handles the MCP session initialization. This means you don't need to manually run the "Initialize MCP Session" request every time.
+The collection includes a **collection-level pre-request script** that automatically handles MCP session initialization **synchronously**. This ensures session initialization completes before the main request is sent, eliminating the intermittent failures caused by async timing issues.
 
 - When you run any MCP-related request, the script checks if a `sessionId` exists in the environment.
-- If it doesn't, the script automatically sends an `initialize` request and saves the new `sessionId`.
-- All subsequent requests in the collection will then use this `sessionId`.
+- If it doesn't exist, the script **synchronously** initializes a new MCP session using a busy-wait pattern.
+- The session initialization blocks until complete (with a 10-second timeout), ensuring the session is ready before the main request executes.
+- All subsequent requests in the collection will then use the validated `sessionId`.
 
 ### Recommended Workflow
 
@@ -87,21 +88,76 @@ By following these steps, you can effectively test all aspects of the Loist Musi
 
 ### MCP Session Initialization Issues
 
-If you encounter errors like "Missing session ID" or "RESOURCE_NOT_FOUND" when running individual MCP tool requests, it's likely due to MCP session initialization issues.
+The collection now uses **synchronous session initialization**, which should eliminate most session-related issues. However, if you still encounter problems:
 
-**Problem**: The Postman collection uses asynchronous pre-request scripts for session initialization, which may not complete before the main request is sent.
+**Problem**: Session initialization fails or times out.
 
-**Solution**:
+**Symptoms**:
+- Error: "Session initialization timed out after 10000ms"
+- Error: "Session initialization failed: [error details]"
+- Error: "MCP session not initialized"
 
-1. **For individual requests**: Always run the **"Initialize MCP Session"** request first (found in the "Health Checks" folder).
-2. **For running the full collection**: The pre-request scripts should handle initialization automatically.
-3. **If you see "RESOURCE_NOT_FOUND" errors**: This usually means the session wasn't properly initialized. Run "Initialize MCP Session" and try again.
+**Solutions**:
 
-**MCP Protocol Flow**:
+1. **Check server connectivity**: Ensure the MCP server is running and accessible:
+   ```bash
+   curl http://localhost:8080/health/ready
+   ```
+
+2. **Clear stale session data**: If you get timeout errors, clear the environment variables:
+   - In Postman, go to your environment and clear `sessionId` and `sessionInitializedAt`
+   - Or run the "Initialize MCP Session" request manually
+
+3. **Manual initialization**: Run the "Initialize MCP Session" request first (found in "Health Checks" folder).
+
+4. **Check for server errors**: Look at the Postman console for detailed error messages.
+
+**New Synchronous Flow**:
 ```
-1. Send "initialize" request → Get session ID from response header
-2. Send "notifications/initialized" → Complete the handshake
-3. Now you can call MCP tools like "tools/call"
+1. Check if sessionId exists in environment
+2. If not, send "initialize" request and BUSY-WAIT until complete
+3. Send "notifications/initialized" synchronously
+4. Validate session is ready, then proceed with main request
 ```
 
-The collection includes automatic session management, but due to Postman's synchronous nature, individual requests may require manual initialization.
+**Benefits of synchronous initialization**:
+- ✅ No more race conditions between session init and main request
+- ✅ Clear error messages guide troubleshooting
+- ✅ Automatic retry logic for failed sessions
+- ✅ Session age validation warns about stale sessions
+
+### Newman CLI Alternative for Automated Testing
+
+For reliable automated testing without GUI dependencies, use Newman (Postman's CLI companion):
+
+**Installation**:
+```bash
+npm install -g newman
+```
+
+**Run the collection**:
+```bash
+# Basic run
+newman run loist-music-library-local.postman_collection.json \
+  --environment postman-env-local.json
+
+# With detailed reporting
+newman run loist-music-library-local.postman_collection.json \
+  --environment postman-env-local.json \
+  --reporters cli,json \
+  --reporter-json-export results.json
+
+# Run specific folder
+newman run loist-music-library-local.postman_collection.json \
+  --environment postman-env-local.json \
+  --folder "MCP Tools"
+```
+
+**Advantages over GUI**:
+- ✅ No async timing issues (Newman runs scripts synchronously)
+- ✅ Consistent test execution
+- ✅ CI/CD integration
+- ✅ Automated reporting
+- ✅ No manual intervention required
+
+**Note**: Newman handles the collection's pre-request scripts correctly, so session initialization works reliably in automated environments.
