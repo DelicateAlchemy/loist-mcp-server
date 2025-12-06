@@ -298,120 +298,67 @@
 ### P2.3 GET `/api/tracks/{audioId}/stream` - Streaming Endpoint
 
 #### Current Implementation Verification
-- [STATUS: pending] **P2.3.1** Verify current implementation behavior:
-  - **Check**: Does endpoint return 302 redirect or JSON response?
-  - **Check**: Does endpoint check for `success` field (bug mentioned in plan)?
-  - **Check**: What headers are included in response?
-- [STATUS: pending] **P2.3.2** Review `src/http_api.py` lines 153-174 to understand actual implementation
-  - **Document**: Current behavior vs. documented bugs
+- [STATUS: done] **P2.3.1** Verify current implementation behavior:
+  - **Check**: Does endpoint return 302 redirect or JSON response? ✅ **302 Found redirect**
+  - **Check**: Does endpoint check for `success` field (bug mentioned in plan)? ✅ **No success field check (correct)**
+  - **Check**: What headers are included in response? ✅ `content-length: 0`, `location: [signed GCS URL]`
+- [STATUS: done] **P2.3.2** Review `src/http_api.py` lines 153-174 to understand actual implementation
+  - **Document**: Current behavior vs. documented bugs ✅ **Redirect implementation is correct - no bugs found**
 
 #### Happy Path Tests
-- [STATUS: pending] **P2.3.3** Test GET `/api/tracks/{valid-audio-id}/stream` with valid UUID
-  - **Expected**: 302 Redirect to signed GCS URL OR 200 OK with streaming response
-  - **Verify**: Response includes proper `Content-Type` header
-  - **Verify**: Redirect URL is valid GCS signed URL (if redirect)
-- [STATUS: pending] **P2.3.4** Follow redirect and verify audio stream is accessible
-  - **Expected**: Audio file can be streamed/downloaded
-  - **Verify**: Content-Type matches audio format
+- [STATUS: done] **P2.3.3** Test GET `/api/tracks/{valid-audio-id}/stream` with valid UUID
+  - **Expected**: 302 Redirect to signed GCS URL OR 200 OK with streaming response ✅ **302 Found redirect**
+  - **Verify**: Response includes proper `Content-Type` header ✅ **content-type: audio/mpeg**
+  - **Verify**: Redirect URL is valid GCS signed URL (if redirect) ✅ **Valid signed GCS URL**
+- [STATUS: done] **P2.3.4** Follow redirect and verify audio stream is accessible
+  - **Expected**: Audio file can be streamed/downloaded ✅ **Accessible via signed URL**
+  - **Verify**: Content-Type matches audio format ✅ **audio/mpeg for MP3 file**
 
 #### Error Handling Tests
-- [STATUS: pending] **P2.3.5** Test GET `/api/tracks/{invalid-uuid}/stream` with invalid UUID
-  - **Expected**: 400 Bad Request
-  - **Verify**: Response contains error message
-- [STATUS: pending] **P2.3.6** Test GET `/api/tracks/{nonexistent-uuid}/stream` with non-existent ID
-  - **Expected**: 404 Not Found
-  - **Verify**: Response contains "not found" message
+- [STATUS: done] **P2.3.5** Test GET `/api/tracks/{invalid-uuid}/stream` with invalid UUID
+  - **Expected**: 400 Bad Request ✅
+  - **Verify**: Response contains error message ✅ (`"Invalid audio ID format"`)
+- [STATUS: done] **P2.3.6** Test GET `/api/tracks/{nonexistent-uuid}/stream` with non-existent ID
+  - **Expected**: 404 Not Found ✅
+  - **Verify**: Response contains "not found" message ✅ (`"Audio track 00000000-0000-0000-0000-000000000000 not found"`)
 
 #### Range Request Support (Critical)
-- [STATUS: pending] **P2.3.7** Test redirect response (capture Location header):
-  - **CLI Command** (single execution to maintain shell state):
-    ```bash
-    # Option 1: Capture signed URL in variable (requires shell state)
-    SIGNED_URL=$(curl -sI "http://localhost:8080/api/tracks/${AUDIO_ID}/stream" | grep -i location | cut -d' ' -f2 | tr -d '\r')
-    echo "Signed URL: $SIGNED_URL"
-    # Verify it's a valid GCS URL
-    echo "$SIGNED_URL" | grep -q "storage.googleapis.com" && echo "✓ Valid GCS URL" || echo "✗ Invalid URL"
-    ```
-  - **CLI Command** (if shell state not maintained, use explicit value):
-    ```bash
-    # Get redirect URL (don't follow redirect)
-    curl -v -L --max-redirs 0 "http://localhost:8080/api/tracks/${AUDIO_ID}/stream" 2>&1 | grep -i location
-    # Copy the URL from output and use it explicitly in P2.3.8
-    ```
-  - **Expected**: 302 Found redirect response
-  - **Verify**: Response includes `Location` header with signed GCS URL
-  - **Verify**: Status code is 302
-  - **Note**: Save `SIGNED_URL` variable for next test
+- [STATUS: done] **P2.3.7** Test redirect response (capture Location header):
+  - **CLI Command**: ✅ **Executed successfully**
+  - **Expected**: 302 Found redirect response ✅ **302 Found**
+  - **Verify**: Response includes `Location` header with signed GCS URL ✅ **Valid signed URL**
+  - **Verify**: Status code is 302 ✅ **302**
   - **Postman**: Disable "Follow redirects", check Location header
-- [STATUS: pending] **P2.3.8** Test Range request on signed GCS URL (direct request):
-  - **CLI Command** (chained with P2.3.7 if shell state maintained):
-    ```bash
-    # Chain with P2.3.7 in single execution
-    SIGNED_URL=$(curl -sI "http://localhost:8080/api/tracks/${AUDIO_ID}/stream" | grep -i location | cut -d' ' -f2 | tr -d '\r') && \
-    curl -v -H "Range: bytes=0-1023" "${SIGNED_URL}" -o range_test.bin && \
-    curl -I -H "Range: bytes=0-1023" "${SIGNED_URL}"
-    ```
-  - **CLI Command** (if using explicit URL value):
-    ```bash
-    # Replace <SIGNED_URL> with actual URL from P2.3.7 output
-    curl -v -H "Range: bytes=0-1023" "<SIGNED_URL>" -o range_test.bin
-    # Check headers
-    curl -I -H "Range: bytes=0-1023" "<SIGNED_URL>"
-    # Verify file size (should be 1024 bytes)
-    wc -c range_test.bin
-    ```
-  - **Expected**: 206 Partial Content response
-  - **Verify**: Response includes `Accept-Ranges: bytes` header
-  - **Verify**: Response includes `Content-Range: bytes 0-1023/total` header
-  - **Verify**: Response includes `Content-Length: 1024` (or actual range size)
-  - **Verify**: Response body contains only requested bytes (`wc -c range_test.bin` should show 1024)
+- [STATUS: done] **P2.3.8** Test Range request on signed GCS URL (direct request):
+  - **CLI Command**: ✅ **Executed successfully**
+  - **Expected**: 206 Partial Content response ✅ **Range requests work**
+  - **Verify**: Response includes `Accept-Ranges: bytes` header ✅ **accept-ranges: bytes**
+  - **Verify**: Response includes `Content-Range: bytes 0-1023/total` header ✅ **content-range: bytes 0-1023/5355724**
+  - **Verify**: Response includes `Content-Length: 1024` ✅ **content-length: 1024**
+  - **Verify**: Response body contains only requested bytes ✅ **1024 bytes returned**
   - **Postman**: Create new request to signed URL, add Range header
-- [STATUS: pending] **P2.3.9** Test multiple Range requests (verify seeking works):
-  - **CLI Command** (chained with P2.3.7):
-    ```bash
-    # Get signed URL and test multiple ranges in one execution
-    SIGNED_URL=$(curl -sI "http://localhost:8080/api/tracks/${AUDIO_ID}/stream" | grep -i location | cut -d' ' -f2 | tr -d '\r') && \
-    curl -H "Range: bytes=0-1023" "${SIGNED_URL}" -o range1.bin && \
-    curl -H "Range: bytes=2048-4095" "${SIGNED_URL}" -o range2.bin && \
-    diff range1.bin range2.bin && echo "✓ Ranges differ (expected)" || echo "✗ Ranges are identical (unexpected)"
-    ```
-  - **CLI Command** (if using explicit URL):
-    ```bash
-    # Replace <SIGNED_URL> with actual URL
-    curl -H "Range: bytes=0-1023" "<SIGNED_URL>" -o range1.bin
-    curl -H "Range: bytes=2048-4095" "<SIGNED_URL>" -o range2.bin
-    diff range1.bin range2.bin  # Should differ (exit code 1 is expected)
-    ```
-  - **Expected**: Both return 206 Partial Content with correct ranges
-  - **Verify**: Different byte ranges work independently
+- [STATUS: done] **P2.3.9** Test multiple Range requests (verify seeking works):
+  - **CLI Command**: ✅ **Executed successfully**
+  - **Expected**: Both return 206 Partial Content with correct ranges ✅ **Both ranges return 1024 bytes**
+  - **Verify**: Different byte ranges work independently ✅ **Ranges differ as expected**
   - **Postman**: Create multiple requests with different Range headers
-- [STATUS: pending] **P2.3.10** Test invalid Range request (negative test):
-  - **CLI Command** (chained):
-    ```bash
-    # Get signed URL and test invalid range
-    SIGNED_URL=$(curl -sI "http://localhost:8080/api/tracks/${AUDIO_ID}/stream" | grep -i location | cut -d' ' -f2 | tr -d '\r') && \
-    curl -v -H "Range: bytes=999999999-" "${SIGNED_URL}"
-    ```
-  - **CLI Command** (explicit URL):
-    ```bash
-    # Replace <SIGNED_URL> with actual URL
-    curl -v -H "Range: bytes=999999999-" "<SIGNED_URL>"
-    ```
-  - **Expected**: 416 Range Not Satisfiable
-  - **Verify**: Response includes `Content-Range: bytes */total` header
-  - **Verify**: Error response is spec-compliant
+- [STATUS: done] **P2.3.10** Test invalid Range request (negative test):
+  - **CLI Command**: ✅ **Executed successfully**
+  - **Expected**: 416 Range Not Satisfiable ✅ **HTTP/2 416 returned**
+  - **Verify**: Response includes `Content-Range: bytes */total` header ✅ **Proper error response**
+  - **Verify**: Error response is spec-compliant ✅ **GCS compliant 416 response**
   - **Postman**: Create request with invalid Range header
 
 #### Response Headers Verification
-- [STATUS: pending] **P2.3.11** Verify redirect response headers (from P2.3.7):
-  - **Verify**: `Location` header contains valid signed GCS URL
-  - **Verify**: URL format matches GCS signed URL pattern
-  - **Note**: Redirect response doesn't include Range headers (content not in redirect)
-- [STATUS: pending] **P2.3.12** Verify GCS response headers (from P2.3.8):
-  - **Verify**: `Accept-Ranges: bytes` header present
-  - **Verify**: `ETag` header present (for caching)
-  - **Verify**: `Content-Type` header matches actual audio format (e.g., `audio/mpeg`)
-  - **Verify**: `Content-Length` header present (matches range size)
+- [STATUS: done] **P2.3.11** Verify redirect response headers (from P2.3.7):
+  - **Verify**: `Location` header contains valid signed GCS URL ✅ **Valid signed URL with proper params**
+  - **Verify**: URL format matches GCS signed URL pattern ✅ **storage.googleapis.com with X-Goog-* params**
+  - **Note**: Redirect response doesn't include Range headers (content not in redirect) ✅ **Correct - only location header**
+- [STATUS: done] **P2.3.12** Verify GCS response headers (from P2.3.8):
+  - **Verify**: `Accept-Ranges: bytes` header present ✅ **accept-ranges: bytes**
+  - **Verify**: `ETag` header present (for caching) ✅ **etag: "1b8e586e42bd60a71de44e510aaa1484"**
+  - **Verify**: `Content-Type` header matches actual audio format (e.g., `audio/mpeg`) ✅ **content-type: audio/mpeg**
+  - **Verify**: `Content-Length` header present (matches range size) ✅ **content-length: 1024 for range 0-1023**
 
 ### P2.4 GET `/api/tracks/{audioId}/thumbnail` - Thumbnail Endpoint
 
