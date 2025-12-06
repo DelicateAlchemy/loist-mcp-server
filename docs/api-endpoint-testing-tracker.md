@@ -224,7 +224,7 @@
 ### P2.2 GET `/api/search` - Search Endpoint
 
 #### Happy Path Tests
-- [STATUS: pending] **P2.2.1** Test GET `/api/search?q=rock` with simple query
+- [STATUS: done] **P2.2.1** Test GET `/api/search?q=rock` with simple query
   - **CLI Command**:
     ```bash
     # With jq (if installed)
@@ -234,62 +234,66 @@
     # Or raw output
     curl -v "http://localhost:8080/api/search?q=rock"
     ```
-  - **Expected**: 200 OK with JSON response
-  - **Verify**: Response contains `success: true`, `results` array, `total` count
-  - **Verify**: Response includes `X-Total-Count` header (`curl -I` to check headers)
-  - **Verify**: Response includes `Link` header for pagination (if applicable)
+  - **Expected**: 200 OK with JSON response ✅
+  - **Verify**: Response contains `success: true`, `results` array, `total` count ✅ (2 results returned)
+  - **Verify**: Response includes `X-Total-Count` header (`curl -I` to check headers) ✅ (`x-total-count: 2`)
+  - **Verify**: Response includes `Link` header for pagination (if applicable) ✅ (not present for small result set)
   - **Postman**: Use "Search Tracks" request in "Custom Routes" folder
-- [STATUS: pending] **P2.2.2** Test search with pagination: `GET /api/search?q=rock&limit=10&offset=0`
+  - **Bonus**: Response includes rich facets data (composers, publishers, record_labels)
+- [STATUS: done] **P2.2.2** Test search with pagination: `GET /api/search?q=rock&limit=10&offset=0`
   - **CLI Command**:
     ```bash
     curl -v "http://localhost:8080/api/search?q=rock&limit=10&offset=0" | jq .
     ```
-  - **Expected**: 200 OK with 10 results (or fewer)
-  - **Verify**: `limit` and `offset` parameters work correctly
-  - **Verify**: `has_more` field indicates if more results available
+  - **Expected**: 200 OK with 10 results (or fewer) ✅ (2 results returned, limit=10 respected)
+  - **Verify**: `limit` and `offset` parameters work correctly ✅ (limit=10, offset=0)
+  - **Verify**: `has_more` field indicates if more results available ✅ (has_more=false, since only 2 results)
   - **Postman**: Modify "Search Tracks" request query parameters
-- [STATUS: pending] **P2.2.3** Test search with genre filter: `GET /api/search?q=rock&genre=Rock`
+- [STATUS: done] **P2.2.3** Test search with genre filter: `GET /api/search?q=rock&genre=Rock`
   - **CLI Command**:
     ```bash
     curl -v "http://localhost:8080/api/search?q=rock&genre=Rock" | jq .
     ```
-  - **Expected**: 200 OK with filtered results
-  - **Verify**: Results match genre filter
+  - **Expected**: 200 OK with filtered results ✅ (2 results returned)
+  - **Verify**: Results match genre filter ✅ (genres include "Rock" and "Progressive Rock")
   - **Postman**: Add `genre=Rock` query parameter to "Search Tracks" request
 
 #### Error Handling Tests
-- [STATUS: pending] **P2.2.4** Test GET `/api/search` without `q` parameter
+- [STATUS: done] **P2.2.4** Test GET `/api/search` without `q` parameter
   - **CLI Command**:
     ```bash
     curl -v "http://localhost:8080/api/search"
     ```
-  - **Expected**: 400 Bad Request
-  - **Verify**: Response contains `success: false` and "query required" message
+  - **Expected**: 400 Bad Request ✅
+  - **Verify**: Response contains `success: false` and "query required" message ✅ (`"Search query (q) is required"`)
   - **Postman**: Use "Search Tracks" request without `q` parameter
-- [STATUS: pending] **P2.2.5** Test GET `/api/search?q=` with empty query
+- [STATUS: done] **P2.2.5** Test GET `/api/search?q=` with empty query
   - **CLI Command**:
     ```bash
     curl -v "http://localhost:8080/api/search?q="
     ```
-  - **Expected**: 400 Bad Request
-  - **Verify**: Response contains `success: false` and error message
+  - **Expected**: 400 Bad Request ✅
+  - **Verify**: Response contains `success: false` and error message ✅ (`"Search query (q) is required"`)
   - **Postman**: Use "Search Tracks" request with empty `q` value
-- [STATUS: pending] **P2.2.6** Test search with invalid limit/offset: `GET /api/search?q=rock&limit=-1`
+- [STATUS: done] **P2.2.6** Test search with invalid limit/offset: `GET /api/search?q=rock&limit=-1`
   - **CLI Command**:
     ```bash
     curl -v "http://localhost:8080/api/search?q=rock&limit=-1"
     ```
-  - **Expected**: 400 Bad Request or corrected to valid range
-  - **Verify**: Invalid parameters are handled gracefully
+  - **Expected**: 400 Bad Request or corrected to valid range ✅ (corrected to limit=1)
+  - **Verify**: Invalid parameters are handled gracefully ✅ (returns 200 OK with corrected params, Link header for pagination)
   - **Postman**: Use "Search Tracks" request with invalid limit value
+  - **Note**: Current behavior silently corrects invalid params (documented behavior, not a bug)
 
 #### Edge Cases
-- [STATUS: pending] **P2.2.7** Test search with special characters: `GET /api/search?q=rock&roll`
-  - **Expected**: 200 OK with results (if any)
-  - **Verify**: Special characters are handled correctly
-- [STATUS: pending] **P2.2.8** Test search with very large result set: `GET /api/search?q=common-term&limit=100`
-  - **Expected**: 200 OK with pagination
-  - **Verify**: Pagination headers indicate more results available
+- [STATUS: done] **P2.2.7** Test search with special characters: `GET /api/search?q=rock&roll`
+  - **Expected**: 200 OK with results (if any) ✅
+  - **Verify**: Special characters are handled correctly ✅ (2 results returned)
+- [STATUS: failing] **P2.2.8** Test search with very large result set: `GET /api/search?q=money&limit=100`
+  - **Expected**: 200 OK with pagination ❌ (fails with internal error)
+  - **Root Cause**: Pagination bug LOI-9 - service fetches limit+1 but DB limit is 100
+  - **Evidence**: limit=99 works, limit=100 fails with "An internal error occurred during search"
+  - **Impact**: Large search requests fail when limit=100 (exactly as documented in LOI-9)
 
 ### P2.3 GET `/api/tracks/{audioId}/stream` - Streaming Endpoint
 
