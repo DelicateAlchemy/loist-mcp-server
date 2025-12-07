@@ -81,6 +81,7 @@ class DatabasePool:
     
     def _build_url_from_env(self) -> Optional[str]:
         """Build database URL from environment variables."""
+        logger.debug("Attempting to build database URL from environment variables.")
         import os
         
         # Get all database connection components

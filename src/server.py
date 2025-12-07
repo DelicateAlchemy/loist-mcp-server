@@ -52,6 +52,25 @@ from src.fastmcp_setup import (
     validate_server_setup,
 )
 
+import asyncio
+from database import get_connection_pool
+
+async def init_db_pool_with_retries(max_retries: int = 5, backoff_seconds: int = 2):
+    """Initialize DB pool with bounded retries (FastMCP best practice)"""
+    for attempt in range(max_retries):
+        try:
+            pool = get_connection_pool()
+            logger.info("✅ Database connection pool initialized")
+            return pool
+        except Exception as e:
+            if attempt < max_retries - 1:
+                wait_time = backoff_seconds * (2 ** attempt)
+                logger.warning(f"⚠️ DB init attempt {attempt + 1}/{max_retries} failed: {e}. Retrying in {wait_time}s...")
+                await asyncio.sleep(wait_time)
+            else:
+                logger.error(f"❌ Database pool initialization failed after {max_retries} attempts: {e}")
+                raise  # Fail fast - let Docker restart the container
+
 # ============================================================================
 # Centralized Exception Import Strategy
 # ============================================================================
@@ -99,6 +118,9 @@ async def lifespan(app):
     logger.info(f"🔧 Log Level: {config.log_level}")
     logger.info(f"🔐 Authentication: {'enabled' if config.auth_enabled else 'disabled'}")
     logger.info(f"✅ Health check enabled: {config.enable_healthcheck}")
+
+    # Initialize database connection pool with retries
+    await init_db_pool_with_retries()
 
     yield
 

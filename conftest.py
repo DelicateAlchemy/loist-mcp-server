@@ -34,6 +34,7 @@ def pytest_collection_modifyitems(config: pytest.Config, items: List[pytest.Item
             'test_query_tools.py',  # Uses database repository
             'test_oembed_endpoint.py',  # Queries database for audio
             'test_process_audio_complete.py',  # Saves to database
+            'test_resource_db_connectivity.py', # New integration test for resources
         ]):
             item.add_marker(pytest.mark.requires_db)
 
