@@ -40,25 +40,29 @@ class DatabasePool:
     ):
         """
         Initialize database connection pool.
-        
+
         Args:
             min_connections: Minimum number of connections to maintain
             max_connections: Maximum number of connections allowed
             database_url: PostgreSQL connection URL (defaults to config)
             **connection_kwargs: Additional psycopg2 connection parameters
         """
+        logger.info("🔄 DatabasePool.__init__ called - reading environment variables at runtime")
         self.min_connections = min_connections
         self.max_connections = max_connections
         self._pool: Optional[pool.ThreadedConnectionPool] = None
         self._connection_kwargs = connection_kwargs
-        
+
         # Get database URL from config or parameter
         if database_url:
+            logger.debug("✅ Using provided database_url parameter")
             self.database_url = database_url
         elif HAS_APP_CONFIG and app_config.database_url:
+            logger.info("✅ Using app_config.database_url from config")
             self.database_url = app_config.database_url
         else:
             # Fallback to environment variables
+            logger.info("🔄 Falling back to environment variables - calling _build_url_from_env()")
             self.database_url = self._build_url_from_env()
         
         if not self.database_url:
@@ -81,9 +85,9 @@ class DatabasePool:
     
     def _build_url_from_env(self) -> Optional[str]:
         """Build database URL from environment variables."""
-        logger.debug("Attempting to build database URL from environment variables.")
+        logger.debug("🔄 _build_url_from_env() called - reading environment variables NOW")
         import os
-        
+
         # Get all database connection components
         db_host = os.getenv("DB_HOST")
         db_port = os.getenv("DB_PORT", "5432")
@@ -91,23 +95,27 @@ class DatabasePool:
         db_user = os.getenv("DB_USER")
         db_password = os.getenv("DB_PASSWORD")
         db_connection_name = os.getenv("DB_CONNECTION_NAME")
-        
+
+        logger.debug(f"📖 Environment variables read: DB_HOST={db_host}, DB_PORT={db_port}, DB_NAME={db_name}, DB_USER={db_user}, DB_PASSWORD={'***' if db_password else None}, DB_CONNECTION_NAME={db_connection_name}")
+
         # PRIORITY 1: Cloud SQL Proxy connection (preferred for Cloud Run)
         if db_connection_name and db_name and db_user and db_password:
-            logger.info(f"Using Cloud SQL Proxy connection: {db_connection_name}")
+            logger.info(f"✅ Using Cloud SQL Proxy connection: {db_connection_name}")
             return f"postgresql://{db_user}:{db_password}@/{db_name}?host=/cloudsql/{db_connection_name}"
-        
+
         # PRIORITY 2: Direct DATABASE_URL (for local development)
         database_url = os.getenv("DATABASE_URL")
+        logger.debug(f"📖 DATABASE_URL env var: {'***' if database_url else 'NOT SET'}")
         if database_url:
-            logger.info("Using DATABASE_URL for database connection")
+            logger.info("✅ Using DATABASE_URL for database connection")
             return database_url
-        
+
         # PRIORITY 3: Direct connection via individual components (fallback)
         if db_host and db_name and db_user and db_password:
-            logger.info(f"Using direct database connection to: {db_host}:{db_port}")
+            logger.info(f"✅ Using direct database connection to: {db_host}:{db_port}")
             return f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
-        
+
+        logger.warning("❌ No valid database configuration found in environment variables")
         return None
     
     def initialize(self) -> None:
@@ -337,18 +345,20 @@ def get_connection_pool(
 ) -> DatabasePool:
     """
     Get or create the global connection pool instance.
-    
+
     Args:
         min_connections: Minimum connections (defaults to config)
         max_connections: Maximum connections (defaults to config)
         force_new: Force creation of new pool
-    
+
     Returns:
         DatabasePool instance
     """
     global _pool
-    
+    logger.debug(f"🔄 get_connection_pool() called: _pool exists={_pool is not None}, force_new={force_new}")
+
     if _pool is None or force_new:
+        logger.debug("🏗️ Creating new DatabasePool instance")
         # Get defaults from config if available
         if HAS_APP_CONFIG:
             min_conn = min_connections or app_config.db_min_connections
@@ -356,14 +366,15 @@ def get_connection_pool(
         else:
             min_conn = min_connections or 2
             max_conn = max_connections or 10
-        
+
         if _pool is not None:
             _pool.close()
-        
+
         _pool = DatabasePool(
             min_connections=min_conn,
             max_connections=max_conn
         )
+        logger.debug("🔄 Calling _pool.initialize() - this will read env vars if needed")
         _pool.initialize()
     
     return _pool
