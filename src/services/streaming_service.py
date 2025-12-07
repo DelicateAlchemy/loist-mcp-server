@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 # Signed URL Cache
 # ============================================================================
 
-class _SignedURLCache:
+class SignedURLCache:
     """In-memory cache for GCS signed URLs."""
 
     def __init__(self, default_ttl: int = 810):  # 13.5 minutes
@@ -60,12 +60,12 @@ class _SignedURLCache:
             logger.info(f"Generated and cached signed URL for {gcs_path}")
             return signed_url
 
-_cache: Optional[_SignedURLCache] = None
+_cache: Optional[SignedURLCache] = None
 
-def get_cache() -> _SignedURLCache:
+def get_cache() -> SignedURLCache:
     global _cache
     if _cache is None:
-        _cache = _SignedURLCache()
+        _cache = SignedURLCache()
     return _cache
 
 

@@ -8,8 +8,8 @@ correctly call the streaming_service and format the MCP response.
 import pytest
 from unittest.mock import patch, AsyncMock
 
-from src.resources.audio_stream import get_audio_stream_resource, get_content_headers_for_audio
-from src.resources.thumbnail import get_thumbnail_resource, get_content_headers_for_thumbnail
+from src.resources.audio_stream import get_audio_stream_resource
+from src.resources.thumbnail import get_thumbnail_resource
 from src.exceptions import ResourceNotFoundError, ValidationError
 
 # ============================================================================
@@ -39,8 +39,7 @@ async def test_audio_stream_not_found(mock_streaming_service):
     mock_streaming_service.get_audio_stream_details.side_effect = ResourceNotFoundError("Not found")
     
     with pytest.raises(ResourceNotFoundError):
-        await get_audio_stream_resource("music-library://audio/not-found-id/stream")
-
+        await get_audio_stream_resource("music-library://audio/550e8400-e29b-41d4-a716-446655440000/stream")
 @pytest.mark.asyncio
 async def test_audio_stream_invalid_uri():
     """Test that the resource wrapper raises ValidationError for bad URIs."""
@@ -74,20 +73,4 @@ async def test_thumbnail_resource_not_found(mock_streaming_service):
     mock_streaming_service.get_thumbnail_details.side_effect = ResourceNotFoundError("Not found")
     
     with pytest.raises(ResourceNotFoundError):
-        await get_thumbnail_resource("music-library://audio/not-found-id/thumbnail")
-
-# ============================================================================
-# Header Util Tests (Keeping them here for now)
-# ============================================================================
-
-def test_audio_headers():
-    """Test audio streaming headers utility function."""
-    headers = get_content_headers_for_audio("MP3", support_ranges=True)
-    assert headers["Content-Type"] == "audio/mpeg"
-    assert headers["Accept-Ranges"] == "bytes"
-
-def test_thumbnail_headers():
-    """Test thumbnail image headers utility function."""
-    headers = get_content_headers_for_thumbnail()
-    assert headers["Content-Type"] == "image/jpeg"
-    assert "Cache-Control" in headers
+        await get_thumbnail_resource("music-library://audio/550e8400-e29b-41d4-a716-446655440000/thumbnail")

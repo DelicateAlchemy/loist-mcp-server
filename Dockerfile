@@ -15,11 +15,12 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy dependency files
-COPY requirements.txt pyproject.toml ./
+COPY requirements.txt requirements-dev.txt pyproject.toml ./
 
 # Install dependencies and create wheels for faster runtime install
 RUN pip install --upgrade pip && \
-    pip wheel --no-cache-dir --wheel-dir=/wheels -r requirements.txt
+    pip wheel --no-cache-dir --wheel-dir=/wheels -r requirements.txt && \
+    pip wheel --no-cache-dir --wheel-dir=/wheels -r requirements-dev.txt
 
 
 # ============================================================================
@@ -44,16 +45,18 @@ RUN useradd --create-home --shell /bin/bash --uid 1000 fastmcpuser
 COPY --from=builder /wheels /wheels
 
 # Copy dependency files
-COPY --chown=fastmcpuser:fastmcpuser requirements.txt pyproject.toml ./
+COPY --chown=fastmcpuser:fastmcpuser requirements.txt requirements-dev.txt pyproject.toml ./
 
 # Install dependencies from wheels (fast, no compilation)
 RUN pip install --no-cache-dir --find-links=/wheels -r requirements.txt && \
+    pip install --no-cache-dir --find-links=/wheels -r requirements-dev.txt && \
     rm -rf /wheels
 
 # Copy application code
 COPY --chown=fastmcpuser:fastmcpuser src/ ./src/
 COPY --chown=fastmcpuser:fastmcpuser database/ ./database/
 COPY --chown=fastmcpuser:fastmcpuser run_server.py ./
+COPY --chown=fastmcpuser:fastmcpuser tests/ ./tests/
 
 # Copy templates directory
 COPY --chown=fastmcpuser:fastmcpuser templates/ ./templates/

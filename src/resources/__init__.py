@@ -16,7 +16,7 @@ Follows best practices from research:
 from .audio_stream import get_audio_stream_resource
 from .metadata import get_metadata_resource
 from .thumbnail import get_thumbnail_resource
-from .cache import SignedURLCache
+from src.services.streaming_service import SignedURLCache
 
 __all__ = [
     "get_audio_stream_resource",

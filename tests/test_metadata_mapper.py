@@ -16,7 +16,7 @@ from unittest.mock import patch, MagicMock
 from src.converter.metadata_mapper import (
     map_metadata_to_ffmpeg_args,
     _escape_metadata_value,
-    _get_artwork_ffmpeg_args,
+    _get_artwork_stream_mapping,  # Updated import
     _get_format_specific_flags,
     get_supported_artwork_formats,
     validate_metadata_for_format,
@@ -118,28 +118,25 @@ class TestMetadataMapping:
 
 
 class TestArtworkEmbedding:
-    """Test artwork embedding argument generation."""
+    """Test artwork embedding argument generation using _get_artwork_stream_mapping."""
 
     def test_mp3_artwork_args(self):
         """Test MP3 artwork embedding arguments."""
-        artwork_path = Path('/tmp/cover.jpg')
-        args = _get_artwork_ffmpeg_args('mp3', artwork_path)
+        args = _get_artwork_stream_mapping('mp3')
 
-        assert '-i' in args
-        assert str(artwork_path) in args
         assert '-map' in args
         assert '0:a' in args  # Audio stream
         assert '1:v' in args  # Video stream (artwork)
         assert '-codec:v' in args
         assert 'mjpeg' in args
+        assert '-metadata:s:v' in args
+        assert 'title=Cover' in args
+        assert 'comment=Cover (front)' in args
 
     def test_aac_artwork_args(self):
         """Test AAC artwork embedding arguments."""
-        artwork_path = Path('/tmp/cover.jpg')
-        args = _get_artwork_ffmpeg_args('aac', artwork_path)
+        args = _get_artwork_stream_mapping('aac')
 
-        assert '-i' in args
-        assert str(artwork_path) in args
         assert '-map' in args
         assert '-codec:v' in args
         assert 'mjpeg' in args
@@ -148,11 +145,8 @@ class TestArtworkEmbedding:
 
     def test_flac_artwork_args(self):
         """Test FLAC artwork embedding arguments."""
-        artwork_path = Path('/tmp/cover.jpg')
-        args = _get_artwork_ffmpeg_args('flac', artwork_path)
+        args = _get_artwork_stream_mapping('flac')
 
-        assert '-i' in args
-        assert str(artwork_path) in args
         assert '-map' in args
         assert '-codec:v' in args
         assert 'mjpeg' in args
@@ -161,19 +155,15 @@ class TestArtworkEmbedding:
 
     def test_wav_no_artwork(self):
         """Test that WAV format doesn't get artwork arguments."""
-        artwork_path = Path('/tmp/cover.jpg')
-        args = _get_artwork_ffmpeg_args('wav', artwork_path)
+        args = _get_artwork_stream_mapping('wav')
 
         # Should return empty list for WAV
         assert args == []
 
     def test_ogg_artwork_args(self):
         """Test OGG artwork embedding arguments."""
-        artwork_path = Path('/tmp/cover.jpg')
-        args = _get_artwork_ffmpeg_args('ogg', artwork_path)
+        args = _get_artwork_stream_mapping('ogg')
 
-        assert '-i' in args
-        assert str(artwork_path) in args
         assert '-map' in args
         assert '-codec:v' in args
         assert 'mjpeg' in args
