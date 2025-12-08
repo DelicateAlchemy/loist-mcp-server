@@ -198,9 +198,8 @@ class GetAudioMetadataInput(BaseModel):
     """
     audio_id: str = Field(
         ...,
-        description="UUID of the audio track",
-        pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-        # Note: pattern already enforces exact length, no need for min_length/max_length
+        description="UUID of the audio track"
+        # UUID format validation handled by custom validator
     )
 
     @field_validator('audio_id')
@@ -609,9 +608,8 @@ class DeleteAudioInput(BaseModel):
     """
     audio_id: str = Field(
         ...,
-        description="UUID of the audio track to delete",
-        pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-        # Note: pattern already enforces exact length, no need for min_length/max_length
+        description="UUID of the audio track to delete"
+        # UUID format validation handled by custom validator
     )
     # TODO: Add user_id for authorization when auth is implemented
 

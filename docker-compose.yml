@@ -56,6 +56,8 @@ services:
       - ./src:/app/src
       # Mount database migrations and config
       - ./database:/app/database:ro
+      # Mount tests for live testing during development
+      - ./tests:/app/tests:ro
       # Mount for local storage (when implementing file features)
       - ./storage:/app/storage
       # Mount templates directory

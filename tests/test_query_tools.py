@@ -79,9 +79,9 @@ async def test_get_audio_metadata_input_validation_edge_cases():
     with pytest.raises(ValueError, match=r"audio_id must be a valid UUID format.*got: abc"):
         GetAudioMetadataInput(audio_id="abc")
 
-    # UUID-like but invalid format
-    with pytest.raises(ValueError, match=r"audio_id must be a valid UUID format.*got: 12345678-1234-1234-1234-123456789abc"):
-        GetAudioMetadataInput(audio_id="12345678-1234-1234-1234-123456789abc")  # Invalid hex
+    # UUID-like but invalid format (contains 'g' which is not valid hex)
+    with pytest.raises(ValueError, match=r"audio_id must be a valid UUID format.*got: 12345678-1234-1234-1234-gggggggggggg"):
+        GetAudioMetadataInput(audio_id="12345678-1234-1234-1234-gggggggggggg")  # Invalid hex (g not valid)
 
     # Valid UUID - should pass
     valid_input = GetAudioMetadataInput(audio_id="550e8400-e29b-41d4-a716-446655440000")
