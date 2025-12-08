@@ -610,9 +610,8 @@ class DeleteAudioInput(BaseModel):
     audio_id: str = Field(
         ...,
         description="UUID of the audio track to delete",
-        pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-        min_length=36,
-        max_length=36
+        pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        # Note: pattern already enforces exact length, no need for min_length/max_length
     )
     # TODO: Add user_id for authorization when auth is implemented
 
@@ -635,13 +634,16 @@ class DeleteAudioInput(BaseModel):
     @classmethod
     def validate_uuid_format(cls, v):
         """Ensure audio_id is a valid UUID format"""
-        uuid_pattern = re.compile(
-            r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
-            re.IGNORECASE
-        )
-        if not uuid_pattern.match(v):
-            raise ValueError("audio_id must be a valid UUID format")
-        return v.lower()  # Normalize to lowercase
+        import uuid
+        try:
+            # Use Python's uuid.UUID for robust validation
+            parsed_uuid = uuid.UUID(v)
+            return str(parsed_uuid).lower()  # Normalize to lowercase hyphenated format
+        except ValueError:
+            raise ValueError(
+                f"audio_id must be a valid UUID format "
+                f"(e.g., 550e8400-e29b-41d4-a716-446655440000), got: {v[:50]}"
+            )
 
     model_config = {
         "json_schema_extra": {
