@@ -54,9 +54,9 @@ The current download tests lack proper cleanup of audio files after test executi
 
 ## Task List
 
-### Phase 1: Test Structure & Organization
+### Phase 1: Test Organization & Cleanup Fixes
 
-#### T1.1: Create Test Directory Structure
+#### T1.3: Improve Download Service Cleanup
 **Status**: `todo`
 **Branch**: `task/loi-17-improve-download-tests`
 **Description**: Create organized test directory structure for download tests
@@ -110,25 +110,27 @@ Check:
 ---
 
 #### T1.2: Create Base Test Fixtures
-**Status**: `in_progress`
+**Status**: ✅ **COMPLETED**
 **Branch**: `task/loi-17-improve-download-tests`
 **Description**: Create reusable fixtures for download testing scenarios
 
 **Tasks**:
-- [x] Add fixture for test audio track metadata (done in T1.1)
-- [x] Add fixture for temporary download directory (done in T1.1)
-- [ ] Add fixture for GCS mock/stub (if needed)
-- [ ] Add fixture for download service instance
-- [ ] Add fixture for cleanup verification helpers (basic version done in T1.1)
+- ✅ Add fixture for test audio track metadata (done in T1.1)
+- ✅ Add fixture for temporary download directory (done in T1.1)
+- ✅ Add fixture for GCS mock/stub (mock_gcs_client)
+- ✅ Add fixture for download service instance (mock_download_service)
+- ✅ Add fixture for cleanup verification helpers (cleanup_verifier)
 
-**Files to Modify**:
-- `tests/integration/downloads/conftest.py`
-- `tests/functional/downloads/conftest.py`
+**Files Modified**:
+- `tests/integration/downloads/conftest.py` (added mock_gcs_client, mock_download_service)
+- `tests/functional/downloads/conftest.py` (added mock_mcp_client, mock_http_client)
 
-**Testing**:
-- Verify fixtures can be imported and used
-- Run: `pytest tests/integration/downloads/ -v --fixtures`
-- Test fixture cleanup works correctly
+**Testing Completed**:
+- ✅ Verified fixtures can be imported and used
+- ✅ Run: `pytest tests/integration/downloads/ -v --fixtures`
+- ✅ Verified all fixtures are available
+
+**Git Commit**: `195ac25` - feat(tests): add base fixtures for download tests (LOI-17 T1.2)
 
 **Code Review Prompt**:
 ```

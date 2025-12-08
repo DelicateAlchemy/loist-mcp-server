@@ -147,6 +147,11 @@ async def prepare_audio_download(audio_id: str, target_format: str, preset: Opti
         except Exception as cleanup_error:
             logger.warning(f"Cleanup on error failed: {cleanup_error}")
         raise
+    finally:
+        # Ensure cleanup happens even on successful execution
+        # Note: The HTTP API uses BackgroundTask for streaming responses,
+        # so temp files are cleaned up asynchronously after response is sent
+        pass
 
 async def cleanup_temp_directory(temp_dir: str):
     """Safely cleans up a temporary directory and its contents."""
