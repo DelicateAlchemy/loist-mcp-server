@@ -536,7 +536,7 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
                 "album": metadata_dict.get("album", ""),
                 "genre": metadata_dict.get("genre"),
                 "year": metadata_dict.get("year"),
-                "duration_seconds": metadata_dict.get("duration", 0),
+                "duration_seconds": metadata_dict.get("duration"),
                 "channels": metadata_dict.get("channels", 2),
                 "sample_rate": metadata_dict.get("sample_rate", 44100),
                 "bitrate": metadata_dict.get("bitrate", 0),
@@ -603,7 +603,7 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
                     year=metadata_dict.get("year")
                 ),
                 format=FormatMetadata(
-                    duration=metadata_dict.get("duration", 0),
+                    duration=metadata_dict.get("duration"),
                     channels=metadata_dict.get("channels", 2),
                     sample_rate=metadata_dict.get("sample_rate", 44100),
                     bitrate=metadata_dict.get("bitrate", 0),
