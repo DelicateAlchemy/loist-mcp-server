@@ -262,16 +262,22 @@ def download_audio(input_data: Dict[str, Any]) -> Dict[str, Any]:
             return result
 
         finally:
-            # Cleanup temp files
+            # Cleanup temp files synchronously
+            # Note: This blocks response until cleanup completes
+            # For production, consider async cleanup or background tasks
             try:
                 if source_path and source_path.exists():
                     source_path.unlink()
+                    logger.debug(f"Cleaned up source file: {source_path}")
                 if output_path and output_path.exists():
                     output_path.unlink()
+                    logger.debug(f"Cleaned up output file: {output_path}")
                 if artwork_path and artwork_path.exists():
                     artwork_path.unlink()
+                    logger.debug(f"Cleaned up artwork file: {artwork_path}")
                 if temp_dir and Path(temp_dir).exists():
                     Path(temp_dir).rmdir()
+                    logger.debug(f"Cleaned up temp directory: {temp_dir}")
             except Exception as e:
                 logger.warning(f"Failed to cleanup temp files: {e}")
 
