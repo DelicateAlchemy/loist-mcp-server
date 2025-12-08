@@ -179,7 +179,6 @@
   - **Verify**: Response includes ETag header (`grep -i etag` or check headers) ✅ (`etag: "ab5bc879afc4407287cd0709ec0cb1c8"`)
   - **Verify**: Response includes Cache-Control header ✅ (`cache-control: public, max-age=3600, must-revalidate`)
   - **Postman**: Use "Get Track Metadata" request in "Custom Routes" folder
-  - **Note**: `metadata.format.duration` is `null` (known issue LOI-14)
 - [STATUS: done] **P2.1.2** Test conditional request with If-None-Match header
   - **CLI Command**:
     ```bash
@@ -214,7 +213,7 @@
 #### Response Format Validation
 - [STATUS: done] **P2.1.5** Verify metadata object structure matches expected schema:
   - `metadata.product.title`, `metadata.product.artist`, `metadata.product.album`, `metadata.product.genre`, `metadata.product.year` ✅
-  - `metadata.format.duration` (null - known issue LOI-14), `metadata.format.channels`, `metadata.format.sample_rate`, `metadata.format.bitrate`, `metadata.format.format` ✅
+  - `metadata.format.duration`, `metadata.format.channels`, `metadata.format.sample_rate`, `metadata.format.bitrate`, `metadata.format.format` ✅
   - `metadata.url_embed_link` ✅
 - [STATUS: done] **P2.1.6** Verify resources object structure:
   - `resources.audio_url` ✅ (`music-library://audio/{audioId}/stream`)
