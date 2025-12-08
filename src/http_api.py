@@ -62,9 +62,13 @@ def register_http_api_routes(mcp: FastMCP) -> None:
         """
         audio_id = request.path_params.get("audioId")
         try:
-            uuid.UUID(audio_id)
-        except (ValueError, AttributeError):
-            return JSONResponse({"success": False, "message": "Invalid audio ID format"}, status_code=400)
+            audio_id = validate_uuid_path(audio_id)
+        except ValidationError as e:
+            return JSONResponse({
+                "success": False,
+                "error": ErrorCode.VALIDATION_ERROR,
+                "message": str(e)
+            }, status_code=400)
 
         try:
             service_result = await audio_service.get_audio_metadata(audio_id)
@@ -166,7 +170,7 @@ def register_http_api_routes(mcp: FastMCP) -> None:
             logger.exception(f"Search failed for query '{request.query_params.get('q', 'unknown')}': {e}")
             return JSONResponse({
                 "success": False,
-                "error": ErrorCode.DOWNLOAD_FAILED,
+                "error": ErrorCode.SEARCH_FAILED,
                 "message": "An internal error occurred during search."
             }, status_code=500)
 
@@ -179,9 +183,13 @@ def register_http_api_routes(mcp: FastMCP) -> None:
         """
         audio_id = request.path_params.get("audioId")
         try:
-            uuid.UUID(audio_id)
-        except (ValueError, AttributeError):
-            return JSONResponse({"success": False, "message": "Invalid audio ID format"}, status_code=400)
+            audio_id = validate_uuid_path(audio_id)
+        except ValidationError as e:
+            return JSONResponse({
+                "success": False,
+                "error": ErrorCode.VALIDATION_ERROR,
+                "message": str(e)
+            }, status_code=400)
 
         try:
             details = await streaming_service.get_audio_stream_details(audio_id)
@@ -203,9 +211,13 @@ def register_http_api_routes(mcp: FastMCP) -> None:
         """
         audio_id = request.path_params.get("audioId")
         try:
-            uuid.UUID(audio_id)
-        except (ValueError, AttributeError):
-            return JSONResponse({"success": False, "message": "Invalid audio ID format"}, status_code=400)
+            audio_id = validate_uuid_path(audio_id)
+        except ValidationError as e:
+            return JSONResponse({
+                "success": False,
+                "error": ErrorCode.VALIDATION_ERROR,
+                "message": str(e)
+            }, status_code=400)
 
         try:
             details = await streaming_service.get_thumbnail_details(audio_id)
@@ -224,21 +236,28 @@ def register_http_api_routes(mcp: FastMCP) -> None:
         """
         audio_id = request.path_params.get("audioId")
         try:
-            uuid.UUID(audio_id)
-        except (ValueError, AttributeError):
-            return JSONResponse({"success": False, "message": "Invalid audio ID format"}, status_code=400)
+            audio_id = validate_uuid_path(audio_id)
+        except ValidationError as e:
+            return JSONResponse({
+                "success": False,
+                "error": ErrorCode.VALIDATION_ERROR,
+                "message": str(e)
+            }, status_code=400)
 
         target_format = request.query_params.get("format")
-        if not target_format:
-            return JSONResponse({"success": False, "message": "Format parameter is required"}, status_code=400)
-        
-        target_format = target_format.lower()
-        if not validate_format(target_format):
-            return JSONResponse({"success": False, "message": f"Unsupported format: {target_format}"}, status_code=400)
+        preset = request.query_params.get("preset")
 
-        preset = request.query_params.get("preset", get_default_preset(target_format)).lower()
-        if not validate_preset(target_format, preset):
-            return JSONResponse({"success": False, "message": f"Invalid preset '{preset}' for format '{target_format}'"}, status_code=400)
+        try:
+            target_format, preset = validate_download_params(target_format, preset)
+            # Apply default preset if not provided
+            if preset is None:
+                preset = get_default_preset(target_format)
+        except ValidationError as e:
+            return JSONResponse({
+                "success": False,
+                "error": ErrorCode.VALIDATION_ERROR,
+                "message": str(e)
+            }, status_code=400)
 
         try:
             action, data = await download_service.prepare_audio_download(audio_id, target_format, preset)
@@ -292,9 +311,13 @@ def register_http_api_routes(mcp: FastMCP) -> None:
         """
         audio_id = request.path_params.get("audioId")
         try:
-            uuid.UUID(audio_id)
-        except (ValueError, AttributeError):
-            return JSONResponse({"success": False, "message": "Invalid audio ID format"}, status_code=400)
+            audio_id = validate_uuid_path(audio_id)
+        except ValidationError as e:
+            return JSONResponse({
+                "success": False,
+                "error": ErrorCode.VALIDATION_ERROR,
+                "message": str(e)
+            }, status_code=400)
 
         try:
             await audio_service.delete_audio_track_and_files(audio_id)

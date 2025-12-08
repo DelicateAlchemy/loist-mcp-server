@@ -26,6 +26,7 @@ class ErrorCode(str):
     CONVERSION_FAILED = "CONVERSION_FAILED"
     TRACK_NOT_FOUND = "TRACK_NOT_FOUND"
     DOWNLOAD_FAILED = "DOWNLOAD_FAILED"
+    SEARCH_FAILED = "SEARCH_FAILED"
 
 
 # ============================================================================
@@ -228,6 +229,8 @@ def validate_search_params(query_params: dict) -> SearchQueryParams:
                 raise ValidationError("Limit must be between 1 and 100")
         elif field == 'offset' and 'greater_than_equal' in message:
             raise ValidationError("Offset must be 0 or greater")
+        elif field == 'offset' and 'greater_than_equal' in message:
+            raise ValidationError("Offset must be 0 or greater")
         elif field == 'q':
             raise ValidationError("Search query is required and cannot be empty")
 
@@ -269,6 +272,9 @@ def validate_download_params(format_param: str, preset_param: Optional[str] = No
     Raises:
         ValidationError: If parameters are invalid
     """
+    if not format_param:
+        raise ValidationError("Format parameter is required")
+
     try:
         params = DownloadQueryParams(format=format_param, preset=preset_param)
         return params.format.lower(), params.preset.lower() if params.preset else None
