@@ -256,15 +256,23 @@ def _build_ffmpeg_command(
     # 3. Output options (copy to avoid mutation)
     cmd.extend(list(preset_config.ffmpeg_args))
 
-    # 4. Metadata
+    # 4. Stream mapping (explicitly select streams to avoid -vn issues)
+    if artwork_path and artwork_path.exists():
+        # Artwork present: will be handled in step 5 with _get_artwork_stream_mapping
+        pass
+    else:
+        # No artwork: explicitly select only audio stream (replaces -vn behavior)
+        cmd.extend(["-map", "0:a"])
+
+    # 6. Metadata
     if metadata:
         cmd.extend(map_metadata_to_ffmpeg_args(metadata, target_format, None))
 
-    # 5. Stream mapping for artwork (only if artwork present)
+    # 7. Stream mapping for artwork (only if artwork present)
     if artwork_path and artwork_path.exists():
         cmd.extend(_get_artwork_stream_mapping(target_format))
 
-    # 6. Output file LAST
+    # 8. Output file LAST
     cmd.append(str(output_path))
 
     return cmd
