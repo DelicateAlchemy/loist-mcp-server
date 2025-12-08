@@ -167,18 +167,14 @@ class TestConvertAudioWithMetadata:
             # Create source file
             source_path.touch()
 
-            # Should still succeed but log warning about metadata failure
-            with patch('src.converter.ffmpeg_converter.logger') as mock_logger:
-                result = convert_audio(
+            # Should raise ValueError when title is missing from metadata
+            with pytest.raises(ValueError, match="Title is required for metadata embedding"):
+                convert_audio(
                     source_path=source_path,
                     output_path=output_path,
                     target_format='mp3',
                     metadata=metadata,
                 )
-
-                assert result.success == True
-                # Should have logged warning about metadata mapping failure
-                mock_logger.warning.assert_called()
 
 
 class TestBuildFFmpegCommand:
