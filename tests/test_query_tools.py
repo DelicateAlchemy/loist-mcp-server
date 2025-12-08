@@ -67,9 +67,30 @@ async def test_get_audio_metadata_input_validation():
     """Test Pydantic input validation for get_audio_metadata."""
     # Valid
     GetAudioMetadataInput(audio_id="550e8400-e29b-41d4-a716-446655440000")
-    # Invalid
-    with pytest.raises(Exception):
+    # Invalid - should show UUID format error message
+    with pytest.raises(ValueError, match=r"audio_id must be a valid UUID format.*got: not-a-uuid"):
         GetAudioMetadataInput(audio_id="not-a-uuid")
+
+
+@pytest.mark.asyncio
+async def test_get_audio_metadata_input_validation_edge_cases():
+    """Test edge cases for UUID validation - should show format errors, not length errors."""
+    # Short string - should show UUID format error, not "String should have at least 36 characters"
+    with pytest.raises(ValueError, match=r"audio_id must be a valid UUID format.*got: abc"):
+        GetAudioMetadataInput(audio_id="abc")
+
+    # UUID-like but invalid format (contains 'g' which is not valid hex)
+    with pytest.raises(ValueError, match=r"audio_id must be a valid UUID format.*got: 12345678-1234-1234-1234-gggggggggggg"):
+        GetAudioMetadataInput(audio_id="12345678-1234-1234-1234-gggggggggggg")  # Invalid hex (g not valid)
+
+    # Valid UUID - should pass
+    valid_input = GetAudioMetadataInput(audio_id="550e8400-e29b-41d4-a716-446655440000")
+    assert valid_input.audio_id == "550e8400-e29b-41d4-a716-446655440000"
+
+    # Valid uppercase UUID - should be normalized to lowercase
+    upper_input = GetAudioMetadataInput(audio_id="550E8400-E29B-41D4-A716-446655440000")
+    assert upper_input.audio_id == "550e8400-e29b-41d4-a716-446655440000"
+
 
 @pytest.mark.asyncio
 @patch('src.tools.query_tools.audio_service', new_callable=AsyncMock)
@@ -89,10 +110,12 @@ async def test_get_audio_metadata_success(mock_audio_service, mock_service_metad
 async def test_get_audio_metadata_not_found(mock_audio_service):
     """Test handling of ResourceNotFoundError from the service."""
     mock_audio_service.get_audio_metadata.side_effect = ResourceNotFoundError("Track not found")
-    
+
+    # Use valid UUID so it passes validation and reaches the service
+    valid_uuid = "550e8400-e29b-41d4-a716-446655440000"
     with pytest.raises(Exception) as excinfo:
-        await get_audio_metadata({"audio_id": "not-found-id"})
-    
+        await get_audio_metadata({"audio_id": valid_uuid})
+
     assert excinfo.value.error_code == QueryErrorCode.RESOURCE_NOT_FOUND
 
 @pytest.mark.asyncio
@@ -101,8 +124,10 @@ async def test_get_audio_metadata_db_error(mock_audio_service):
     """Test handling of DatabaseOperationError from the service."""
     mock_audio_service.get_audio_metadata.side_effect = DatabaseOperationError("DB connection failed")
 
+    # Use valid UUID so it passes validation and reaches the service
+    valid_uuid = "550e8400-e29b-41d4-a716-446655440001"
     with pytest.raises(Exception) as excinfo:
-        await get_audio_metadata({"audio_id": "any-id"})
+        await get_audio_metadata({"audio_id": valid_uuid})
 
     assert excinfo.value.error_code == QueryErrorCode.DATABASE_ERROR
 
@@ -152,8 +177,29 @@ async def test_search_library_db_error(mock_audio_service):
 async def test_delete_audio_input_validation():
     """Test Pydantic input validation for delete_audio."""
     DeleteAudioInput(audio_id="550e8400-e29b-41d4-a716-446655440000")
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError, match=r"audio_id must be a valid UUID format.*got: not-a-uuid"):
         DeleteAudioInput(audio_id="not-a-uuid")
+
+
+@pytest.mark.asyncio
+async def test_delete_audio_input_validation_edge_cases():
+    """Test edge cases for UUID validation in delete_audio - should show format errors, not length errors."""
+    # Short string - should show UUID format error, not "String should have at least 36 characters"
+    with pytest.raises(ValueError, match=r"audio_id must be a valid UUID format.*got: xyz"):
+        DeleteAudioInput(audio_id="xyz")
+
+    # UUID-like but invalid format
+    with pytest.raises(ValueError, match=r"audio_id must be a valid UUID format.*got: abcdefgh-ijkl-mnop-qrst-uvwxyzabcdef"):
+        DeleteAudioInput(audio_id="abcdefgh-ijkl-mnop-qrst-uvwxyzabcdef")  # Invalid hex
+
+    # Valid UUID - should pass
+    valid_input = DeleteAudioInput(audio_id="550e8400-e29b-41d4-a716-446655440000")
+    assert valid_input.audio_id == "550e8400-e29b-41d4-a716-446655440000"
+
+    # Valid uppercase UUID - should be normalized to lowercase
+    upper_input = DeleteAudioInput(audio_id="550E8400-E29B-41D4-A716-446655440000")
+    assert upper_input.audio_id == "550e8400-e29b-41d4-a716-446655440000"
+
 
 @pytest.mark.asyncio
 @patch('src.tools.query_tools.audio_service', new_callable=AsyncMock)
@@ -173,7 +219,9 @@ async def test_delete_audio_not_found(mock_audio_service):
     """Test handling of ResourceNotFoundError on delete."""
     mock_audio_service.delete_audio_track_and_files.side_effect = ResourceNotFoundError("Not found")
 
+    # Use valid UUID so it passes validation and reaches the service
+    valid_uuid = "550e8400-e29b-41d4-a716-446655440000"
     with pytest.raises(Exception) as excinfo:
-        await delete_audio({"audio_id": "not-found-id"})
+        await delete_audio({"audio_id": valid_uuid})
 
     assert excinfo.value.error_code == QueryErrorCode.RESOURCE_NOT_FOUND
