@@ -75,7 +75,7 @@ async def get_metadata_resource(uri: str) -> Dict[str, Any]:
                 "Year": metadata.get("year")
             },
             "Format": {
-                "Duration": metadata.get("duration", 0.0),
+                "Duration": float(metadata.get("duration_seconds") or 0.0),
                 "Channels": metadata.get("channels", 2),
                 "SampleRate": metadata.get("sample_rate", 44100),
                 "Bitrate": metadata.get("bitrate", 0),
