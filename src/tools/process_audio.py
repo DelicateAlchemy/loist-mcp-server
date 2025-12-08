@@ -61,6 +61,7 @@ from src.metadata import (
     MetadataExtractionError,
     FormatValidationError,
 )
+from src.metadata.fallback import apply_artist_composer_fallback
 from src.storage import (
     upload_audio_file,
     generate_signed_url,
@@ -415,6 +416,9 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
                     logger.warning(f"🎵 BWF EXTRACTION: BWF enhancement failed: {e}")
             else:
                 logger.debug(f"🎵 BWF EXTRACTION: Skipping BWF enhancement (not needed or not supported)")
+
+            # Apply composer→artist fallback if needed
+            metadata_dict = apply_artist_composer_fallback(metadata_dict)
 
             # Parse filename for missing metadata fields
             # Priority order: source.filename > URL parsing > temp file

@@ -12,7 +12,7 @@ The server features a modern, scalable architecture with:
 
 - **Repository Pattern**: Clean data access abstraction with dependency injection
 - **Unified Exception Framework**: Comprehensive error handling with automatic recovery strategies
-- **Advanced Metadata Extraction**: ID3 tags, BWF metadata, XMP data, and intelligent filename parsing
+- **Advanced Metadata Extraction**: ID3 tags, BWF metadata, XMP data, intelligent filename parsing, and composer→artist fallback
 - **Performance Optimizations**: 75-80% faster database operations with batch processing
 - **Comprehensive Testing**: 85%+ test coverage with automated performance validation
 - **Clean FastMCP Integration**: Zero workarounds for exception serialization
@@ -722,6 +722,9 @@ await update_metadata({
 **Editable Fields:**
 - Product metadata: `artist`, `title`, `album`, `genre`, `year`
 - XMP metadata: `composer`, `publisher`, `record_label`, `isrc`
+
+**Metadata Processing:**
+- **Composer→Artist Fallback**: When artist field is blank, composer automatically fills artist for better UX with classical music and film scores
 
 **Behavior:**
 - Omit a field → remains unchanged
