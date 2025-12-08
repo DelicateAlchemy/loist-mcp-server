@@ -67,9 +67,30 @@ async def test_get_audio_metadata_input_validation():
     """Test Pydantic input validation for get_audio_metadata."""
     # Valid
     GetAudioMetadataInput(audio_id="550e8400-e29b-41d4-a716-446655440000")
-    # Invalid
-    with pytest.raises(Exception):
+    # Invalid - should show UUID format error message
+    with pytest.raises(ValueError, match=r"audio_id must be a valid UUID format.*got: not-a-uuid"):
         GetAudioMetadataInput(audio_id="not-a-uuid")
+
+
+@pytest.mark.asyncio
+async def test_get_audio_metadata_input_validation_edge_cases():
+    """Test edge cases for UUID validation - should show format errors, not length errors."""
+    # Short string - should show UUID format error, not "String should have at least 36 characters"
+    with pytest.raises(ValueError, match=r"audio_id must be a valid UUID format.*got: abc"):
+        GetAudioMetadataInput(audio_id="abc")
+
+    # UUID-like but invalid format
+    with pytest.raises(ValueError, match=r"audio_id must be a valid UUID format.*got: 12345678-1234-1234-1234-123456789abc"):
+        GetAudioMetadataInput(audio_id="12345678-1234-1234-1234-123456789abc")  # Invalid hex
+
+    # Valid UUID - should pass
+    valid_input = GetAudioMetadataInput(audio_id="550e8400-e29b-41d4-a716-446655440000")
+    assert valid_input.audio_id == "550e8400-e29b-41d4-a716-446655440000"
+
+    # Valid uppercase UUID - should be normalized to lowercase
+    upper_input = GetAudioMetadataInput(audio_id="550E8400-E29B-41D4-A716-446655440000")
+    assert upper_input.audio_id == "550e8400-e29b-41d4-a716-446655440000"
+
 
 @pytest.mark.asyncio
 @patch('src.tools.query_tools.audio_service', new_callable=AsyncMock)
@@ -152,8 +173,29 @@ async def test_search_library_db_error(mock_audio_service):
 async def test_delete_audio_input_validation():
     """Test Pydantic input validation for delete_audio."""
     DeleteAudioInput(audio_id="550e8400-e29b-41d4-a716-446655440000")
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError, match=r"audio_id must be a valid UUID format.*got: not-a-uuid"):
         DeleteAudioInput(audio_id="not-a-uuid")
+
+
+@pytest.mark.asyncio
+async def test_delete_audio_input_validation_edge_cases():
+    """Test edge cases for UUID validation in delete_audio - should show format errors, not length errors."""
+    # Short string - should show UUID format error, not "String should have at least 36 characters"
+    with pytest.raises(ValueError, match=r"audio_id must be a valid UUID format.*got: xyz"):
+        DeleteAudioInput(audio_id="xyz")
+
+    # UUID-like but invalid format
+    with pytest.raises(ValueError, match=r"audio_id must be a valid UUID format.*got: abcdefgh-ijkl-mnop-qrst-uvwxyzabcdef"):
+        DeleteAudioInput(audio_id="abcdefgh-ijkl-mnop-qrst-uvwxyzabcdef")  # Invalid hex
+
+    # Valid UUID - should pass
+    valid_input = DeleteAudioInput(audio_id="550e8400-e29b-41d4-a716-446655440000")
+    assert valid_input.audio_id == "550e8400-e29b-41d4-a716-446655440000"
+
+    # Valid uppercase UUID - should be normalized to lowercase
+    upper_input = DeleteAudioInput(audio_id="550E8400-E29B-41D4-A716-446655440000")
+    assert upper_input.audio_id == "550e8400-e29b-41d4-a716-446655440000"
+
 
 @pytest.mark.asyncio
 @patch('src.tools.query_tools.audio_service', new_callable=AsyncMock)
