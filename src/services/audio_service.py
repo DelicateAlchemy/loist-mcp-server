@@ -162,9 +162,13 @@ async def search_audio_library(
             'timezone': filters.get('time', {}).get('timezone', 'UTC'),
         }
 
-    # Pagination boundary handling:
+    # Pagination boundary handling: LOI-12 Fix
+    # The standard pagination pattern fetches limit+1 results to determine if more pages exist.
+    # However, when limit equals DATABASE_MAX_LIMIT, this would exceed the database's hard limit.
+    #
+    # Strategy:
     # - For limit < DATABASE_MAX_LIMIT: use +1 approach (fetch extra to determine has_more)
-    # - For limit = DATABASE_MAX_LIMIT: use total_count approach (avoid exceeding DB limit)
+    # - For limit = DATABASE_MAX_LIMIT: use total_count approach (avoid ValidationError)
     if limit < DATABASE_MAX_LIMIT:
         actual_limit = limit + 1
         use_count_for_has_more = False
