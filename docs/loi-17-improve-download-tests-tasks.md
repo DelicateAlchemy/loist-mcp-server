@@ -110,16 +110,16 @@ Check:
 ---
 
 #### T1.2: Create Base Test Fixtures
-**Status**: `todo`
+**Status**: `in_progress`
 **Branch**: `task/loi-17-improve-download-tests`
 **Description**: Create reusable fixtures for download testing scenarios
 
 **Tasks**:
-- [ ] Add fixture for test audio track metadata
-- [ ] Add fixture for temporary download directory
+- [x] Add fixture for test audio track metadata (done in T1.1)
+- [x] Add fixture for temporary download directory (done in T1.1)
 - [ ] Add fixture for GCS mock/stub (if needed)
 - [ ] Add fixture for download service instance
-- [ ] Add fixture for cleanup verification helpers
+- [ ] Add fixture for cleanup verification helpers (basic version done in T1.1)
 
 **Files to Modify**:
 - `tests/integration/downloads/conftest.py`
@@ -129,17 +129,6 @@ Check:
 - Verify fixtures can be imported and used
 - Run: `pytest tests/integration/downloads/ -v --fixtures`
 - Test fixture cleanup works correctly
-
-**Git Commit**:
-```
-feat(tests): add base fixtures for download tests (LOI-17 T1.2)
-
-- Add test audio track metadata fixture
-- Add temporary download directory fixture with auto-cleanup
-- Add download service instance fixture
-- Add cleanup verification helper fixtures
-- Files: tests/integration/downloads/conftest.py, tests/functional/downloads/conftest.py
-```
 
 **Code Review Prompt**:
 ```
