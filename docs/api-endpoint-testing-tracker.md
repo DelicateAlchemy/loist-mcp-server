@@ -68,7 +68,7 @@
 | Endpoint | Method | Current Status | Priority | Notes |
 |----------|--------|----------------|----------|-------|
 | `/api/tracks/{audioId}` | GET | ✅ Service Layer | High | Uses `audio_service`, verify response format |
-| `/api/search` | GET | ✅ Service Layer | High | Uses `audio_service`, verify pagination headers |
+| `/api/search` | GET | ✅ Service Layer | High | Uses `audio_service`, strict parameter validation (LOI-16) |
 | `/api/tracks/{audioId}/stream` | GET | ✅ Redirect | High | Redirects to signed URL (correct approach), verify Range support works |
 | `/api/tracks/{audioId}/thumbnail` | GET | ✅ Redirect | High | Redirects to signed URL (correct approach), verify image serving works |
 | `/api/tracks/{audioId}/download` | GET | ✅ Good | Medium | Proper implementation, verify conversion |
@@ -280,10 +280,42 @@
     ```bash
     curl -v "http://localhost:8080/api/search?q=rock&limit=-1"
     ```
-  - **Expected**: 400 Bad Request or corrected to valid range ✅ (corrected to limit=1)
-  - **Verify**: Invalid parameters are handled gracefully ✅ (returns 200 OK with corrected params, Link header for pagination)
+  - **Expected**: 400 Bad Request ✅ (strict validation - no silent correction)
+  - **Verify**: Invalid parameters are rejected with clear error message ✅ (returns 400 with "error": "INVALID_QUERY")
   - **Postman**: Use "Search Tracks" request with invalid limit value
-  - **Note**: Current behavior silently corrects invalid params (documented behavior, not a bug)
+  - **Note**: **BREAKING CHANGE**: Behavior changed from silent correction (200 OK) to strict rejection (400 Bad Request) - LOI-16 implementation
+
+- [STATUS: done] **P2.2.6b** Test search with limit=0: `GET /api/search?q=rock&limit=0`
+  - **CLI Command**:
+    ```bash
+    curl -v "http://localhost:8080/api/search?q=rock&limit=0"
+    ```
+  - **Expected**: 400 Bad Request ✅
+  - **Verify**: Response contains "Input should be greater than or equal to 1" ✅
+
+- [STATUS: done] **P2.2.6c** Test search with limit=101: `GET /api/search?q=rock&limit=101`
+  - **CLI Command**:
+    ```bash
+    curl -v "http://localhost:8080/api/search?q=rock&limit=101"
+    ```
+  - **Expected**: 400 Bad Request ✅
+  - **Verify**: Response contains "Input should be less than or equal to 100" ✅
+
+- [STATUS: done] **P2.2.6d** Test search with offset=-1: `GET /api/search?q=rock&offset=-1`
+  - **CLI Command**:
+    ```bash
+    curl -v "http://localhost:8080/api/search?q=rock&offset=-1"
+    ```
+  - **Expected**: 400 Bad Request ✅
+  - **Verify**: Response contains "Input should be greater than or equal to 0" ✅
+
+- [STATUS: done] **P2.2.6e** Test search with empty genre: `GET /api/search?q=rock&genre=`
+  - **CLI Command**:
+    ```bash
+    curl -v "http://localhost:8080/api/search?q=rock&genre="
+    ```
+  - **Expected**: 400 Bad Request ✅
+  - **Verify**: Response contains genre validation error ✅
 
 #### Edge Cases
 - [STATUS: done] **P2.2.7** Test search with special characters: `GET /api/search?q=rock&roll`
@@ -556,11 +588,11 @@
 <!-- Add entries as you complete tasks -->
 | Date | Task ID | Summary | Files Changed |
 |------|---------|---------|---------------|
-| _YYYY-MM-DD_ | _P1.1.1_ | _Description_ | _files_ |
+| 2025-01-09 | LOI-16 | Implemented strict parameter validation for search endpoint (BREAKING CHANGE) | `src/schemas/http_api.py`, `src/http_api.py`, `docs/api-endpoint-testing-tracker.md` |
 
 ### Key Findings
 <!-- Document important discoveries during testing -->
-- _None yet_
+- **LOI-16 Breaking Change**: Search endpoint now returns 400 Bad Request for invalid `limit`/`offset` values instead of silently correcting them. This aligns with MCP tool validation patterns but breaks existing client behavior.
 
 ### Bugs Discovered
 <!-- Track bugs found during testing -->
