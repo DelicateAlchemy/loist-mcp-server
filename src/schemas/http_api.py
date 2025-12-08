@@ -277,6 +277,15 @@ def validate_download_params(format_param: str, preset_param: Optional[str] = No
 
     try:
         params = DownloadQueryParams(format=format_param, preset=preset_param)
+
+        # Additional validation for format and preset
+        from src.converter import validate_format, validate_preset
+        if not validate_format(params.format):
+            raise ValidationError(f"Unsupported format: {params.format}")
+
+        if params.preset and not validate_preset(params.format, params.preset):
+            raise ValidationError(f"Invalid preset '{params.preset}' for format '{params.format}'")
+
         return params.format.lower(), params.preset.lower() if params.preset else None
     except PydanticValidationError as e:
         error_details = e.errors()[0] if e.errors() else {}
