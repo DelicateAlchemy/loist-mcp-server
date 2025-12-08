@@ -53,6 +53,7 @@ def save_audio_metadata(
             - bitrate: int (optional, bits per second)
             - format: str (required, e.g., 'MP3', 'FLAC')
             - file_size_bytes: int (optional)
+            - original_filename: str (optional, for download filename preservation)
         audio_gcs_path: Full GCS path (gs://bucket/path) to audio file
         thumbnail_gcs_path: Optional GCS path to thumbnail/artwork
         track_id: Optional UUID string for the track (generates new if None)
@@ -155,6 +156,8 @@ def save_audio_metadata(
         'publisher': metadata.get('publisher'),
         'record_label': metadata.get('record_label'),
         'isrc': metadata.get('isrc'),
+        # Filename preservation
+        'original_filename': metadata.get('original_filename'),
     }
     
     # Execute insert with transaction management
@@ -167,19 +170,20 @@ def save_audio_metadata(
                         id, status, artist, title, album, genre, year,
                         duration_seconds, channels, sample_rate, bitrate,
                         format, file_size_bytes, audio_gcs_path, thumbnail_gcs_path,
-                        composer, publisher, record_label, isrc
+                        composer, publisher, record_label, isrc, original_filename
                     ) VALUES (
                         %(id)s, %(status)s, %(artist)s, %(title)s, %(album)s,
                         %(genre)s, %(year)s, %(duration_seconds)s, %(channels)s,
                         %(sample_rate)s, %(bitrate)s, %(format)s, %(file_size_bytes)s,
                         %(audio_gcs_path)s, %(thumbnail_gcs_path)s,
-                        %(composer)s, %(publisher)s, %(record_label)s, %(isrc)s
+                        %(composer)s, %(publisher)s, %(record_label)s, %(isrc)s,
+                        %(original_filename)s
                     )
                     RETURNING
                         id, status, artist, title, album, genre, year,
                         duration_seconds, channels, sample_rate, bitrate,
                         format, file_size_bytes, audio_gcs_path, thumbnail_gcs_path,
-                        composer, publisher, record_label, isrc,
+                        composer, publisher, record_label, isrc, original_filename,
                         created_at, updated_at
                 """
                 
@@ -392,6 +396,13 @@ def save_audio_metadata_batch(
                 'file_size_bytes': metadata.get('file_size_bytes'),
                 'audio_gcs_path': audio_gcs_path,
                 'thumbnail_gcs_path': thumbnail_gcs_path,
+                # XMP fields
+                'composer': metadata.get('composer'),
+                'publisher': metadata.get('publisher'),
+                'record_label': metadata.get('record_label'),
+                'isrc': metadata.get('isrc'),
+                # Filename preservation
+                'original_filename': metadata.get('original_filename'),
             })
 
             track_ids.append(track_id)
@@ -412,7 +423,7 @@ def save_audio_metadata_batch(
                         id, status, artist, title, album, genre, year,
                         duration_seconds, channels, sample_rate, bitrate,
                         format, file_size_bytes, audio_gcs_path, thumbnail_gcs_path,
-                        composer, publisher, record_label, isrc
+                        composer, publisher, record_label, isrc, original_filename
                     ) VALUES
                 """
 
@@ -422,7 +433,7 @@ def save_audio_metadata_batch(
 
                 for record in validated_records:
                     values_clauses.append("""
-                        (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """)
                     params.extend([
                         record['id'], record['status'], record['artist'], record['title'],
@@ -430,7 +441,7 @@ def save_audio_metadata_batch(
                         record['channels'], record['sample_rate'], record['bitrate'],
                         record['format'], record['file_size_bytes'], record['audio_gcs_path'],
                         record['thumbnail_gcs_path'], record['composer'], record['publisher'],
-                        record['record_label'], record['isrc']
+                        record['record_label'], record['isrc'], record['original_filename']
                     ])
 
                 insert_query += ", ".join(values_clauses)
@@ -593,6 +604,7 @@ def get_audio_metadata_by_id(track_id: str) -> Optional[Dict[str, Any]]:
             - artist, title, album, genre, year
             - duration_seconds, channels, sample_rate, bitrate, format
             - file_size_bytes, audio_gcs_path, thumbnail_gcs_path
+            - original_filename: Original filename from ingestion (for downloads)
             - created_at, updated_at timestamps
             - error_message, retry_count, last_processed_at (if applicable)
         Returns None if track doesn't exist
@@ -619,11 +631,11 @@ def get_audio_metadata_by_id(track_id: str) -> Optional[Dict[str, Any]]:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                 # Parameterized query for security
                 query = """
-                    SELECT 
+                    SELECT
                         id, status, artist, title, album, genre, year,
                         duration_seconds, channels, sample_rate, bitrate,
                         format, file_size_bytes, audio_gcs_path, thumbnail_gcs_path,
-                        created_at, updated_at, error_message, retry_count, last_processed_at
+                        original_filename, created_at, updated_at, error_message, retry_count, last_processed_at
                     FROM audio_tracks
                     WHERE id = %s
                 """
@@ -696,11 +708,11 @@ def get_audio_metadata_by_ids(track_ids: List[str]) -> List[Dict[str, Any]]:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                 # Use ANY operator for efficient batch query
                 query = """
-                    SELECT 
+                    SELECT
                         id, status, artist, title, album, genre, year,
                         duration_seconds, channels, sample_rate, bitrate,
                         format, file_size_bytes, audio_gcs_path, thumbnail_gcs_path,
-                        created_at, updated_at, error_message, retry_count, last_processed_at
+                        original_filename, created_at, updated_at, error_message, retry_count, last_processed_at
                     FROM audio_tracks
                     WHERE id = ANY(%s)
                 """

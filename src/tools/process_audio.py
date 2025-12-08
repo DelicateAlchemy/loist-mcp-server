@@ -465,6 +465,23 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
                 metadata_dict.update(filename_metadata)
                 logger.info(f"Enhanced metadata from filename: {filename_metadata}")
 
+            # Capture original filename for download preservation
+            original_filename = None
+            if hasattr(filename_for_parsing, '__fspath__'):
+                # Handle Path objects and URLPath objects
+                original_filename = os.path.basename(filename_for_parsing.__fspath__())
+            elif isinstance(filename_for_parsing, str):
+                original_filename = os.path.basename(filename_for_parsing)
+            elif isinstance(filename_for_parsing, Path):
+                original_filename = filename_for_parsing.name
+
+            if original_filename:
+                # Clean up the filename (remove any path components that might remain)
+                original_filename = Path(original_filename).name
+                logger.info(f"🎵 FILENAME CAPTURE: Captured original_filename='{original_filename}' for download preservation")
+            else:
+                logger.debug("🎵 FILENAME CAPTURE: No original filename captured (will use metadata fallback for downloads)")
+
             # Adaptive quality validation after filename parsing
             _validate_metadata_quality_after_enhancement(metadata_dict)
 
@@ -546,6 +563,8 @@ async def process_audio_complete(input_data: Dict[str, Any]) -> Dict[str, Any]:
                 "publisher": metadata_dict.get("publisher"),
                 "record_label": metadata_dict.get("record_label"),
                 "isrc": metadata_dict.get("isrc"),
+                # Filename preservation for downloads
+                "original_filename": original_filename,
             }
             
             # Save to database using transaction

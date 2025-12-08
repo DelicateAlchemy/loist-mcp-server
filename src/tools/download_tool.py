@@ -340,9 +340,46 @@ def _normalize_format(extension: str) -> str:
     return format_map.get(extension, extension)
 
 
+def _sanitize_filename_component(component: str, max_length: int = 100) -> Optional[str]:
+    """
+    Sanitize a filename component by removing unsafe characters and limiting length.
+
+    Args:
+        component: The filename component to sanitize
+        max_length: Maximum allowed length (default 100)
+
+    Returns:
+        Sanitized component string, or None if empty/invalid
+    """
+    if not component:
+        return None
+
+    # Convert to string and strip whitespace
+    component = str(component).strip()
+
+    if not component:
+        return None
+
+    # Replace unsafe characters with underscores
+    unsafe_chars = '<>:"/\\|?*'
+    for char in unsafe_chars:
+        component = component.replace(char, '_')
+
+    # Limit length
+    if len(component) > max_length:
+        component = component[:max_length].rstrip()
+
+    # Final check - if empty after processing, return None
+    return component if component else None
+
+
 def _generate_download_filename(metadata: Dict[str, Any], target_format: str) -> str:
     """
     Generate a safe filename for download from track metadata.
+
+    Priority order:
+    1. original_filename (if stored during ingestion) - stem + target extension
+    2. title/artist metadata (fallback)
 
     Args:
         metadata: Track metadata dictionary
@@ -355,32 +392,35 @@ def _generate_download_filename(metadata: Dict[str, Any], target_format: str) ->
         logger.error("Metadata is None in _generate_download_filename")
         return "Unknown_Unknown_Artist.unknown"
 
-    # More detailed debugging
-    logger.error(f"DEBUG: metadata type: {type(metadata)}")
-    logger.error(f"DEBUG: metadata keys: {list(metadata.keys()) if isinstance(metadata, dict) else 'Not a dict'}")
-    if isinstance(metadata, dict):
-        for key in ['title', 'artist', 'album']:
-            logger.error(f"DEBUG: {key} = {repr(metadata.get(key))}")
+    # Determine target extension
+    ext = target_format if target_format != 'aac' else 'm4a'
 
-    # Sanitize title and artist (handle None values explicitly)
+    # Priority 1: Original filename (if available)
+    original_filename = metadata.get('original_filename')
+    if original_filename:
+        logger.debug(f"Using original_filename for download: {original_filename}")
+        try:
+            from pathlib import Path
+            # Extract stem (filename without extension) and sanitize
+            stem = Path(original_filename).stem
+            sanitized_stem = _sanitize_filename_component(stem)
+            if sanitized_stem:
+                filename = f"{sanitized_stem}.{ext}"
+                logger.debug(f"Generated filename from original: {filename}")
+                return filename
+            else:
+                logger.debug("Original filename stem was empty after sanitization, falling back to metadata")
+        except Exception as e:
+            logger.warning(f"Error processing original_filename '{original_filename}': {e}, falling back to metadata")
+
+    # Priority 2: Fallback to title/artist metadata
     logger.debug(f"Filename generation metadata keys: {list(metadata.keys())}")
     logger.debug(f"Raw title: {repr(metadata.get('title'))}, artist: {repr(metadata.get('artist'))}")
-    title = str(metadata.get('title') or '').strip() or 'Unknown'
-    artist = str(metadata.get('artist') or '').strip() or 'Unknown Artist'
+    title = _sanitize_filename_component(metadata.get('title')) or 'Unknown'
+    artist = _sanitize_filename_component(metadata.get('artist'), max_length=50) or 'Unknown Artist'
     logger.debug(f"Processed title: {repr(title)}, artist: {repr(artist)}")
 
-    # Replace unsafe characters
-    unsafe_chars = '<>:"/\\|?*'
-    for char in unsafe_chars:
-        title = title.replace(char, '_')
-        artist = artist.replace(char, '_')
-
-    # Limit lengths
-    title = title[:100] if len(title) > 100 else title
-    artist = artist[:50] if len(artist) > 50 else artist
-
     # Combine and add extension
-    ext = target_format if target_format != 'aac' else 'm4a'
     filename = f"{title} - {artist}.{ext}"
-
+    logger.debug(f"Generated fallback filename: {filename}")
     return filename
