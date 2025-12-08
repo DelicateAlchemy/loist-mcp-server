@@ -110,10 +110,12 @@ async def test_get_audio_metadata_success(mock_audio_service, mock_service_metad
 async def test_get_audio_metadata_not_found(mock_audio_service):
     """Test handling of ResourceNotFoundError from the service."""
     mock_audio_service.get_audio_metadata.side_effect = ResourceNotFoundError("Track not found")
-    
+
+    # Use valid UUID so it passes validation and reaches the service
+    valid_uuid = "550e8400-e29b-41d4-a716-446655440000"
     with pytest.raises(Exception) as excinfo:
-        await get_audio_metadata({"audio_id": "not-found-id"})
-    
+        await get_audio_metadata({"audio_id": valid_uuid})
+
     assert excinfo.value.error_code == QueryErrorCode.RESOURCE_NOT_FOUND
 
 @pytest.mark.asyncio
@@ -122,8 +124,10 @@ async def test_get_audio_metadata_db_error(mock_audio_service):
     """Test handling of DatabaseOperationError from the service."""
     mock_audio_service.get_audio_metadata.side_effect = DatabaseOperationError("DB connection failed")
 
+    # Use valid UUID so it passes validation and reaches the service
+    valid_uuid = "550e8400-e29b-41d4-a716-446655440001"
     with pytest.raises(Exception) as excinfo:
-        await get_audio_metadata({"audio_id": "any-id"})
+        await get_audio_metadata({"audio_id": valid_uuid})
 
     assert excinfo.value.error_code == QueryErrorCode.DATABASE_ERROR
 
@@ -215,7 +219,9 @@ async def test_delete_audio_not_found(mock_audio_service):
     """Test handling of ResourceNotFoundError on delete."""
     mock_audio_service.delete_audio_track_and_files.side_effect = ResourceNotFoundError("Not found")
 
+    # Use valid UUID so it passes validation and reaches the service
+    valid_uuid = "550e8400-e29b-41d4-a716-446655440000"
     with pytest.raises(Exception) as excinfo:
-        await delete_audio({"audio_id": "not-found-id"})
+        await delete_audio({"audio_id": valid_uuid})
 
     assert excinfo.value.error_code == QueryErrorCode.RESOURCE_NOT_FOUND
