@@ -47,7 +47,7 @@ class DatabasePool:
             database_url: PostgreSQL connection URL (defaults to config)
             **connection_kwargs: Additional psycopg2 connection parameters
         """
-        logger.info("🔄 DatabasePool.__init__ called - reading environment variables at runtime")
+        logger.debug("🔄 DatabasePool.__init__ called - reading environment variables at runtime")
         self.min_connections = min_connections
         self.max_connections = max_connections
         self._pool: Optional[pool.ThreadedConnectionPool] = None
@@ -58,11 +58,11 @@ class DatabasePool:
             logger.debug("✅ Using provided database_url parameter")
             self.database_url = database_url
         elif HAS_APP_CONFIG and app_config.database_url:
-            logger.info("✅ Using app_config.database_url from config")
+            logger.debug("✅ Using app_config.database_url from config")
             self.database_url = app_config.database_url
         else:
             # Fallback to environment variables
-            logger.info("🔄 Falling back to environment variables - calling _build_url_from_env()")
+            logger.debug("🔄 Falling back to environment variables - calling _build_url_from_env()")
             self.database_url = self._build_url_from_env()
         
         if not self.database_url:
