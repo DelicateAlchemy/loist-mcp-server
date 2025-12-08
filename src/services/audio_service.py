@@ -29,6 +29,12 @@ from src.tools.query_schemas import SearchResult, SearchFacets, FacetData
 
 logger = logging.getLogger(__name__)
 
+# ============================================================================
+# Constants
+# ============================================================================
+
+# Database-imposed maximum limit for queries (used for pagination boundary handling)
+DATABASE_MAX_LIMIT = 100
 
 # ============================================================================
 # Private Helper Functions
