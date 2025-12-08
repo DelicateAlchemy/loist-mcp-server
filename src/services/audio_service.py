@@ -162,9 +162,20 @@ async def search_audio_library(
             'timezone': filters.get('time', {}).get('timezone', 'UTC'),
         }
 
+    # Pagination boundary handling:
+    # - For limit < DATABASE_MAX_LIMIT: use +1 approach (fetch extra to determine has_more)
+    # - For limit = DATABASE_MAX_LIMIT: use total_count approach (avoid exceeding DB limit)
+    if limit < DATABASE_MAX_LIMIT:
+        actual_limit = limit + 1
+        use_count_for_has_more = False
+    else:
+        actual_limit = limit  # Don't exceed database max
+        use_count_for_has_more = True
+        logger.debug(f"Using count-based has_more (limit={limit} at database max)")
+
     search_response = filter_audio_tracks_combined(
         query=query,
-        limit=limit + 1,  # Fetch one extra to check for more results
+        limit=actual_limit,
         offset=offset,
         min_rank=0.01,
         **xmp_filters,
@@ -172,9 +183,15 @@ async def search_audio_library(
 
     search_results = search_response.get('tracks', [])
     total_matches = search_response.get('total_count', 0)
-    has_more = len(search_results) > limit
-    if has_more:
-        search_results = search_results[:limit]
+
+    if use_count_for_has_more:
+        # At database limit: use total_count to determine has_more
+        has_more = (offset + limit) < total_matches
+    else:
+        # Standard case: use +1 fetch approach
+        has_more = len(search_results) > limit
+        if has_more:
+            search_results = search_results[:limit]
 
     formatted_results = []
     for result in search_results:
