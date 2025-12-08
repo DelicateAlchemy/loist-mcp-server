@@ -139,16 +139,24 @@ class UUIDPathParams(BaseModel):
     audio_id: str = Field(
         ...,
         description="UUID of the audio track",
-        pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-        min_length=36,
-        max_length=36
+        pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        # Note: pattern already enforces exact length, no need for min_length/max_length
     )
 
     @field_validator('audio_id')
     @classmethod
-    def normalize_uuid(cls, v):
-        """Normalize UUID to lowercase"""
-        return v.lower()
+    def validate_and_normalize_uuid(cls, v):
+        """Validate UUID format and normalize to lowercase"""
+        import uuid
+        try:
+            # Use Python's uuid.UUID for robust validation
+            parsed_uuid = uuid.UUID(v)
+            return str(parsed_uuid).lower()  # Normalize to lowercase hyphenated format
+        except ValueError:
+            raise ValueError(
+                f"audio_id must be a valid UUID format "
+                f"(e.g., 550e8400-e29b-41d4-a716-446655440000), got: {v[:50]}"
+            )
 
     model_config = {
         "json_schema_extra": {
@@ -254,8 +262,11 @@ def validate_uuid_path(audio_id: str) -> str:
     try:
         params = UUIDPathParams(audio_id=audio_id)
         return params.audio_id
-    except PydanticValidationError:
-        raise ValidationError("Invalid audio ID format")
+    except PydanticValidationError as e:
+        # Extract the specific validation error message from the schema validator
+        error_details = e.errors()[0] if e.errors() else {}
+        error_msg = error_details.get('msg', 'Invalid audio ID format')
+        raise ValidationError(error_msg)
 
 
 def validate_download_params(format_param: str, preset_param: Optional[str] = None) -> tuple[str, Optional[str]]:
