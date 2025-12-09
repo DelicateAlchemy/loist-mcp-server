@@ -72,5 +72,26 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+addopts = "-v --tb=short --strict-markers --disable-warnings"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests",
+    "functional: End-to-end functional tests",
+    "slow: Slow running tests",
+    "metadata: Metadata generation tests",
+    "social: Social media sharing tests",
+    "asyncio: Async tests using pytest-asyncio",
+    "requires_db: Tests requiring database connection",
+    "requires_gcs: Tests requiring Google Cloud Storage",
+    "requires_tools: Tests requiring static analysis tools (black, isort, etc.)",
+    "regression: Regression tests for previously fixed bugs",
+    "tasks_13_14: Tests related to tasks 13 and 14"
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning"
+]
 
 
