@@ -10,6 +10,8 @@ Created: 2025-11-05
 
 import time
 import pytest
+
+pytestmark = pytest.mark.requires_db
 import logging
 from typing import Dict, Any, List, Optional
 from pathlib import Path

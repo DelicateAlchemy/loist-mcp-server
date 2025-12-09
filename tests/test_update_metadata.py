@@ -1,4 +1,6 @@
 import pytest
+
+pytestmark = pytest.mark.requires_db
 from src.tools.update_tools import update_metadata
 
 # A placeholder for a real track ID. In a real test suite, this

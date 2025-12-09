@@ -10,6 +10,8 @@ proper cleanup.
 import pytest
 from unittest.mock import AsyncMock, patch
 
+pytestmark = pytest.mark.requires_db
+
 from src.resources.audio_stream import get_audio_stream_resource
 from src.resources.metadata import get_metadata_resource
 from src.resources.thumbnail import get_thumbnail_resource

@@ -11,6 +11,8 @@ Tests verify:
 """
 
 import pytest
+
+pytestmark = pytest.mark.requires_db
 import time
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed

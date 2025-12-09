@@ -14,6 +14,8 @@ import os
 import tempfile
 from pathlib import Path
 import pytest
+
+pytestmark = pytest.mark.requires_gcs
 from google.cloud.exceptions import NotFound
 
 # Skip tests if GCS is not configured
