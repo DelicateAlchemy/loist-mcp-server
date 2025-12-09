@@ -2705,7 +2705,8 @@ def update_audio_metadata(
         track_id: UUID of the track to update
         metadata: Dict with fields to update (pre-validated by Pydantic)
                   Allowed fields: artist, title, album, genre, year,
-                                  composer, publisher, record_label, isrc
+                                  composer, publisher, record_label, isrc,
+                                  original_filename
     
     Returns:
         Full updated track record as dict
@@ -2734,7 +2735,8 @@ def update_audio_metadata(
     # Allowed editable fields (whitelist for safety)
     allowed_fields = {
         'artist', 'title', 'album', 'genre', 'year',
-        'composer', 'publisher', 'record_label', 'isrc'
+        'composer', 'publisher', 'record_label', 'isrc',
+        'original_filename'
     }
     
     # Filter to only allowed fields

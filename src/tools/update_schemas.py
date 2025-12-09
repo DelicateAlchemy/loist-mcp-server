@@ -32,13 +32,14 @@ class UpdateErrorCode(str, Enum):
 class TrackMetadataUpdate(BaseModel):
     """
     Partial update model for track metadata - all fields optional.
-    
+
     MVP: Simple validation, no complex ISRC regex.
     Fields not provided = leave unchanged (use exclude_unset=True).
-    
+
     Editable fields match the database schema:
     - Product metadata: artist, title, album, genre, year
     - XMP metadata: composer, publisher, record_label, isrc
+    - Filename: original_filename
     """
     artist: Optional[str] = Field(
         default=None,
@@ -85,6 +86,11 @@ class TrackMetadataUpdate(BaseModel):
         default=None,
         max_length=20,
         description="ISRC code (format: CC-XXX-YY-NNNNN)"
+    )
+    original_filename: Optional[str] = Field(
+        default=None,
+        max_length=500,
+        description="Original filename for downloads (e.g., 'My Song.mp3')"
     )
 
 

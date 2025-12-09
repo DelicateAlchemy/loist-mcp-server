@@ -683,7 +683,7 @@ async def update_metadata(audio_id: str, metadata: dict) -> dict:
     - Provide a value → update it
 
     Editable fields: artist, title, album, genre, year,
-                     composer, publisher, record_label, isrc
+                     composer, publisher, record_label, isrc, original_filename
 
     Args:
         audio_id: UUID of the audio track to update
@@ -697,6 +697,7 @@ async def update_metadata(audio_id: str, metadata: dict) -> dict:
             - publisher: Publisher name (max 500 chars)
             - record_label: Record label name (max 500 chars)
             - isrc: ISRC code (max 20 chars)
+            - original_filename: Download filename override (max 500 chars)
 
     Returns:
         dict: {success, audio_id, updated_fields, metadata} on success,
