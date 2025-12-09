@@ -16,6 +16,10 @@ import sys
 import os
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.requires_tools
+
 
 class TestStaticAnalysisTools:
     """Test static analysis tools configuration and functionality."""
@@ -34,7 +38,7 @@ class TestStaticAnalysisTools:
     def test_black_configuration(self):
         """Test black configuration is working."""
         # Create a test file with poorly formatted code
-        test_file = Path("test_black_format.py")
+        test_file = Path("/tmp/test_black_format.py")
         test_file.write_text("""
 def poorly_formatted_function(  arg1,arg2   ,   arg3):
     if arg1  ==  "test":
@@ -85,7 +89,7 @@ def poorly_formatted_function(  arg1,arg2   ,   arg3):
     def test_isort_configuration(self):
         """Test isort configuration is working."""
         # Create a test file with unsorted imports
-        test_file = Path("test_isort_imports.py")
+        test_file = Path("/tmp/test_isort_imports.py")
         test_file.write_text("""
 import os
 import sys
@@ -129,7 +133,7 @@ from typing import Dict, List
     def test_flake8_configuration(self):
         """Test flake8 configuration is working."""
         # Create a test file with some linting issues
-        test_file = Path("test_flake8_lint.py")
+        test_file = Path("/tmp/test_flake8_lint.py")
         test_file.write_text("""
 def function_with_issues( unused_arg):
     unused_variable = 42
@@ -170,7 +174,7 @@ def function_with_issues( unused_arg):
     def test_mypy_configuration(self):
         """Test mypy configuration is working."""
         # Create a test file with type issues
-        test_file = Path("test_mypy_types.py")
+        test_file = Path("/tmp/test_mypy_types.py")
         test_file.write_text("""
 def add_numbers(a, b):
     return a + b
@@ -209,7 +213,7 @@ result = add_numbers("hello", 42)
     def test_pylint_configuration(self):
         """Test pylint configuration is working."""
         # Create a test file with pylint issues
-        test_file = Path("test_pylint_analyze.py")
+        test_file = Path("/tmp/test_pylint_analyze.py")
         test_file.write_text("""
 def badFunction():
     x=1
