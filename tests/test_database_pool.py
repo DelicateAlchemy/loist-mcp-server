@@ -15,6 +15,8 @@ Tests verify:
 """
 
 import pytest
+
+pytestmark = pytest.mark.requires_db
 import os
 import time
 import threading

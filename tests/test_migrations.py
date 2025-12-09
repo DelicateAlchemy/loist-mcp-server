@@ -13,6 +13,8 @@ Tests verify:
 """
 
 import pytest
+
+pytestmark = pytest.mark.requires_db
 import os
 from pathlib import Path
 from unittest.mock import patch, MagicMock

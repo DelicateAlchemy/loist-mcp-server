@@ -10,6 +10,8 @@ import pytest
 import httpx
 from unittest.mock import patch, AsyncMock, MagicMock
 
+pytestmark = pytest.mark.requires_db
+
 # Models for creating mock service responses
 from src.schemas.metadata import AudioMetadata, AudioResources, ProductMetadata, FormatMetadata
 from src.tools.query_schemas import SearchResult

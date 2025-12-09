@@ -21,6 +21,8 @@ import time
 import uuid
 from pathlib import Path
 import pytest
+
+pytestmark = pytest.mark.requires_gcs
 import requests
 from google.cloud.exceptions import NotFound, GoogleCloudError
 

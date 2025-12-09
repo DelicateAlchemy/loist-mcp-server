@@ -12,6 +12,8 @@ Tests:
 """
 
 import pytest
+
+pytestmark = pytest.mark.requires_gcs
 import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
