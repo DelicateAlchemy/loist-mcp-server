@@ -18,7 +18,8 @@ The `tests/` directory is organized to reflect the different types of testing:
 - **`/tests/unit`**: Contains unit tests that are self-contained and do not require external services like databases or network access. They are fast and should be run frequently during development.
 - **`/tests/integration`**: Houses integration tests that verify the interaction between different components, such as the application logic and the database. These tests may require a running database instance.
 - **`/tests/functional`**: For end-to-end tests that simulate real user scenarios. These are the slowest and most comprehensive tests.
-- **`/tests/conftest.py`**: The main `pytest` configuration file, used for defining project-wide fixtures and test helpers.
+- **`/tests/conftest.py`**: The main test fixtures file, used for defining project-wide fixtures and test helpers.
+- **`pyproject.toml`**: Contains pytest configuration including markers and test options.
 - **`/tests/database_testing.py`**: A dedicated module for database-related test infrastructure, providing tools for schema isolation, transaction management, and test data generation.
 
 ## ▶️ How to Run Tests
@@ -68,6 +69,73 @@ pytest --cov=src --cov=database
 pytest --cov=src --cov=database --cov-report=html
 # Then open `htmlcov/index.html` in your browser.
 ```
+
+### Running Tests by Environment
+
+The test suite uses pytest markers to categorize tests based on their external dependencies. This allows you to run only the tests appropriate for your development environment.
+
+#### Local Development (Docker)
+
+For local development in Docker Compose (no database/GCS access), run only unit tests:
+
+```bash
+# Run tests that don't require external services
+docker-compose exec mcp-server python -m pytest tests/ \
+  -m "not (requires_db or requires_gcs or requires_tools)"
+
+# Expected: ~629 tests collected (209 deselected)
+```
+
+#### With Database Access
+
+When you have database access available:
+
+```bash
+# Run tests that require database
+docker-compose exec mcp-server python -m pytest tests/ -m "requires_db"
+
+# Or run all tests including database tests
+docker-compose exec mcp-server python -m pytest tests/ \
+  -m "not (requires_gcs or requires_tools)"
+```
+
+#### With Full Environment
+
+When all services are available (database, GCS, tools):
+
+```bash
+# Run all tests
+docker-compose exec mcp-server python -m pytest tests/
+
+# Expected: 838 tests collected
+```
+
+### Test Markers
+
+The following pytest markers are used to categorize tests by their dependencies:
+
+| Marker | Description | When to Use |
+|--------|-------------|-------------|
+| `unit` | Fast, isolated unit tests with no external dependencies | Always run locally |
+| `integration` | Tests that verify component interactions | Run with database |
+| `functional` | End-to-end tests simulating user scenarios | Run with full environment |
+| `slow` | Tests that take >5 seconds to run | Skip for quick feedback |
+| `requires_db` | Tests requiring PostgreSQL database connection | Skip without database |
+| `requires_gcs` | Tests requiring Google Cloud Storage access | Skip without GCS |
+| `requires_tools` | Tests requiring static analysis tools (black, isort, mypy, etc.) | Skip without tools |
+| `regression` | Tests for previously fixed bugs | Run to prevent regressions |
+| `tasks_13_14` | Tests related to specific tasks 13 and 14 | Run for targeted testing |
+
+### Expected Test Behavior
+
+| Environment | Tests Run | Expected Failures | Notes |
+|-------------|-----------|-------------------|-------|
+| Local Docker | 629 tests | 0 | No external dependencies |
+| With Database | 729 tests | 0 | Database tests included |
+| With GCS | 732 tests | 0 | GCS tests included |
+| Full Environment | 838 tests | 0 | All tests should pass |
+
+**Important**: Tests with missing dependencies will either be skipped (if properly marked) or fail. The goal is 0 failures in all environments when dependencies are available.
 
 ## 🛠️ Testing Tools & Fixtures
 
