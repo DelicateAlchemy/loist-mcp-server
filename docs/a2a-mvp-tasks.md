@@ -1,6 +1,6 @@
 # A2A MVP Implementation - Task Tracking
 
-**Status**: 0/10 tasks complete | **Last Updated**: 2025-12-11  
+**Status**: 2/10 tasks complete | **Last Updated**: 2025-12-11  
 **Branch**: `a2a-mvp` (from `origin/dev`)  
 **Spec Document**: [`a2a-mvp-implementation-tasks.md`](./a2a-mvp-implementation-tasks.md)
 
@@ -116,8 +116,8 @@ gh pr create --base dev --head a2a-mvp \
 
 | ID | Task | Status | Blocked By | Updated |
 |----|------|--------|------------|---------|
-| T1 | Verify MCP Server Foundation | todo | — | |
-| T2 | Create A2A Agent Card | todo | T1 | |
+| T1 | Verify MCP Server Foundation | done | — | 2025-12-11 |
+| T2 | Create A2A Agent Card | done | T1 | 2025-12-11 |
 | T3 | Configure SDK Database Storage | todo | T1 | |
 | T4 | Configure SDK JSON-RPC Server | todo | T2, T3 | |
 | T5 | Create Shared Business Logic Layer | todo | T4 | |
@@ -171,19 +171,25 @@ gh pr create --base dev --head a2a-mvp \
 - **Branch Commit**: —
 
 **Validation Checklist**:
-- [ ] `AgentCard` object created with SDK types
-- [ ] 6 skills defined (process_audio, search, get_metadata, update, delete, embed)
-- [ ] `protocolVersion: "0.3.0"` set
-- [ ] `capabilities` object configured
-- [ ] Security scheme defined (BearerAuth)
-- [ ] Imports work: `from a2a.types import AgentCard, AgentSkill, AgentCapabilities`
+- [x] `AgentCard` object created with SDK types
+- [x] 6 skills defined (process_audio, search, get_metadata, update, delete, embed)
+- [x] `protocolVersion: "0.3.0"` set
+- [x] `capabilities` object configured
+- [x] Security scheme defined (BearerAuth)
+- [x] Imports work: `from a2a.types import AgentCard, AgentSkill, AgentCapabilities`
 
 **Files to Create**:
 - `src/a2a/__init__.py`
 - `src/a2a/agent_card.py`
 
 **Notes**:
-<!-- Agent: Add implementation notes here -->
+- ✅ **Agent Card Created**: Complete A2A v0.3 compliant AgentCard with all required fields
+- ✅ **SDK Integration**: Successfully installed `a2a-sdk[postgresql]==0.3.20`
+- ✅ **Field Mapping**: Corrected field names to snake_case (`protocol_version`, `default_input_modes`, etc.)
+- ✅ **Security Config**: Fixed security field format to `[{'BearerAuth': []}]`
+- ✅ **6 Skills Defined**: All core business capabilities included with proper tags
+- ✅ **Package Structure**: Created `src/a2a/` package with proper `__init__.py`
+- ✅ **Import Testing**: All imports work correctly in Docker environment
 
 ---
 
@@ -398,13 +404,27 @@ Agent: Add entries here as you work. Format:
 -->
 
 ### 2025-12-11 - Document Created
-**Tasks Worked On**: —  
-**Completed**: —  
-**Key Decisions**: 
+**Tasks Worked On**: —
+**Completed**: —
+**Key Decisions**:
 - Created tracking document separate from spec
 - Using `a2a-mvp` branch for all A2A work
 **Next Steps**:
 - Start with T1: Verify MCP Server Foundation
+
+### 2025-12-11 - Completed T2: Create A2A Agent Card
+**Tasks Worked On**: T2
+**Completed**: T2
+**Key Decisions**:
+- Installed `a2a-sdk[postgresql]==0.3.20` in Docker environment
+- Used snake_case field names as required by SDK (`protocol_version`, `default_input_modes`)
+- Fixed security field format to `[{'BearerAuth': []}]` instead of string array
+- Defined all 6 core skills with proper tags and descriptions
+**Blockers/Issues**:
+- Initial import test failed due to incorrect field names and security format
+- Resolved by testing SDK directly in Docker container
+**Next Steps**:
+- Move to T3: Configure SDK Database Storage (now unblocked)
 
 ---
 
