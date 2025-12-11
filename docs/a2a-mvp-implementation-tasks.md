@@ -10,23 +10,148 @@
 
 **See also**: [`mcp-audit-tasks.md`](../mcp-audit-tasks.md) for detailed research findings on tool granularity, A2A compatibility, and operational tools best practices.
 
-**Database Requirements (Planned):**
-- ✅ **Existing**: `audio_tracks` table stores processed audio metadata
-- 📝 **Planned**: `a2a_tasks` table for A2A task coordination (separate from audio processing)
-- 📋 **Migration**: `003_add_a2a_tasks.sql` exists but has not been applied
-- 🔗 **Integration**: A2A tasks would create/update `audio_tracks` records when processing completes
+---
 
-**Architecture Overview (Planned):**
+## 🔬 SDK Research Findings (LOI-23)
+
+**Research Date:** December 11, 2025  
+**Source:** DeepWiki Codemap analysis of `a2aproject/a2a-python` repository
+
+### Key Discovery: SDK Provides Built-in SQL Storage
+
+The `a2a-sdk[postgresql]` package includes **complete task persistence** via `DatabaseTaskStore`. This significantly simplifies our implementation.
+
+#### SDK Components Available
+
+| Component | SDK Provides | Our Original Plan |
+|-----------|--------------|-------------------|
+| **Task Storage** | `DatabaseTaskStore` class | Custom `a2a_tasks` table |
+| **JSON-RPC Server** | `A2AFastAPIApplication` | Manual JSON-RPC implementation |
+| **Task States** | 7 states (enum) | 5 custom states |
+| **Table Schema** | Auto-created via SQLAlchemy | Manual SQL migration |
+| **Pydantic Mapping** | Automatic ORM ↔ Pydantic | Manual mapping |
+
+#### SDK Task States (7 total)
+- `submitted` - Initial state
+- `working` - In progress  
+- `input-required` - Waiting for user input
+- `completed` - Successfully finished (terminal)
+- `failed` - Error occurred (terminal)
+- `canceled` - User canceled (terminal)
+- `rejected` - Task rejected (terminal)
+
+**Note**: Terminal states (`completed`, `canceled`, `failed`, `rejected`) cannot be modified. The SDK's `DefaultRequestHandler` automatically validates this via `TERMINAL_TASK_STATES` check before operations.
+
+#### SDK Database Schema (auto-created)
+```python
+# From a2a.server.models.TaskMixin
+id: Mapped[str] = mapped_column(String(36), primary_key=True, index=True)
+context_id: Mapped[str] = mapped_column(String(36), nullable=False)
+kind: Mapped[str] = mapped_column(String(16), nullable=False, default='task')
+status: Mapped[TaskStatus] = mapped_column(PydanticType(TaskStatus))
+artifacts: Mapped[list[Artifact] | None] = mapped_column(PydanticListType(Artifact), nullable=True)
+history: Mapped[list[Message] | None] = mapped_column(PydanticListType(Message), nullable=True)
+task_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True, name='metadata')
+```
+
+### Integration Strategy: Custom Model with FK
+
+To link A2A tasks to our `audio_tracks` table, extend `TaskMixin` with a custom base class:
+
+```python
+from sqlalchemy import ForeignKey
+from sqlalchemy.orm import relationship
+from a2a.server.models import Base, TaskMixin, create_task_model
+
+# Custom task model with FK to audio_tracks
+class LoistTaskBase(Base):
+    audio_track_id = mapped_column(
+        String(36), 
+        ForeignKey('audio_tracks.id'), 
+        nullable=True
+    )
+    audio_track = relationship("AudioTrack", back_populates="a2a_tasks")
+
+# Create custom task model using SDK factory
+A2ATask = create_task_model(
+    table_name='a2a_tasks',
+    base=LoistTaskBase
+)
+
+# Use with SDK's DatabaseTaskStore
+from a2a.server.tasks import DatabaseTaskStore
+store = DatabaseTaskStore(
+    engine=engine,
+    create_table=True,  # SDK creates table automatically
+    table_name='a2a_tasks'
+)
+```
+
+### SDK JSON-RPC Server
+
+The SDK provides a **complete JSON-RPC server**, not just storage:
+
+```python
+from a2a.server.apps import A2AFastAPIApplication
+from a2a.server.request_handlers import DefaultRequestHandler
+
+# Complete server with one line
+app = A2AFastAPIApplication(agent_card, handler)
+fastapi_app = app.build()
+```
+
+**Built-in features:**
+- Agent Card serving at `/.well-known/agent-card.json`
+- Full JSON-RPC 2.0 protocol handling
+- Request validation and routing
+- Error handling with proper codes
+- SSE streaming support
+- Authentication via extended card
+
+### Impact on Implementation Tasks
+
+| Task | Original Approach | With SDK | Effort Change |
+|------|-------------------|----------|---------------|
+| **Task 3** | Manual SQL migration | SDK auto-creates + FK migration | **-70%** |
+| **Task 4** | Manual JSON-RPC handlers | Use `A2AFastAPIApplication` | **-80%** |
+| **Task 5** | Extract shared logic | Implement `RequestHandler` interface | **Similar** |
+| **Task 6** | Message parsing utils | SDK provides `Message` types | **-50%** |
+
+### Research Citations
+
+**DatabaseTaskStore initialization:**
+- `src/a2a/server/tasks/database_task_store.py:43` - Accepts SQLAlchemy engine, configurable table name
+- `src/a2a/server/tasks/database_task_store.py:67` - Dynamic model selection
+
+**TaskMixin schema:**
+- `src/a2a/server/models.py:122-145` - All task columns with Pydantic types
+
+**Custom model factory:**
+- `src/a2a/server/models.py:156-184` - `create_task_model()` for custom base classes
+
+**Complete server:**
+- `src/a2a/server/apps/jsonrpc/fastapi_app.py:61-67` - `A2AFastAPIApplication`
+
+---
+
+**Database Requirements (Updated):**
+- ✅ **Existing**: `audio_tracks` table stores processed audio metadata
+- ✅ **SDK Provides**: `DatabaseTaskStore` handles task persistence automatically
+- 📝 **Simplified Migration**: Only need FK link from `audio_tracks` to SDK's task table
+- 🔗 **Integration**: Custom `TaskMixin` extension for `audio_track_id` FK
+
+**Architecture Overview (Updated):**
 - **MCP Server**: Existing FastMCP implementation with audio processing tools (stdio)
-- **A2A Layer**: Agent Card discovery + JSON-RPC 2.0 task coordination API (not implemented)
-- **Bridge Pattern**: Separate FastAPI app for A2A HTTP endpoints delegating to MCP tools (not implemented)
-- 
+- **A2A Layer**: Use SDK's `A2AFastAPIApplication` for complete JSON-RPC server
+- **Storage**: SDK's `DatabaseTaskStore` with custom FK to `audio_tracks`
+- **Bridge Pattern**: Still needed for shared business logic between MCP and A2A
+
 **Success Criteria (for future implementation):**
-- Agent Card accessible at `/.well-known/agent.json` (A2A v0.3 compliant)
-- Task creation via JSON-RPC 2.0 `tasks/send` method
-- Task status polling via JSON-RPC 2.0 `tasks/get` method
-- Integration with existing MCP tools via shared business logic
-- Basic error handling and validation
+- Agent Card accessible at `/.well-known/agent-card.json` (SDK serves this automatically)
+- Task creation via SDK's JSON-RPC `tasks/send` method
+- Task status polling via SDK's JSON-RPC `tasks/get` method
+- Integration with existing MCP tools via `RequestHandler` implementation
+- Basic error handling provided by SDK
 
 ---
 
@@ -107,7 +232,7 @@
    - ❌ `list_embed_templates` - Utility, not core workflow
 5. Add serviceEndpoint with JSON-RPC protocol
 6. Include authentication configuration (bearer token)
-7. Save as `/.well-known/agent.json`
+7. Agent Card served automatically by SDK at `/.well-known/agent-card.json`
 8. Create FastAPI route to serve the Agent Card
 9. Add CORS headers for cross-origin access
 10. Implement response caching for performance
@@ -116,254 +241,407 @@
 **Agent Card Structure** (A2A v0.3 compliant):
 ```json
 {
-  "agentId": "loist-music-processor",
   "name": "Loist Music Library Processor",
-  "version": "1.0.0",
   "description": "Audio processing and metadata extraction service",
-
+  "url": "https://api.loist.music/a2a",
+  "version": "1.0.0",
+  "protocolVersion": "0.3.0",
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": false,
+    "stateTransitionHistory": true
+  },
+  "defaultInputModes": ["application/json", "text/plain"],
+  "defaultOutputModes": ["application/json"],
+  "security": [{"BearerAuth": []}],
+  "securitySchemes": {
+    "BearerAuth": {
+      "type": "http",
+      "scheme": "bearer",
+      "bearerFormat": "JWT"
+    }
+  },
   "skills": [
     {
-      "name": "process_audio_complete",
-      "description": "Process audio file from URL and extract complete metadata",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "source": {
-            "type": "object",
-            "properties": {
-              "type": {"type": "string", "enum": ["http_url"]},
-              "url": {"type": "string"}
-            }
-          },
-          "options": {"type": "object"}
-        },
-        "required": ["source"]
-      }
+      "id": "process_audio_complete",
+      "name": "Process audio (full)",
+      "description": "Process audio file from URL and extract complete metadata including waveform, artwork, and tags",
+      "tags": ["audio", "ingestion", "metadata", "waveform"]
     },
     {
-      "name": "search_library",
-      "description": "Search processed music library with filters"
+      "id": "search_library",
+      "name": "Search library",
+      "description": "Search processed music library with text queries and metadata filters",
+      "tags": ["search", "query", "metadata"]
     },
     {
-      "name": "get_audio_metadata",
-      "description": "Get track metadata by ID"
+      "id": "get_audio_metadata",
+      "name": "Get metadata",
+      "description": "Retrieve complete metadata for a processed audio track by ID",
+      "tags": ["metadata", "retrieval"]
     },
     {
-      "name": "update_metadata",
-      "description": "Update track metadata"
+      "id": "update_metadata",
+      "name": "Update metadata",
+      "description": "Update metadata fields for an existing audio track",
+      "tags": ["metadata", "update", "editing"]
     },
     {
-      "name": "delete_audio",
-      "description": "Delete track from library"
+      "id": "delete_audio",
+      "name": "Delete audio",
+      "description": "Remove an audio track from the library and delete associated files",
+      "tags": ["deletion", "cleanup"]
     },
     {
-      "name": "get_embed_url",
-      "description": "Generate embeddable player URLs"
+      "id": "get_embed_url",
+      "name": "Get embed URL",
+      "description": "Generate embeddable player URLs for audio tracks with waveform visualization",
+      "tags": ["embed", "player", "waveform"]
     }
-  ],
-
-  "serviceEndpoint": {
-    "url": "https://api.loist.music/a2a",
-    "protocols": ["json-rpc"]
-  },
-
-  "authentication": {
-    "type": "bearer",
-    "scheme": "Bearer"
-  }
+  ]
 }
 ```
 
 **Output Requirements**:
-- Valid Agent Card JSON file at `/.well-known/agent.json`
-- HTTP endpoint serving the Agent Card
+- Valid Agent Card JSON file at `/.well-known/agent-card.json`
+- HTTP endpoint serving the Agent Card (SDK automatic)
 - CORS headers configured
 - Response caching implemented
 
 **Validation Criteria**:
 - [ ] Agent Card JSON validates against A2A v0.3 schema
-- [ ] `GET /.well-known/agent.json` returns 200 OK
-- [ ] JSON contains required fields: agentId, skills, serviceEndpoint
-- [ ] Skills array includes all 3 core capabilities
+- [ ] `GET /.well-known/agent-card.json` returns 200 OK
+- [ ] JSON contains required fields: name, url, version, capabilities, defaultInputModes, defaultOutputModes, skills
+- [ ] Skills array includes all 6 core capabilities with proper id/name/description/tags
+- [ ] Security configuration includes BearerAuth scheme
 - [ ] CORS headers allow cross-origin requests
 - [ ] OpenAPI documentation updated
 
 **Files to Create/Modify**:
-- `/.well-known/agent.json` (new)
-- `src/a2a/app.py` (new FastAPI app)
+- `src/a2a/agent_card.py` (SDK-based AgentCard configuration)
+- `src/a2a/app.py` (SDK A2AFastAPIApplication)
 - `docs/openapi.yaml` (update)
 
 **Dependencies**:
 - Task 1: MCP server foundation verified
 
-## Task 3: Implement A2A Database Schema
+## Task 3: Configure SDK Database Storage with Custom FK
 
-**Goal**: Create A2A-compliant database schema for task coordination
+**Goal**: Configure SDK's `DatabaseTaskStore` with custom model linking to `audio_tracks`
 
-**Context**: Need new database table for A2A task coordination separate from existing audio_tracks table.
+**Context**: SDK provides built-in task persistence. We only need to extend it with a foreign key relationship to our existing `audio_tracks` table.
+
+**🔬 Research Update (LOI-23)**: SDK handles schema creation automatically via SQLAlchemy. No manual migration needed for base task table.
 
 **Input Requirements**:
-- Existing database migration system
-- Current audio_tracks table structure
-- A2A v0.3 task state requirements
+- SDK package: `a2a-sdk[postgresql]`
+- Existing `audio_tracks` table structure
+- SQLAlchemy async engine configuration
 
 **Implementation Steps**:
-1. Create `database/migrations/003_add_a2a_tasks.sql` migration
-2. Define `a2a_tasks` table with A2A-compliant fields:
-   - task_id (VARCHAR(36) PRIMARY KEY)
-   - status (VARCHAR(20) with A2A state constraints)
-   - messages (JSONB NOT NULL for A2A message format)
-   - artifacts (JSONB for task results)
-   - error (JSONB for error details)
-   - created_at, updated_at timestamps
-3. Add indexes on status and created_at for efficient querying
-4. Add foreign key relationship to audio_tracks table
-5. Update database operations for A2A task management
-6. Run migration to create table
+1. Install SDK with PostgreSQL support: `pip install a2a-sdk[postgresql]`
+2. Create custom task model extending `TaskMixin`:
+   ```python
+   # src/a2a/models.py
+   from sqlalchemy import ForeignKey, String
+   from sqlalchemy.orm import Mapped, mapped_column, relationship
+   from a2a.server.models import Base, TaskMixin, create_task_model
+   
+   class LoistTaskBase(Base):
+       """Custom base adding FK to audio_tracks."""
+       __abstract__ = True
+       
+       audio_track_id: Mapped[str | None] = mapped_column(
+           String(36), 
+           ForeignKey('audio_tracks.id'), 
+           nullable=True
+       )
+   
+   # Create task model with custom FK
+   A2ATask = create_task_model(
+       table_name='a2a_tasks',
+       base=LoistTaskBase
+   )
+   ```
+3. Configure `DatabaseTaskStore` with custom table:
+   ```python
+   # src/a2a/storage.py
+   from a2a.server.tasks import DatabaseTaskStore
+   from sqlalchemy.ext.asyncio import create_async_engine
+   
+   async def create_task_store(database_url: str) -> DatabaseTaskStore:
+       engine = create_async_engine(
+           database_url.replace("postgresql://", "postgresql+asyncpg://")
+       )
+       return DatabaseTaskStore(
+           engine=engine,
+           create_table=True,  # SDK creates table automatically
+           table_name='a2a_tasks'
+       )
+   ```
+4. Add relationship to existing `AudioTrack` model:
+   ```python
+   # Update src/repositories/audio_repository.py or models
+   class AudioTrack(Base):
+       # ... existing fields ...
+       a2a_tasks = relationship("A2ATask", back_populates="audio_track")
+   ```
+5. Create minimal migration for FK (run AFTER SDK creates base table):
+   ```sql
+   -- database/migrations/003_add_a2a_audio_link.sql
+   -- Note: SDK creates a2a_tasks table on first startup
+   -- This migration adds the relationship column
+   ALTER TABLE audio_tracks
+   ADD COLUMN IF NOT EXISTS a2a_task_id VARCHAR(36);
+   
+   -- Add FK constraint (run after a2a_tasks exists)
+   ALTER TABLE audio_tracks
+   ADD CONSTRAINT fk_audio_a2a_task
+   FOREIGN KEY (a2a_task_id) REFERENCES a2a_tasks(id)
+   ON DELETE SET NULL;
+   ```
 
-**Database Schema** (A2A v0.3 compliant):
-```sql
--- MVP: Simple task tracking (no retry logic for Phase 1)
-CREATE TABLE a2a_tasks (
-    task_id VARCHAR(36) PRIMARY KEY,
-    status VARCHAR(20) NOT NULL CHECK (status IN
-        ('submitted', 'working', 'completed', 'failed', 'cancelled')),
-    messages JSONB NOT NULL,
-    artifacts JSONB,
-    error JSONB,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
-CREATE INDEX idx_a2a_status ON a2a_tasks(status);
-CREATE INDEX idx_a2a_created ON a2a_tasks(created_at DESC);
-
--- Link to existing audio_tracks when processing completes
-ALTER TABLE audio_tracks
-ADD COLUMN a2a_task_id VARCHAR(36) REFERENCES a2a_tasks(task_id);
+**SDK-Provided Schema** (auto-created):
+```
+a2a_tasks table:
+├── id (VARCHAR(36), PK, indexed)
+├── context_id (VARCHAR(36), NOT NULL)
+├── kind (VARCHAR(16), default='task')
+├── status (JSON - TaskStatus Pydantic model)
+├── artifacts (JSON - list[Artifact])
+├── history (JSON - list[Message])
+└── metadata (JSON)
 ```
 
 **Output Requirements**:
-- Migration script created and applied
-- a2a_tasks table exists with correct schema
-- Database operations for A2A tasks implemented
+- SDK `DatabaseTaskStore` initialized with custom table name
+- Custom model includes `audio_track_id` FK
+- `audio_tracks` table can reference A2A tasks
 
 **Validation Criteria**:
-- [ ] Migration runs without errors
-- [ ] a2a_tasks table created with correct columns
-- [ ] Status constraint includes all A2A states
-- [ ] Indexes created for performance
-- [ ] Foreign key relationship to audio_tracks works
-- [ ] Database operations can insert/retrieve A2A tasks
+- [ ] `a2a-sdk[postgresql]` installed in requirements.txt
+- [ ] Custom `A2ATask` model created with FK
+- [ ] `DatabaseTaskStore` initializes without errors
+- [ ] SDK auto-creates `a2a_tasks` table on startup
+- [ ] Can save and retrieve tasks via SDK
+- [ ] FK relationship to `audio_tracks` works
 
 **Files to Create/Modify**:
-- `database/migrations/003_add_a2a_tasks.sql` (new)
-- `database/operations.py` (add A2A task operations)
+- `requirements.txt` (add `a2a-sdk[postgresql]`)
+- `src/a2a/models.py` (new - custom task model)
+- `src/a2a/storage.py` (new - store initialization)
+- `database/migrations/003_add_a2a_audio_link.sql` (simplified - FK only)
 
 **Dependencies**:
 - Task 1: MCP server foundation verified
 
-## Task 4: Implement JSON-RPC 2.0 Task API
+## Task 4: Configure SDK JSON-RPC Server
 
-**Goal**: Create JSON-RPC 2.0 endpoints for A2A task creation and status polling
+**Goal**: Set up SDK's `A2AFastAPIApplication` with custom request handler
 
-**Context**: A2A v0.3 uses JSON-RPC 2.0 as the primary protocol, not REST endpoints.
+**Context**: SDK provides a complete JSON-RPC 2.0 server. We implement the `RequestHandler` interface to add our audio processing logic.
+
+**🔬 Research Update (LOI-23)**: SDK provides `A2AFastAPIApplication` with built-in JSON-RPC protocol handling, request validation, Agent Card serving, and error handling. We only need to implement business logic.
 
 **Input Requirements**:
-- A2A database schema implemented
-- FastAPI application structure
-- JSON-RPC 2.0 specification understanding
+- SDK package: `a2a-sdk[postgresql]`
+- Agent Card configuration (from Task 2)
+- `DatabaseTaskStore` configured (from Task 3)
 
 **Implementation Steps**:
-1. Create JSON-RPC request/response models using Pydantic
-2. Implement `tasks/send` method for task creation:
-   - Parse A2A message format from request
-   - Extract audio_url from message parts
-   - Generate unique task ID
-   - Store task in a2a_tasks table with 'submitted' status
-   - Trigger async processing
-   - Return task ID in JSON-RPC response
-3. Implement `tasks/get` method for status polling:
-   - Accept task ID parameter
-   - Retrieve task from database
-   - Return current status, messages, and artifacts
-   - Handle not-found cases with proper JSON-RPC errors
-4. Add proper error handling and validation
-5. Implement message parsing utilities
+1. Create Agent Card configuration:
+   ```python
+   # src/a2a/agent_card.py
+   from a2a.types import AgentCard, AgentSkill, AgentCapabilities
 
-**JSON-RPC Request/Response Examples**:
+   AGENT_CARD = AgentCard(
+       name="Loist Music Library Processor",
+       description="Audio processing and metadata extraction service",
+       url="https://api.loist.music/a2a",
+       version="1.0.0",
+       protocolVersion="0.3.0",
+       capabilities=AgentCapabilities(
+           streaming=False,
+           pushNotifications=False,
+           stateTransitionHistory=True
+       ),
+       defaultInputModes=["application/json", "text/plain"],
+       defaultOutputModes=["application/json"],
+       security=[{"BearerAuth": []}],
+       securitySchemes={
+           "BearerAuth": {
+               "type": "http",
+               "scheme": "bearer",
+               "bearerFormat": "JWT"
+           }
+       },
+       skills=[
+           AgentSkill(
+               id="process_audio_complete",
+               name="Process audio (full)",
+               description="Process audio file from URL and extract complete metadata including waveform, artwork, and tags",
+               tags=["audio", "ingestion", "metadata", "waveform"]
+           ),
+           AgentSkill(
+               id="search_library",
+               name="Search library",
+               description="Search processed music library with text queries and metadata filters",
+               tags=["search", "query", "metadata"]
+           ),
+           AgentSkill(
+               id="get_audio_metadata",
+               name="Get metadata",
+               description="Retrieve complete metadata for a processed audio track by ID",
+               tags=["metadata", "retrieval"]
+           ),
+           AgentSkill(
+               id="update_metadata",
+               name="Update metadata",
+               description="Update metadata fields for an existing audio track",
+               tags=["metadata", "update", "editing"]
+           ),
+           AgentSkill(
+               id="delete_audio",
+               name="Delete audio",
+               description="Remove an audio track from the library and delete associated files",
+               tags=["deletion", "cleanup"]
+           ),
+           AgentSkill(
+               id="get_embed_url",
+               name="Get embed URL",
+               description="Generate embeddable player URLs for audio tracks with waveform visualization",
+               tags=["embed", "player", "waveform"]
+           ),
+       ]
+   )
+   ```
 
-**tasks/send request:**
+2. Implement `RequestHandler` interface:
+   ```python
+   # src/a2a/handler.py
+   from a2a.server.request_handlers import RequestHandler
+   from a2a.types import (
+       SendMessageRequest, SendMessageResponse,
+       GetTaskRequest, GetTaskResponse,
+       Message, TaskStatus, TaskState
+   )
+   
+   # Terminal states - SDK validates these automatically, but useful for our logic
+   TERMINAL_TASK_STATES = {
+       TaskState.completed, 
+       TaskState.canceled, 
+       TaskState.failed, 
+       TaskState.rejected
+   }
+   
+   class LoistRequestHandler(RequestHandler):
+       def __init__(self, task_store, audio_processor):
+           self.task_store = task_store
+           self.audio_processor = audio_processor
+       
+       async def on_send_message(
+           self, request: SendMessageRequest, context
+       ) -> SendMessageResponse:
+           # Extract audio URL from message
+           audio_url = self._extract_audio_url(request.params.message)
+           
+           # Create task with 'working' status
+           task = await self._create_task(request, TaskState.working)
+           
+           # Process audio (calls shared business logic)
+           try:
+               result = await self.audio_processor.process(audio_url)
+               task.status = TaskStatus(state=TaskState.completed)
+               task.artifacts = [result.to_artifact()]
+           except Exception as e:
+               task.status = TaskStatus(state=TaskState.failed, message=str(e))
+           
+           await self.task_store.save(task)
+           return SendMessageResponse(result=task)
+       
+       async def on_get_task(
+           self, request: GetTaskRequest, context
+       ) -> GetTaskResponse:
+           task = await self.task_store.get(request.params.task_id)
+           return GetTaskResponse(result=task)
+   ```
+
+3. Build FastAPI application using SDK:
+   ```python
+   # src/a2a/app.py
+   from a2a.server.apps import A2AFastAPIApplication
+   from .agent_card import AGENT_CARD
+   from .handler import LoistRequestHandler
+   from .storage import create_task_store
+   
+   async def create_a2a_app():
+       task_store = await create_task_store(DATABASE_URL)
+       handler = LoistRequestHandler(task_store, audio_processor)
+       
+       # SDK handles everything: JSON-RPC, validation, Agent Card serving
+       a2a_app = A2AFastAPIApplication(
+           agent_card=AGENT_CARD,
+           http_handler=handler
+       )
+       return a2a_app.build()
+   ```
+
+**SDK-Provided Endpoints** (automatic):
+- `GET /.well-known/agent-card.json` - Agent Card discovery
+- `POST /` - JSON-RPC endpoint (tasks/send, tasks/get, etc.)
+- Full JSON-RPC 2.0 error handling
+- Request validation via Pydantic
+- Optional SSE streaming support
+
+**JSON-RPC Examples** (SDK handles protocol, we handle logic):
+
+**tasks/send** - SDK routes to `on_send_message()`:
 ```json
 {
   "jsonrpc": "2.0",
   "id": "req-123",
   "method": "tasks/send",
   "params": {
-    "task": {
-      "id": "task-uuid-here",
-      "messages": [
-        {
-          "role": "user",
-          "parts": [
-            {
-              "type": "text",
-              "text": "Process this audio: https://example.com/track.mp3"
-            }
-          ]
-        }
-      ]
+    "message": {
+      "role": "user",
+      "parts": [{"type": "text", "text": "Process: https://example.com/track.mp3"}]
     }
   }
 }
 ```
 
-**tasks/send response:**
+**tasks/get** - SDK routes to `on_get_task()`:
 ```json
 {
   "jsonrpc": "2.0",
-  "id": "req-123",
-  "result": {
-    "task": {
-      "id": "task-uuid-here",
-      "status": "submitted",
-      "messages": [...]
-    }
-  }
-}
-```
-
-**tasks/get request:**
-```json
-{
-  "jsonrpc": "2.0",
-  "id": "req-456",
+  "id": "req-456", 
   "method": "tasks/get",
   "params": {"taskId": "task-uuid-here"}
 }
 ```
 
 **Output Requirements**:
-- JSON-RPC 2.0 compliant endpoints
-- Task creation and status polling working
-- Message parsing from A2A format
-- Proper error responses
+- `A2AFastAPIApplication` configured and running
+- `RequestHandler` implementation with audio processing logic
+- Agent Card served at standard endpoint
+- JSON-RPC methods routed to handler
 
 **Validation Criteria**:
-- [ ] `tasks/send` accepts valid JSON-RPC requests
-- [ ] Tasks are created in database with correct status
-- [ ] `tasks/get` returns current task state
-- [ ] Message parsing extracts audio URLs correctly
-- [ ] Invalid requests return proper JSON-RPC errors
-- [ ] Endpoints handle concurrent requests
+- [ ] `A2AFastAPIApplication` builds without errors
+- [ ] `GET /.well-known/agent-card.json` returns Agent Card
+- [ ] `tasks/send` routes to `on_send_message()`
+- [ ] `tasks/get` routes to `on_get_task()`
+- [ ] SDK validates JSON-RPC format automatically
+- [ ] Errors return proper JSON-RPC error responses
 
 **Files to Create/Modify**:
-- `src/a2a/models.py` (JSON-RPC models)
-- `src/a2a/endpoints.py` (RPC handlers)
-- `src/a2a/message_parser.py` (message parsing utilities)
+- `src/a2a/agent_card.py` (new - Agent Card config)
+- `src/a2a/handler.py` (new - RequestHandler implementation)
+- `src/a2a/app.py` (new - FastAPI app using SDK)
 
 **Dependencies**:
-- Task 3: A2A database schema implemented
+- Task 2: Agent Card design finalized
+- Task 3: DatabaseTaskStore configured
 
 ## Task 5: Create Shared Business Logic Layer
 
@@ -435,61 +713,107 @@ ADD COLUMN a2a_task_id VARCHAR(36) REFERENCES a2a_tasks(task_id);
 
 ## Task 6: Implement Message Parsing Utilities
 
-**Goal**: Create utilities to extract parameters from A2A message format
+**Goal**: Create utilities to extract audio URLs from A2A `Message` objects
 
-**Context**: A2A sends parameters as messages with parts, not direct JSON. Need to parse "Process this audio: https://..." from message structures.
+**Context**: A2A sends parameters as messages with parts, not direct JSON. SDK provides typed `Message` and `Part` classes; we add domain-specific URL extraction.
+
+**🔬 Research Update (LOI-23)**: SDK provides typed `Message`, `TextPart`, `FilePart` classes. We only need URL extraction logic, not message structure handling.
 
 **Input Requirements**:
-- A2A message format specification
-- Current task creation endpoint
+- SDK `Message` type from `a2a.types`
 - Audio URL extraction requirements
+- URL validation patterns
 
 **Implementation Steps**:
-1. Create `src/a2a/message_parser.py` with parsing functions
-2. Implement `extract_audio_url()` function that:
-   - Accepts A2A message array
-   - Searches for user role messages
-   - Parses text parts for audio URLs
-   - Handles various message formats gracefully
-   - Returns extracted URL or raises ValueError
-3. Add URL validation and sanitization
-4. Support natural language patterns like:
-   - "Process this audio: https://example.com/track.mp3"
-   - "Download and analyze: https://audio.url/file.wav"
-   - Direct URLs in text parts
+1. Create `src/a2a/message_parser.py` with parsing functions:
+   ```python
+   # src/a2a/message_parser.py
+   import re
+   from urllib.parse import urlparse
+   from a2a.types import Message, TextPart, FilePart
+   
+   # URL pattern for audio files
+   AUDIO_URL_PATTERN = re.compile(
+       r'https?://[^\s<>"{}|\\^`\[\]]+\.(?:mp3|wav|flac|m4a|aac|ogg)',
+       re.IGNORECASE
+   )
+   
+   def extract_audio_url(message: Message) -> str | None:
+       """Extract audio URL from A2A message parts.
+       
+       Checks:
+       1. FilePart with audio MIME type
+       2. TextPart containing audio URL
+       """
+       for part in message.parts:
+           # Check for file parts with audio
+           if isinstance(part, FilePart):
+               if part.mime_type and part.mime_type.startswith('audio/'):
+                   return part.uri
+           
+           # Check text parts for URLs
+           if isinstance(part, TextPart):
+               match = AUDIO_URL_PATTERN.search(part.text)
+               if match:
+                   return match.group(0)
+       
+       return None
+   
+   def validate_audio_url(url: str) -> bool:
+       """Validate URL is safe to process."""
+       parsed = urlparse(url)
+       # Only allow HTTP/HTTPS
+       if parsed.scheme not in ('http', 'https'):
+           return False
+       # Block internal IPs (SSRF protection)
+       # ... existing SSRF checks from downloader ...
+       return True
+   ```
 
-**Example Implementation**:
+2. Integrate with `RequestHandler`:
+   ```python
+   # In src/a2a/handler.py
+   from .message_parser import extract_audio_url, validate_audio_url
+   
+   class LoistRequestHandler(RequestHandler):
+       async def on_send_message(self, request, context):
+           audio_url = extract_audio_url(request.params.message)
+           if not audio_url:
+               raise ValueError("No audio URL found in message")
+           if not validate_audio_url(audio_url):
+               raise ValueError("Invalid or blocked audio URL")
+           # ... continue processing
+   ```
+
+**SDK Types Used**:
 ```python
-def extract_audio_url(messages: list[Message]) -> str:
-    """Extract audio URL from A2A message parts"""
-    for message in messages:
-        if message.role == "user":
-            for part in message.parts:
-                if part.type == "text":
-                    # Parse "Process this audio: https://..."
-                    url = extract_url_from_text(part.text)
-                    if url:
-                        return url
-    raise ValueError("No audio URL found in messages")
+from a2a.types import (
+    Message,      # Container with role and parts
+    TextPart,     # Text content
+    FilePart,     # File reference with URI and MIME type
+    DataPart,     # Inline binary data
+)
 ```
 
 **Output Requirements**:
-- Message parsing utilities implemented
-- Audio URL extraction working
-- Support for various message formats
-- Proper error handling for invalid messages
+- URL extraction from `TextPart` content
+- URL extraction from `FilePart` URIs
+- SSRF protection via URL validation
+- Clear error messages for missing URLs
 
 **Validation Criteria**:
-- [ ] Can extract URLs from various message formats
-- [ ] Handles missing URLs gracefully
-- [ ] Validates extracted URLs
-- [ ] Works with JSON-RPC task creation
+- [ ] Extracts URLs from `TextPart.text` content
+- [ ] Extracts URLs from `FilePart.uri`
+- [ ] Validates URL scheme (http/https only)
+- [ ] SSRF protection blocks internal IPs
+- [ ] Returns `None` gracefully for messages without URLs
 
 **Files to Create/Modify**:
 - `src/a2a/message_parser.py` (new)
+- `src/a2a/handler.py` (integrate parser)
 
 **Dependencies**:
-- Task 4: JSON-RPC Task API implemented
+- Task 4: JSON-RPC server configured (provides `Message` types)
 
 ## Task 7: Connect A2A Tasks to Audio Processing
 
@@ -704,7 +1028,7 @@ services:
 
 **Implementation Steps**:
 1. Test Agent Card discovery and validation:
-   - Verify `/.well-known/agent.json` endpoint
+   - Verify `/.well-known/agent-card.json` endpoint (SDK automatic)
    - Validate against A2A v0.3 schema
    - Test CORS headers and accessibility
 2. Test JSON-RPC compliance:
@@ -728,8 +1052,8 @@ services:
    - Test concurrent access to both services
 
 **MVP Completion Checklist**:
-- [ ] Agent Card returns valid JSON at `/.well-known/agent.json`
-- [ ] `curl` test: `curl http://localhost:8080/.well-known/agent.json`
+- [ ] Agent Card returns valid JSON at `/.well-known/agent-card.json` (SDK automatic)
+- [ ] `curl` test: `curl http://localhost:8080/.well-known/agent-card.json`
 - [ ] JSON-RPC test: Send `tasks/send` request, get valid response
 - [ ] Task polling: Create task, poll until completion
 - [ ] MCP still works: Existing tools callable via stdio
@@ -896,7 +1220,7 @@ services:
 - Flag optional components clearly
 
 **File Organization:**
-- New A2A files: `/.well-known/agent.json`, task route handlers
+- New A2A files: `src/a2a/agent_card.py`, `src/a2a/handler.py`, `src/a2a/app.py`
 - Modified files: `src/server.py`, database schemas, OpenAPI spec
 - Test files: Integration tests for A2A endpoints
 
@@ -917,7 +1241,7 @@ services:
 CREATE TABLE a2a_tasks (
     task_id VARCHAR(36) PRIMARY KEY,
     status VARCHAR(20) NOT NULL CHECK (status IN
-        ('submitted', 'working', 'completed', 'failed', 'cancelled')),
+        ('submitted', 'working', 'input-required', 'completed', 'failed', 'canceled', 'rejected')),
     messages JSONB NOT NULL,
     artifacts JSONB,
     error JSONB,
@@ -960,15 +1284,16 @@ ADD COLUMN a2a_task_id VARCHAR(36) REFERENCES a2a_tasks(task_id);
 - Specified A2A v0.3 compliant format
 
 ### 📋 **JSON-RPC API Design (Task 4)**
-- Planned `POST /a2a/v1/rpc` endpoint instead of REST
-- Designed `tasks/send` and `tasks/get` methods with examples
-- Specified JSON-RPC 2.0 request/response format
-- Planned message parsing utilities (Task 6)
+- ~~Planned `POST /a2a/v1/rpc` endpoint instead of REST~~
+- **Updated**: Use SDK's `A2AFastAPIApplication` (handles protocol automatically)
+- Implement `RequestHandler` interface for business logic
+- SDK provides JSON-RPC routing, validation, error handling
 
 ### 📋 **Database Schema Design (Task 3)**
-- Designed simplified schema without over-engineering
-- Planned A2A-compliant fields (`messages`, `artifacts`)
-- Specified A2A state names (`submitted`, `working`, `completed`, `failed`, `cancelled`)
+- ~~Designed simplified schema without over-engineering~~
+- **Updated**: SDK's `DatabaseTaskStore` handles schema automatically
+- Custom `TaskMixin` extension for `audio_track_id` FK
+- Simplified migration: FK link only, not full table creation
 
 ### 📋 **Bridge Pattern Design (Task 5)**
 - Designed shared business logic layer to avoid code duplication
@@ -976,7 +1301,7 @@ ADD COLUMN a2a_task_id VARCHAR(36) REFERENCES a2a_tasks(task_id);
 - Specified separate FastAPI app architecture
 
 ### 📋 **Component Integration Design**
-- **Message Parsing** (Task 6): Designed URL extraction from A2A message format
+- **Message Parsing** (Task 6): Use SDK's typed `Message`/`Part` classes + URL extraction
 - **Processing Integration** (Task 7): Planned A2A to audio processing connection
 - **Dual Server Deployment** (Task 8): Designed Docker Compose for both MCP and A2A
 - **Agent Discovery Documentation** (Task 9): Planned how others find and use the service
@@ -992,4 +1317,54 @@ ADD COLUMN a2a_task_id VARCHAR(36) REFERENCES a2a_tasks(task_id);
 - Focused on deliverable completion criteria
 - Each task measured by validation criteria
 
-**Status**: This document contains comprehensive A2A MVP design work ready for future implementation. All planning is complete, but no code has been implemented.
+---
+
+## 🔬 **SDK Research Update (LOI-23) - December 2025**
+
+**Research Method**: DeepWiki Codemap analysis of `a2aproject/a2a-python`
+
+### Key Findings
+
+| Discovery | Impact |
+|-----------|--------|
+| SDK provides `DatabaseTaskStore` | Task 3 simplified: use SDK storage, add FK only |
+| SDK provides `A2AFastAPIApplication` | Task 4 simplified: implement `RequestHandler` interface |
+| SDK has 7 task states (not 5) | Include `input-required` and `rejected` states |
+| SDK uses `history` not `messages` | Naming alignment with SDK conventions |
+| Custom models via `create_task_model()` | FK to `audio_tracks` via custom base class |
+
+### Effort Impact
+
+| Task | Original Estimate | With SDK | Reduction |
+|------|-------------------|----------|-----------|
+| Task 3 (Database) | Manual SQL migration | SDK auto-creates + FK only | **-70%** |
+| Task 4 (JSON-RPC) | Manual handlers | Use SDK server | **-80%** |
+| Task 6 (Parsing) | Manual message types | SDK provides types | **-50%** |
+
+### Documentation Added
+
+- SDK Research Findings section (top of document)
+- Updated Task 3 with custom model pattern
+- Updated Task 4 with `RequestHandler` implementation
+- Updated Task 6 with SDK type usage
+- Research citations with file paths and line numbers
+
+**Status**: Planning document updated with SDK integration strategy. Implementation effort significantly reduced by leveraging SDK capabilities.
+
+---
+
+## 📋 **Schema Corrections Applied (Post-Review)**
+
+### Agent Card v0.3 Compliance Fixes
+- **Removed**: `agentId`, `serviceEndpoint`, `authentication` fields (outdated)
+- **Added**: `protocolVersion`, `capabilities`, `defaultInputModes`, `defaultOutputModes`, `security`, `securitySchemes`
+- **Updated**: Well-known path from `/.well-known/agent.json` to `/.well-known/agent-card.json`
+- **Fixed**: Skills structure with required `id`, `name`, `description`, `tags` fields
+- **Corrected**: SDK code examples to match A2A v0.3 AgentCard structure
+
+### Architectural Alignment
+- **Confirmed**: SDK provides complete JSON-RPC server (`A2AFastAPIApplication`)
+- **Updated**: Task 2 to use SDK-served Agent Card (no manual JSON file needed)
+- **Aligned**: All code examples with actual SDK types and patterns
+
+**Review Status**: Critical schema issues resolved. Document now compliant with A2A v0.3 specification and SDK patterns.

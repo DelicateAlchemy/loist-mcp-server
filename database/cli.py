@@ -159,7 +159,7 @@ def create_sample_data_command(args):
             track = AudioTrackDB.insert_track(
                 track_id=track_id,
                 title=f"Sample Track {i+1}",
-                audio_path=f"audio/sample-{track_id}.mp3",
+                audio_gcs_path=f"gs://loist-mvp-audio-files/samples/sample-{track_id}.mp3",
                 artist=artist,
                 album=f"Sample Album {random.randint(1, 10)}",
                 genre=random.choice(genres),

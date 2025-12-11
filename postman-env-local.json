@@ -10,10 +10,10 @@
 		},
 		{
 			"key": "audio_id",
-			"value": "",
+			"value": "dea289dc-fc68-4c92-90c8-569e98d79863",
 			"type": "any",
 			"enabled": true,
-			"description": "Set by Process Audio Complete request - UUID of processed audio track"
+			"description": "Set by Process Audio Complete request - UUID of processed audio track (currently set to track with test_bell.wav file)"
 		},
 		{
 			"key": "audio_source_url",
