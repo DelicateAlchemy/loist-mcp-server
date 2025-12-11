@@ -1,6 +1,6 @@
 # A2A MVP Implementation - Task Tracking
 
-**Status**: 2/10 tasks complete | **Last Updated**: 2025-12-11  
+**Status**: 3/11 tasks complete | **Last Updated**: 2025-12-11  
 **Branch**: `a2a-mvp` (from `origin/dev`)  
 **Spec Document**: [`a2a-mvp-implementation-tasks.md`](./a2a-mvp-implementation-tasks.md)
 
@@ -118,6 +118,7 @@ gh pr create --base dev --head a2a-mvp \
 |----|------|--------|------------|---------|
 | T1 | Verify MCP Server Foundation | done | — | 2025-12-11 |
 | T2 | Create A2A Agent Card | done | T1 | 2025-12-11 |
+| T2.1 | Configure Domain Mapping | todo | T2 | |
 | T3 | Configure SDK Database Storage | todo | T1 | |
 | T4 | Configure SDK JSON-RPC Server | todo | T2, T3 | |
 | T5 | Create Shared Business Logic Layer | todo | T4 | |
@@ -165,7 +166,7 @@ gh pr create --base dev --head a2a-mvp \
 ---
 
 ### T2: Create A2A Agent Card
-- **Status**: todo
+- **Status**: done
 - **Blocked By**: T1
 - **Spec**: [Task 2](./a2a-mvp-implementation-tasks.md#task-2-create-a2a-agent-card)
 - **Branch Commit**: —
@@ -186,10 +187,38 @@ gh pr create --base dev --head a2a-mvp \
 - ✅ **Agent Card Created**: Complete A2A v0.3 compliant AgentCard with all required fields
 - ✅ **SDK Integration**: Successfully installed `a2a-sdk[postgresql]==0.3.20`
 - ✅ **Field Mapping**: Corrected field names to snake_case (`protocol_version`, `default_input_modes`, etc.)
-- ✅ **Security Config**: Fixed security field format to `[{'BearerAuth': []}]`
+- ✅ **Security Config**: Disabled JWT tokens for development (no authentication)
+- ✅ **Domain Mapping**: URL hardcoded for development - needs proper domain mapping for production
 - ✅ **6 Skills Defined**: All core business capabilities included with proper tags
 - ✅ **Package Structure**: Created `src/a2a/` package with proper `__init__.py`
 - ✅ **Import Testing**: All imports work correctly in Docker environment
+
+---
+
+### T2.1: Configure Domain Mapping
+- **Status**: todo
+- **Blocked By**: T2
+- **Spec**: Investigate and configure proper domain mapping for A2A endpoint
+- **Branch Commit**: —
+
+**Validation Checklist**:
+- [ ] Research Google Cloud domain mapping options
+- [ ] Determine appropriate domain structure for A2A endpoint
+- [ ] Configure DNS records if needed
+- [ ] Update AgentCard URL to use proper domain
+- [ ] Test agent discovery from external agents
+- [ ] Ensure CORS and security headers work with new domain
+
+**Files to Create/Modify**:
+- AgentCard URL configuration
+- Google Cloud domain mapping setup
+- DNS configuration (if required)
+
+**Notes**:
+- Currently using placeholder URL `https://api.loist.music/a2a` for development
+- Need to determine if this should be a subdomain, path-based, or separate domain
+- Consider security implications of domain choice
+- May require Google Cloud Load Balancer or Cloud Run domain mapping
 
 ---
 
@@ -444,7 +473,8 @@ Agent: Add entries here as you work. Format:
 ```
 T1 (Foundation)
 ├── T2 (Agent Card)
-│   ├── T4 (JSON-RPC Server) ←── T3 (Database)
+│   ├── T2.1 (Domain Mapping)
+│   └── T4 (JSON-RPC Server) ←── T3 (Database)
 │   │   ├── T5 (Business Logic)
 │   │   │   └── T7 (Processing Integration) ←── T6 (Message Parser)
 │   │   ├── T6 (Message Parser)

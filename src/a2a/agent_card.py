@@ -13,6 +13,8 @@ def create_agent_card() -> AgentCard:
         # Agent identity
         name="Loist Music Library Processor",
         description="Audio processing and metadata extraction service",
+        # TODO: Domain mapping - need to configure proper domain for production
+        # Currently hardcoded for development - see Task A2A-2.1 for domain mapping
         url="https://api.loist.music/a2a",
         version="1.0.0",
 
@@ -30,15 +32,11 @@ def create_agent_card() -> AgentCard:
         default_input_modes=["application/json", "text/plain"],
         default_output_modes=["application/json"],
 
-        # Security configuration
-        security=[{"BearerAuth": []}],
-        security_schemes={
-            "BearerAuth": {
-                "type": "http",
-                "scheme": "bearer",
-                "bearerFormat": "JWT"
-            }
-        },
+        # Security configuration - DISABLED for development
+        # TODO: Implement JWT authentication before production deployment
+        # Currently no authentication required for development testing
+        security=None,
+        security_schemes=None,
 
         # Core business skills
         skills=[
