@@ -330,7 +330,7 @@ gh pr create --base dev --head a2a-mvp \
 - **Status**: completed
 - **Blocked By**: T4
 - **Spec**: [Task 6](./a2a-mvp-implementation-tasks.md#task-6-implement-message-parsing-utilities)
-- **Branch Commit**: feat: Implement A2A message parsing utilities (Task T6)
+- **Branch Commit**: `6f7a1f3` feat: Implement A2A message parsing utilities (Task T6)
 
 **Validation Checklist**:
 - [x] `extract_audio_url()` function implemented
