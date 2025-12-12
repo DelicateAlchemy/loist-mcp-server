@@ -30,25 +30,9 @@ from ..exceptions.context import ExceptionContext, OperationType
 logger = logging.getLogger(__name__)
 
 
-class AudioProcessor(Protocol):
-    """
-    Protocol for audio processing services.
-
-    This protocol defines the interface that audio processing implementations
-    must follow. Will be implemented in Task 5.
-    """
-
-    async def process(self, url: str) -> dict:
-        """
-        Process an audio file from URL.
-
-        Args:
-            url: URL to the audio file to process
-
-        Returns:
-            dict: Processing results with metadata, artifacts, etc.
-        """
-        ...
+# Audio processing is now handled by the shared business logic layer
+# (src/business/audio_processor.py) instead of a protocol.
+# The handler imports and calls process_audio_shared() directly.
 
 
 class LoistRequestHandler(RequestHandler):
@@ -62,7 +46,6 @@ class LoistRequestHandler(RequestHandler):
     def __init__(
         self,
         task_store,
-        audio_processor: Optional[AudioProcessor] = None,
         exception_handler: Optional[ExceptionHandler] = None
     ):
         """
@@ -70,11 +53,12 @@ class LoistRequestHandler(RequestHandler):
 
         Args:
             task_store: DatabaseTaskStore instance for task persistence
-            audio_processor: Audio processing service (will be implemented in T5)
             exception_handler: Exception handler for consistent error handling
+        
+        Note: Audio processing is now handled by shared business logic
+        (src/business/audio_processor.py) instead of an injected processor.
         """
         self.task_store = task_store
-        self.audio_processor = audio_processor
 
         # Initialize exception handler
         self.exception_handler = exception_handler or ExceptionHandler(
@@ -132,19 +116,63 @@ class LoistRequestHandler(RequestHandler):
             task = await self._create_task_from_message(params, TaskState.working)
             logger.info(f"✅ Created task {task.id} for audio URL: {audio_url}")
 
-            # TODO: Implement actual audio processing in T7
-            # For now, create a placeholder task that will be processed later
-            if self.audio_processor:
-                try:
-                    # This will be implemented when we have the shared business logic (T5)
-                    logger.warning("⚠️ Audio processor available but processing logic not yet implemented")
-                except Exception as e:
-                    logger.error(f"❌ Audio processing failed: {e}")
-                    task.status = TaskStatus(state=TaskState.failed, message=str(e))
+            # Call shared business logic for audio processing
+            try:
+                # Import shared business logic
+                from src.business import (
+                    process_audio_shared,
+                    AudioProcessingRequest,
+                    SharedAudioProcessingError,
+                )
+                
+                # Create shared request (using defaults for options)
+                shared_request = AudioProcessingRequest(
+                    url=audio_url,
+                    # Use default options (max_size_mb=100, timeout=300, etc.)
+                )
+                
+                logger.info(f"🎵 Calling shared audio processing for task {task.id}")
+                result = await process_audio_shared(shared_request)
+                
+                # Mark task as completed with result artifact
+                task.status = TaskStatus(state=TaskState.completed)
+                task.artifacts = [
+                    {
+                        "type": "audio_processing_result",
+                        "data": result.model_dump(),
+                    }
+                ]
+                logger.info(f"✅ Audio processing completed for task {task.id}, audio_id: {result.audio_id}")
+                
+            except SharedAudioProcessingError as e:
+                # Handle shared processing errors
+                logger.error(f"❌ Audio processing failed for task {task.id}: {e.message}")
+                task.status = TaskStatus(state=TaskState.failed, message=e.message)
+                task.artifacts = [
+                    {
+                        "type": "audio_processing_error",
+                        "data": e.to_dict(),
+                    }
+                ]
+                
+            except Exception as e:
+                # Handle unexpected errors
+                logger.exception(f"❌ Unexpected error processing task {task.id}: {e}")
+                task.status = TaskStatus(state=TaskState.failed, message=f"Unexpected error: {str(e)}")
+                task.artifacts = [
+                    {
+                        "type": "audio_processing_error",
+                        "data": {
+                            "code": "FETCH_FAILED",
+                            "message": str(e),
+                            "details": {"exception_type": type(e).__name__},
+                        },
+                    }
+                ]
 
             # Save task to database
             await self.task_store.save(task)
-            logger.info(f"💾 Task {task.id} saved to database")
+            logger.info(f"💾 Task {task.id} saved to database with status: {task.status.state}")
 
             return task
 
@@ -194,20 +222,30 @@ class LoistRequestHandler(RequestHandler):
 
     def _extract_audio_url(self, message: Message) -> Optional[str]:
         """
-        Extract audio URL from message content.
-
-        This is a placeholder implementation. The full message parsing
-        will be implemented in Task 6.
+        Extract audio URL from message content using message parser utilities.
 
         Args:
             message: A2A Message object
 
         Returns:
-            str or None: Audio URL if found, None otherwise
+            str or None: Audio URL if found and valid, None otherwise
+
+        Raises:
+            ValueError: If URL is found but invalid/blocked
         """
-        # Placeholder implementation - will be replaced in T6
-        # For now, just return None to indicate no URL found
-        logger.debug("🔍 Audio URL extraction not yet implemented (Task 6)")
+        # Import message parser utilities
+        from .message_parser import extract_audio_url, validate_audio_url
+
+        # Extract URL from message
+        audio_url = extract_audio_url(message)
+
+        if audio_url:
+            # Validate the extracted URL for security (raises ValueError if invalid)
+            validate_audio_url(audio_url)
+            logger.info(f"✅ Valid audio URL extracted: {audio_url}")
+            return audio_url
+
+        logger.debug("🔍 No audio URL found in message")
         return None
 
     async def _create_task_from_message(
