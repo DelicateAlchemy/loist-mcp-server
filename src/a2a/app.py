@@ -29,6 +29,7 @@ async def create_a2a_app(database_url: Optional[str] = None) -> FastAPI:
     - Agent Card serving at /.well-known/agent-card.json
     - JSON-RPC endpoints for task operations
     - LoistRequestHandler for audio processing logic
+    - Proper database connection lifecycle management
 
     Args:
         database_url: Optional database URL override (uses env var if not provided)
@@ -66,6 +67,22 @@ async def create_a2a_app(database_url: Optional[str] = None) -> FastAPI:
         # Build the FastAPI application
         logger.debug("🏗️ Building FastAPI application")
         app = a2a_app.build()
+
+        # Store task store in app state for cleanup
+        app.state.task_store = task_store
+
+        # Add shutdown event handler for proper cleanup
+        @app.on_event("shutdown")
+        async def shutdown_event():
+            """Clean up database connections on application shutdown."""
+            logger.info("🧹 Shutting down A2A application, cleaning up resources")
+            try:
+                if hasattr(app.state, 'task_store') and hasattr(app.state.task_store, 'engine'):
+                    logger.debug("🔌 Disposing database engine")
+                    await app.state.task_store.engine.dispose()
+                    logger.info("✅ Database connections cleaned up")
+            except Exception as e:
+                logger.error(f"❌ Error during cleanup: {e}")
 
         logger.info("✅ A2A FastAPI application created successfully")
         logger.info("📍 Agent Card endpoint: /.well-known/agent-card.json")

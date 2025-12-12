@@ -9,7 +9,8 @@ Created: $(date)
 """
 
 import logging
-from typing import Optional
+import uuid
+from typing import Optional, Protocol
 
 from a2a.server.request_handlers import RequestHandler
 from a2a.types import (
@@ -21,7 +22,33 @@ from a2a.types import (
     TaskStatus,
 )
 
+# Import exception framework
+from ..exceptions.handler import ExceptionHandler
+from ..exceptions.config import ExceptionConfig
+from ..exceptions.context import ExceptionContext, OperationType
+
 logger = logging.getLogger(__name__)
+
+
+class AudioProcessor(Protocol):
+    """
+    Protocol for audio processing services.
+
+    This protocol defines the interface that audio processing implementations
+    must follow. Will be implemented in Task 5.
+    """
+
+    async def process(self, url: str) -> dict:
+        """
+        Process an audio file from URL.
+
+        Args:
+            url: URL to the audio file to process
+
+        Returns:
+            dict: Processing results with metadata, artifacts, etc.
+        """
+        ...
 
 
 class LoistRequestHandler(RequestHandler):
@@ -32,16 +59,27 @@ class LoistRequestHandler(RequestHandler):
     Implements the RequestHandler interface to integrate with A2AFastAPIApplication.
     """
 
-    def __init__(self, task_store, audio_processor=None):
+    def __init__(
+        self,
+        task_store,
+        audio_processor: Optional[AudioProcessor] = None,
+        exception_handler: Optional[ExceptionHandler] = None
+    ):
         """
         Initialize the request handler.
 
         Args:
             task_store: DatabaseTaskStore instance for task persistence
             audio_processor: Audio processing service (will be implemented in T5)
+            exception_handler: Exception handler for consistent error handling
         """
         self.task_store = task_store
         self.audio_processor = audio_processor
+
+        # Initialize exception handler
+        self.exception_handler = exception_handler or ExceptionHandler(
+            ExceptionConfig().for_development()  # Use dev config for now
+        )
 
         # Terminal states - tasks in these states cannot be modified
         self._terminal_states = {
@@ -71,35 +109,49 @@ class LoistRequestHandler(RequestHandler):
             Task: Created task object with processing status
 
         Raises:
-            ValueError: If message doesn't contain a valid audio URL
+            Exception: If task creation or processing fails
         """
         logger.info("📨 Processing tasks/send request")
 
-        # Extract audio URL from message (placeholder - will be implemented in T6)
-        audio_url = self._extract_audio_url(params.message)
+        # Create exception context for this operation
+        exc_context = ExceptionContext(
+            operation="send_message",
+            component="a2a.handler",
+            operation_type=OperationType.AUDIO_PROCESSING,
+            request_id=getattr(context, 'request_id', None) if context else None,
+        )
 
-        if not audio_url:
-            raise ValueError("No audio URL found in message. Please provide a valid audio file URL.")
+        try:
+            # Extract audio URL from message (placeholder - will be implemented in T6)
+            audio_url = self._extract_audio_url(params.message)
 
-        # Create new task with working status
-        task = await self._create_task_from_message(params, TaskState.working)
-        logger.info(f"✅ Created task {task.id} for audio URL: {audio_url}")
+            if not audio_url:
+                raise ValueError("No audio URL found in message. Please provide a valid audio file URL.")
 
-        # TODO: Implement actual audio processing in T7
-        # For now, create a placeholder task that will be processed later
-        if self.audio_processor:
-            try:
-                # This will be implemented when we have the shared business logic (T5)
-                logger.warning("⚠️ Audio processor available but processing logic not yet implemented")
-            except Exception as e:
-                logger.error(f"❌ Audio processing failed: {e}")
-                task.status = TaskStatus(state=TaskState.failed, message=str(e))
+            # Create new task with working status
+            task = await self._create_task_from_message(params, TaskState.working)
+            logger.info(f"✅ Created task {task.id} for audio URL: {audio_url}")
 
-        # Save task to database
-        await self.task_store.save(task)
-        logger.info(f"💾 Task {task.id} saved to database")
+            # TODO: Implement actual audio processing in T7
+            # For now, create a placeholder task that will be processed later
+            if self.audio_processor:
+                try:
+                    # This will be implemented when we have the shared business logic (T5)
+                    logger.warning("⚠️ Audio processor available but processing logic not yet implemented")
+                except Exception as e:
+                    logger.error(f"❌ Audio processing failed: {e}")
+                    task.status = TaskStatus(state=TaskState.failed, message=str(e))
 
-        return task
+            # Save task to database
+            await self.task_store.save(task)
+            logger.info(f"💾 Task {task.id} saved to database")
+
+            return task
+
+        except Exception as e:
+            # Use exception framework for consistent error handling
+            logger.error(f"❌ Failed to send message: {e}")
+            self.exception_handler.handle_and_raise(e, exc_context)
 
     async def on_get_task(
         self,
@@ -121,6 +173,14 @@ class LoistRequestHandler(RequestHandler):
         task_id = params.task_id
         logger.info(f"📋 Processing tasks/get request for task {task_id}")
 
+        # Create exception context for this operation
+        exc_context = ExceptionContext(
+            operation="get_task",
+            component="a2a.handler",
+            operation_type=OperationType.DATABASE_QUERY,
+            request_id=getattr(context, 'request_id', None) if context else None,
+        )
+
         try:
             task = await self.task_store.get(task_id)
             if task:
@@ -130,7 +190,7 @@ class LoistRequestHandler(RequestHandler):
             return task
         except Exception as e:
             logger.error(f"❌ Failed to retrieve task {task_id}: {e}")
-            raise
+            self.exception_handler.handle_and_raise(e, exc_context)
 
     def _extract_audio_url(self, message: Message) -> Optional[str]:
         """
@@ -166,8 +226,9 @@ class LoistRequestHandler(RequestHandler):
             Task: Newly created task object
         """
         # Create task using SDK's Task constructor
-        # The SDK will generate the ID and set up the basic structure
+        # Generate UUID for task ID since it's required
         task = Task(
+            id=str(uuid.uuid4()),
             context_id=params.message.id if hasattr(params.message, 'id') else "unknown",
             kind="task",
             status=TaskStatus(state=initial_state),

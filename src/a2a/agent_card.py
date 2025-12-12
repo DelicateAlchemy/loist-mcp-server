@@ -1,5 +1,6 @@
 """A2A Agent Card configuration for Loist Music Library Processor."""
 
+import os
 from a2a.types import AgentCard, AgentSkill, AgentCapabilities
 
 
@@ -13,9 +14,8 @@ def create_agent_card() -> AgentCard:
         # Agent identity
         name="Loist Music Library Processor",
         description="Audio processing and metadata extraction service",
-        # TODO: Domain mapping - need to configure proper domain for production
-        # Currently hardcoded for development - see Task A2A-2.1 for domain mapping
-        url="https://api.loist.music/a2a",
+        # Use environment variable with fallback for development
+        url=os.getenv("A2A_SERVICE_URL", "https://api.loist.music/a2a"),
         version="1.0.0",
 
         # A2A protocol version

@@ -14,13 +14,19 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import create_async_engine
 from a2a.server.tasks import DatabaseTaskStore
 
+# Import exception framework
+from ..exceptions.handler import ExceptionHandler
+from ..exceptions.config import ExceptionConfig
+from ..exceptions.context import ExceptionContext, OperationType
+
 logger = logging.getLogger(__name__)
 
 
 async def create_task_store(
     database_url: str,
     create_table: bool = True,
-    echo: bool = False
+    echo: bool = False,
+    exception_handler: Optional[ExceptionHandler] = None
 ) -> DatabaseTaskStore:
     """
     Create and initialize A2A DatabaseTaskStore using SDK defaults.
@@ -29,6 +35,7 @@ async def create_task_store(
         database_url: PostgreSQL connection URL
         create_table: Whether SDK should auto-create the a2a_tasks table
         echo: Enable SQLAlchemy engine logging
+        exception_handler: Exception handler for consistent error handling
 
     Returns:
         Configured DatabaseTaskStore instance
@@ -37,8 +44,19 @@ async def create_task_store(
         ValueError: If database_url is invalid
         Exception: If database connection fails
     """
+    # Initialize exception handler
+    exception_handler = exception_handler or ExceptionHandler(ExceptionConfig().for_development())
+
+    # Create exception context for this operation
+    exc_context = ExceptionContext(
+        operation="create_task_store",
+        component="a2a.storage",
+        operation_type=OperationType.DATABASE_QUERY,
+    )
+
     if not database_url:
-        raise ValueError("Database URL is required")
+        error = ValueError("Database URL is required")
+        exception_handler.handle_and_raise(error, exc_context)
 
     # Convert to async PostgreSQL URL for SQLAlchemy async engine
     if database_url.startswith("postgresql://"):
@@ -46,7 +64,8 @@ async def create_task_store(
     elif database_url.startswith("postgresql+asyncpg://"):
         async_url = database_url  # Already async
     elif not database_url.startswith("postgresql+"):
-        raise ValueError(f"Unsupported database URL scheme: {database_url}")
+        error = ValueError(f"Unsupported database URL scheme: {database_url}")
+        exception_handler.handle_and_raise(error, exc_context)
     else:
         async_url = database_url
 
@@ -73,13 +92,13 @@ async def create_task_store(
 
     except ValueError as e:
         logger.error(f"❌ Invalid database configuration: {e}")
-        raise
+        exception_handler.handle_and_raise(e, exc_context)
     except Exception as e:
         logger.error(f"❌ Failed to initialize A2A DatabaseTaskStore: {e}", exc_info=True)
-        raise
+        exception_handler.handle_and_raise(e, exc_context)
 
 
-async def get_task_store(database_url: Optional[str] = None) -> DatabaseTaskStore:
+async def get_task_store(database_url: Optional[str] = None, exception_handler: Optional[ExceptionHandler] = None) -> DatabaseTaskStore:
     """
     Convenience function to get configured task store.
 
@@ -87,6 +106,7 @@ async def get_task_store(database_url: Optional[str] = None) -> DatabaseTaskStor
 
     Args:
         database_url: Optional database URL override
+        exception_handler: Exception handler for consistent error handling
 
     Returns:
         Configured DatabaseTaskStore instance
@@ -94,14 +114,26 @@ async def get_task_store(database_url: Optional[str] = None) -> DatabaseTaskStor
     Raises:
         ValueError: If database URL is not provided or invalid
     """
+    # Initialize exception handler
+    exception_handler = exception_handler or ExceptionHandler(ExceptionConfig().for_development())
+
+    # Create exception context for this operation
+    exc_context = ExceptionContext(
+        operation="get_task_store",
+        component="a2a.storage",
+        operation_type=OperationType.DATABASE_QUERY,
+    )
+
     if not database_url:
         database_url = os.getenv("DATABASE_URL")
 
     if not database_url:
-        raise ValueError("Database URL not provided and DATABASE_URL environment variable not set")
+        error = ValueError("Database URL not provided and DATABASE_URL environment variable not set")
+        exception_handler.handle_and_raise(error, exc_context)
 
     # Basic validation
     if not database_url.startswith(("postgresql://", "postgresql+")):
-        raise ValueError(f"Invalid database URL format: {database_url}")
+        error = ValueError(f"Invalid database URL format: {database_url}")
+        exception_handler.handle_and_raise(error, exc_context)
 
-    return await create_task_store(database_url)
+    return await create_task_store(database_url, exception_handler=exception_handler)
