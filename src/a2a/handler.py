@@ -41,6 +41,15 @@ class LoistRequestHandler(RequestHandler):
 
     Handles JSON-RPC requests for audio processing tasks via the A2A SDK.
     Implements the RequestHandler interface to integrate with A2AFastAPIApplication.
+
+    Task Linking Design:
+    - Bidirectional linking between A2A tasks and audio_tracks:
+      1. audio_tracks.a2a_task_id: Links audio track to A2A task (database column)
+      2. task.metadata['audio_track_id']: Links A2A task to audio track (JSON field)
+    - No foreign key constraint: a2a_tasks table is SDK-managed, so we enforce
+      referential integrity at the application level (UUID validation).
+    - Status transitions: submitted → working → completed/failed, with explicit
+      saves at each step for task polling support.
     """
 
     def __init__(
@@ -112,9 +121,27 @@ class LoistRequestHandler(RequestHandler):
             if not audio_url:
                 raise ValueError("No audio URL found in message. Please provide a valid audio file URL.")
 
-            # Create new task with working status
-            task = await self._create_task_from_message(params, TaskState.working)
+            # Create new task with submitted status
+            task = await self._create_task_from_message(params, TaskState.submitted)
             logger.info(f"✅ Created task {task.id} for audio URL: {audio_url}")
+
+            # Save task immediately with submitted status
+            try:
+                await self.task_store.save(task)
+                logger.info(f"💾 Task {task.id} saved with submitted status")
+            except Exception as e:
+                logger.error(f"❌ Failed to save task {task.id} with submitted status: {e}")
+                raise  # Re-raise since we can't proceed without task creation
+
+            # Transition to working status before processing
+            task.status = TaskStatus(state=TaskState.working)
+            try:
+                await self.task_store.save(task)
+                logger.info(f"🔄 Task {task.id} transitioned to working status")
+            except Exception as e:
+                logger.error(f"❌ Failed to save task {task.id} with working status: {e}")
+                # Log but continue - processing can proceed even if status save fails
+                # The final save will attempt to update the status again
 
             # Call shared business logic for audio processing
             try:
@@ -129,6 +156,7 @@ class LoistRequestHandler(RequestHandler):
                 shared_request = AudioProcessingRequest(
                     url=audio_url,
                     # Use default options (max_size_mb=100, timeout=300, etc.)
+                    a2a_task_id=task.id
                 )
                 
                 logger.info(f"🎵 Calling shared audio processing for task {task.id}")
@@ -136,43 +164,32 @@ class LoistRequestHandler(RequestHandler):
                 
                 # Mark task as completed with result artifact
                 task.status = TaskStatus(state=TaskState.completed)
-                task.artifacts = [
-                    {
-                        "type": "audio_processing_result",
-                        "data": result.model_dump(),
-                    }
-                ]
+                task.artifacts = [self._create_success_artifact(result)]
+                # Store bidirectional link: audio_track_id in task metadata
+                task.metadata = {"audio_track_id": result.audio_id}
                 logger.info(f"✅ Audio processing completed for task {task.id}, audio_id: {result.audio_id}")
                 
             except SharedAudioProcessingError as e:
                 # Handle shared processing errors
                 logger.error(f"❌ Audio processing failed for task {task.id}: {e.message}")
                 task.status = TaskStatus(state=TaskState.failed, message=e.message)
-                task.artifacts = [
-                    {
-                        "type": "audio_processing_error",
-                        "data": e.to_dict(),
-                    }
-                ]
+                task.artifacts = [self._create_error_artifact(e)]
                 
             except Exception as e:
                 # Handle unexpected errors
                 logger.exception(f"❌ Unexpected error processing task {task.id}: {e}")
                 task.status = TaskStatus(state=TaskState.failed, message=f"Unexpected error: {str(e)}")
-                task.artifacts = [
-                    {
-                        "type": "audio_processing_error",
-                        "data": {
-                            "code": "FETCH_FAILED",
-                            "message": str(e),
-                            "details": {"exception_type": type(e).__name__},
-                        },
-                    }
-                ]
+                task.artifacts = [self._create_error_artifact(e)]
 
-            # Save task to database
-            await self.task_store.save(task)
-            logger.info(f"💾 Task {task.id} saved to database with status: {task.status.state}")
+            # Save final task state with artifacts
+            try:
+                await self.task_store.save(task)
+                logger.info(f"💾 Task {task.id} saved to database with final status: {task.status.state}")
+            except Exception as e:
+                logger.error(f"❌ Failed to save final task state for {task.id}: {e}")
+                # Log error but don't fail the request - processing completed successfully
+                # The task state may be inconsistent, but the audio track is saved
+                # Consider implementing a retry mechanism or background job to sync task states
 
             return task
 
