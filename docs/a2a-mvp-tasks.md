@@ -118,7 +118,7 @@ gh pr create --base dev --head a2a-mvp \
 |----|------|--------|------------|---------|
 | T1 | Verify MCP Server Foundation | done | — | 2025-12-11 |
 | T2 | Create A2A Agent Card | done | T1 | 2025-12-11 |
-| T2.1 | Configure Domain Mapping | todo | T2 | |
+| T2.1 | Configure Domain Mapping | todo | T8 | |
 | T3 | Configure SDK Database Storage | todo | T1 | |
 | T4 | Configure SDK JSON-RPC Server | todo | T2, T3 | |
 | T5 | Create Shared Business Logic Layer | todo | T4 | |
@@ -197,28 +197,31 @@ gh pr create --base dev --head a2a-mvp \
 
 ### T2.1: Configure Domain Mapping
 - **Status**: todo
-- **Blocked By**: T2
-- **Spec**: Investigate and configure proper domain mapping for A2A endpoint
+- **Blocked By**: T8
+- **Spec**: Configure a2a.loist.io and a2a.staging.loist.io domain mapping for A2A endpoints
 - **Branch Commit**: —
 
 **Validation Checklist**:
-- [ ] Research Google Cloud domain mapping options
-- [ ] Determine appropriate domain structure for A2A endpoint
-- [ ] Configure DNS records if needed
-- [ ] Update AgentCard URL to use proper domain
-- [ ] Test agent discovery from external agents
-- [ ] Ensure CORS and security headers work with new domain
+- [ ] A2A Cloud Run services deployed (production and staging) - prerequisite from T8
+- [ ] Configure Cloud Run domain mapping for a2a.loist.io → A2A production service
+- [ ] Configure Cloud Run domain mapping for a2a.staging.loist.io → A2A staging service
+- [x] Update DNS CNAME records for a2a.loist.io and a2a.staging.loist.io
+- [ ] Update AgentCard URL to use https://a2a.loist.io/a2a for production
+- [ ] Update staging AgentCard URL to use https://a2a.staging.loist.io/a2a
+- [ ] Test agent discovery from external agents at /.well-known/agent-card.json
+- [ ] Ensure CORS and security headers work with new domains
 
 **Files to Create/Modify**:
-- AgentCard URL configuration
-- Google Cloud domain mapping setup
-- DNS configuration (if required)
+- AgentCard URL configuration (production and staging variants)
+- Cloud Run domain mapping configuration
+- DNS CNAME record setup for subdomains
 
 **Notes**:
+- Using subdomain approach: a2a.loist.io and a2a.staging.loist.io mapped directly to A2A Cloud Run services
 - Currently using placeholder URL `https://api.loist.music/a2a` for development
-- Need to determine if this should be a subdomain, path-based, or separate domain
-- Consider security implications of domain choice
-- May require Google Cloud Load Balancer or Cloud Run domain mapping
+- Agent card will be accessible at https://a2a.loist.io/.well-known/agent-card.json
+- Using direct Cloud Run domain mapping (simpler than load balancer for MVP)
+- **Blocked by T8**: Domain mapping requires A2A Cloud Run services to exist first
 
 ---
 
