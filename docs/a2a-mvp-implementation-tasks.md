@@ -54,37 +54,26 @@ history: Mapped[list[Message] | None] = mapped_column(PydanticListType(Message),
 task_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True, name='metadata')
 ```
 
-### Integration Strategy: Custom Model with FK
+### Integration Strategy: Use SDK Defaults
 
-To link A2A tasks to our `audio_tracks` table, extend `TaskMixin` with a custom base class:
+For MVP, we use the SDK's default task model. The SDK's `DatabaseTaskStore` doesn't easily support custom models, so we'll use the metadata JSON field for any relationships if needed:
 
 ```python
-from sqlalchemy import ForeignKey
-from sqlalchemy.orm import relationship
-from a2a.server.models import Base, TaskMixin, create_task_model
-
-# Custom task model with FK to audio_tracks
-class LoistTaskBase(Base):
-    audio_track_id = mapped_column(
-        String(36), 
-        ForeignKey('audio_tracks.id'), 
-        nullable=True
-    )
-    audio_track = relationship("AudioTrack", back_populates="a2a_tasks")
-
-# Create custom task model using SDK factory
-A2ATask = create_task_model(
-    table_name='a2a_tasks',
-    base=LoistTaskBase
-)
-
-# Use with SDK's DatabaseTaskStore
+# Use SDK's DatabaseTaskStore with default model
 from a2a.server.tasks import DatabaseTaskStore
+from sqlalchemy.ext.asyncio import create_async_engine
+
+engine = create_async_engine(database_url.replace("postgresql://", "postgresql+asyncpg://"))
+
 store = DatabaseTaskStore(
     engine=engine,
     create_table=True,  # SDK creates table automatically
     table_name='a2a_tasks'
 )
+
+# If audio track linking needed, store in metadata
+task.metadata = {"audio_track_id": "uuid-here"}
+await store.save(task)
 ```
 
 ### SDK JSON-RPC Server
@@ -112,7 +101,7 @@ fastapi_app = app.build()
 
 | Task | Original Approach | With SDK | Effort Change |
 |------|-------------------|----------|---------------|
-| **Task 3** | Manual SQL migration | SDK auto-creates + FK migration | **-70%** |
+| **Task 3** | Manual SQL migration | SDK auto-creates (no migration) | **-80%** |
 | **Task 4** | Manual JSON-RPC handlers | Use `A2AFastAPIApplication` | **-80%** |
 | **Task 5** | Extract shared logic | Implement `RequestHandler` interface | **Similar** |
 | **Task 6** | Message parsing utils | SDK provides `Message` types | **-50%** |
@@ -137,13 +126,13 @@ fastapi_app = app.build()
 **Database Requirements (Updated):**
 - ✅ **Existing**: `audio_tracks` table stores processed audio metadata
 - ✅ **SDK Provides**: `DatabaseTaskStore` handles task persistence automatically
-- 📝 **Simplified Migration**: Only need FK link from `audio_tracks` to SDK's task table
-- 🔗 **Integration**: Custom `TaskMixin` extension for `audio_track_id` FK
+- 📝 **No Migration Needed**: SDK auto-creates `a2a_tasks` table on startup
+- 🔗 **Integration**: Use task `metadata` JSON field for relationships if needed
 
 **Architecture Overview (Updated):**
 - **MCP Server**: Existing FastMCP implementation with audio processing tools (stdio)
 - **A2A Layer**: Use SDK's `A2AFastAPIApplication` for complete JSON-RPC server
-- **Storage**: SDK's `DatabaseTaskStore` with custom FK to `audio_tracks`
+- **Storage**: SDK's `DatabaseTaskStore` with default task model
 - **Bridge Pattern**: Still needed for shared business logic between MCP and A2A
 
 **Success Criteria (for future implementation):**
@@ -325,13 +314,13 @@ fastapi_app = app.build()
 **Dependencies**:
 - Task 1: MCP server foundation verified
 
-## Task 3: Configure SDK Database Storage with Custom FK
+## Task 3: Configure SDK Database Storage
 
-**Goal**: Configure SDK's `DatabaseTaskStore` with custom model linking to `audio_tracks`
+**Goal**: Configure SDK's `DatabaseTaskStore` for A2A task persistence
 
-**Context**: SDK provides built-in task persistence. We only need to extend it with a foreign key relationship to our existing `audio_tracks` table.
+**Context**: SDK provides built-in task persistence with automatic schema creation. For MVP, we use the SDK's default task model. If audio track linking is needed, we'll store the relationship in the task's `metadata` JSON field rather than extending the schema.
 
-**🔬 Research Update (LOI-23)**: SDK handles schema creation automatically via SQLAlchemy. No manual migration needed for base task table.
+**🔬 Research Update (LOI-23)**: SDK handles schema creation automatically via SQLAlchemy. No manual migration needed. The SDK's `DatabaseTaskStore` doesn't support custom models easily, so we use the default model and store relationships in metadata if needed.
 
 **Input Requirements**:
 - SDK package: `a2a-sdk[postgresql]`
@@ -339,66 +328,42 @@ fastapi_app = app.build()
 - SQLAlchemy async engine configuration
 
 **Implementation Steps**:
-1. Install SDK with PostgreSQL support: `pip install a2a-sdk[postgresql]`
-2. Create custom task model extending `TaskMixin`:
-   ```python
-   # src/a2a/models.py
-   from sqlalchemy import ForeignKey, String
-   from sqlalchemy.orm import Mapped, mapped_column, relationship
-   from a2a.server.models import Base, TaskMixin, create_task_model
-   
-   class LoistTaskBase(Base):
-       """Custom base adding FK to audio_tracks."""
-       __abstract__ = True
-       
-       audio_track_id: Mapped[str | None] = mapped_column(
-           String(36), 
-           ForeignKey('audio_tracks.id'), 
-           nullable=True
-       )
-   
-   # Create task model with custom FK
-   A2ATask = create_task_model(
-       table_name='a2a_tasks',
-       base=LoistTaskBase
-   )
-   ```
-3. Configure `DatabaseTaskStore` with custom table:
+1. Verify SDK with PostgreSQL support: `a2a-sdk[postgresql]` already in requirements.txt
+2. Create `DatabaseTaskStore` initialization function:
    ```python
    # src/a2a/storage.py
    from a2a.server.tasks import DatabaseTaskStore
    from sqlalchemy.ext.asyncio import create_async_engine
    
    async def create_task_store(database_url: str) -> DatabaseTaskStore:
+       # Convert to async PostgreSQL URL
+       async_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+       
        engine = create_async_engine(
-           database_url.replace("postgresql://", "postgresql+asyncpg://")
+           async_url,
+           pool_pre_ping=True
        )
+       
        return DatabaseTaskStore(
            engine=engine,
            create_table=True,  # SDK creates table automatically
            table_name='a2a_tasks'
        )
    ```
-4. Add relationship to existing `AudioTrack` model:
+3. Add convenience function for environment-based initialization:
    ```python
-   # Update src/repositories/audio_repository.py or models
-   class AudioTrack(Base):
-       # ... existing fields ...
-       a2a_tasks = relationship("A2ATask", back_populates="audio_track")
+   async def get_task_store(database_url: Optional[str] = None) -> DatabaseTaskStore:
+       if not database_url:
+           database_url = os.getenv("DATABASE_URL")
+       if not database_url:
+           raise ValueError("Database URL required")
+       return await create_task_store(database_url)
    ```
-5. Create minimal migration for FK (run AFTER SDK creates base table):
-   ```sql
-   -- database/migrations/003_add_a2a_audio_link.sql
-   -- Note: SDK creates a2a_tasks table on first startup
-   -- This migration adds the relationship column
-   ALTER TABLE audio_tracks
-   ADD COLUMN IF NOT EXISTS a2a_task_id VARCHAR(36);
-   
-   -- Add FK constraint (run after a2a_tasks exists)
-   ALTER TABLE audio_tracks
-   ADD CONSTRAINT fk_audio_a2a_task
-   FOREIGN KEY (a2a_task_id) REFERENCES a2a_tasks(id)
-   ON DELETE SET NULL;
+4. If audio track linking needed later, use metadata field:
+   ```python
+   # Store relationship in task metadata
+   task.metadata = {"audio_track_id": "uuid-here"}
+   await task_store.save(task)
    ```
 
 **SDK-Provided Schema** (auto-created):
@@ -414,23 +379,21 @@ a2a_tasks table:
 ```
 
 **Output Requirements**:
-- SDK `DatabaseTaskStore` initialized with custom table name
-- Custom model includes `audio_track_id` FK
-- `audio_tracks` table can reference A2A tasks
+- SDK `DatabaseTaskStore` initialized with default task model
+- SDK auto-creates `a2a_tasks` table on startup
+- Can save and retrieve tasks via SDK store
+- Database URL validation and error handling
 
 **Validation Criteria**:
-- [ ] `a2a-sdk[postgresql]` installed in requirements.txt
-- [ ] Custom `A2ATask` model created with FK
+- [ ] `a2a-sdk[postgresql]` installed in requirements.txt (already present)
 - [ ] `DatabaseTaskStore` initializes without errors
 - [ ] SDK auto-creates `a2a_tasks` table on startup
 - [ ] Can save and retrieve tasks via SDK
-- [ ] FK relationship to `audio_tracks` works
+- [ ] Database URL validation works correctly
+- [ ] Error handling provides clear messages
 
 **Files to Create/Modify**:
-- `requirements.txt` (add `a2a-sdk[postgresql]`)
-- `src/a2a/models.py` (new - custom task model)
 - `src/a2a/storage.py` (new - store initialization)
-- `database/migrations/003_add_a2a_audio_link.sql` (simplified - FK only)
 
 **Dependencies**:
 - Task 1: MCP server foundation verified
@@ -834,7 +797,7 @@ from a2a.types import (
    - Call shared `process_audio_internal()` function
    - Update task status to 'working', then 'completed'/'failed'
    - Store results in both a2a_tasks.artifacts and audio_tracks table
-   - Link records via a2a_task_id foreign key
+   - Store audio_track_id in task.metadata if linking needed
 2. Handle async processing and status updates
 3. Implement proper error handling and rollback
 4. Add task status polling in `tasks/get` method
@@ -1292,8 +1255,8 @@ ADD COLUMN a2a_task_id VARCHAR(36) REFERENCES a2a_tasks(task_id);
 ### 📋 **Database Schema Design (Task 3)**
 - ~~Designed simplified schema without over-engineering~~
 - **Updated**: SDK's `DatabaseTaskStore` handles schema automatically
-- Custom `TaskMixin` extension for `audio_track_id` FK
-- Simplified migration: FK link only, not full table creation
+- Using SDK's default task model (no custom FK needed for MVP)
+- If audio track linking needed, use `task.metadata` JSON field
 
 ### 📋 **Bridge Pattern Design (Task 5)**
 - Designed shared business logic layer to avoid code duplication
@@ -1327,17 +1290,17 @@ ADD COLUMN a2a_task_id VARCHAR(36) REFERENCES a2a_tasks(task_id);
 
 | Discovery | Impact |
 |-----------|--------|
-| SDK provides `DatabaseTaskStore` | Task 3 simplified: use SDK storage, add FK only |
+| SDK provides `DatabaseTaskStore` | Task 3 simplified: use SDK storage with defaults |
 | SDK provides `A2AFastAPIApplication` | Task 4 simplified: implement `RequestHandler` interface |
 | SDK has 7 task states (not 5) | Include `input-required` and `rejected` states |
 | SDK uses `history` not `messages` | Naming alignment with SDK conventions |
-| Custom models via `create_task_model()` | FK to `audio_tracks` via custom base class |
+| SDK uses default task model | Use `metadata` JSON field for relationships if needed |
 
 ### Effort Impact
 
 | Task | Original Estimate | With SDK | Reduction |
 |------|-------------------|----------|-----------|
-| Task 3 (Database) | Manual SQL migration | SDK auto-creates + FK only | **-70%** |
+| Task 3 (Database) | Manual SQL migration | SDK auto-creates (no migration) | **-80%** |
 | Task 4 (JSON-RPC) | Manual handlers | Use SDK server | **-80%** |
 | Task 6 (Parsing) | Manual message types | SDK provides types | **-50%** |
 

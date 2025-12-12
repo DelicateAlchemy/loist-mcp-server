@@ -228,24 +228,23 @@ gh pr create --base dev --head a2a-mvp \
 ### T3: Configure SDK Database Storage
 - **Status**: todo
 - **Blocked By**: T1
-- **Spec**: [Task 3](./a2a-mvp-implementation-tasks.md#task-3-configure-sdk-database-storage-with-custom-fk)
+- **Spec**: [Task 3](./a2a-mvp-implementation-tasks.md#task-3-configure-sdk-database-storage)
 - **Branch Commit**: —
 
 **Validation Checklist**:
-- [ ] `a2a-sdk[postgresql]` added to `requirements.txt`
-- [ ] Custom `LoistTaskBase` class with `audio_track_id` FK
-- [ ] `A2ATask` model created via `create_task_model()`
-- [ ] `DatabaseTaskStore` initialization function
+- [ ] `a2a-sdk[postgresql]` added to `requirements.txt` (already present)
+- [ ] `DatabaseTaskStore` initialization function created
 - [ ] SDK auto-creates `a2a_tasks` table on startup
 - [ ] Can save/retrieve task via SDK store
+- [ ] Database URL validation and error handling implemented
 
 **Files to Create**:
-- `src/a2a/models.py`
 - `src/a2a/storage.py`
-- `database/migrations/008_add_a2a_audio_link.sql` (FK only)
 
 **Notes**:
-<!-- Agent: Add implementation notes here -->
+- Using SDK's default task model (no custom FK needed for MVP)
+- If audio track linking needed later, use `task.metadata` JSON field
+- SDK handles all table creation automatically
 
 ---
 
