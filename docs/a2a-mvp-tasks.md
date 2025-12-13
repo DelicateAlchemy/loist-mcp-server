@@ -434,6 +434,8 @@ gh pr create --base dev --head a2a-mvp \
 
 **Future Work - Abstract Method Stubs**:
 The A2A `RequestHandler` currently implements MVP stubs for 7 abstract methods that raise `NotImplementedError`. These need proper implementation for Phase 2 features:
+
+**Linear Task**: [LOI-24: Phase 2: Implement A2A RequestHandler Abstract Methods](https://linear.app/loist/issue/LOI-24/phase-2-implement-a2a-requesthandler-abstract-methods)
 - `on_cancel_task()` - Task cancellation workflow
 - `on_delete_task_push_notification_config()` - Notification management
 - `on_get_task_push_notification_config()` - Notification retrieval
@@ -622,6 +624,7 @@ Agent: Add entries here as you work. Format:
 **Next Steps**:
 - T9: Document agent discovery strategy (README.md updates, integration guide)
 - T10: Comprehensive A2A testing (end-to-end validation, JSON-RPC compliance)
+- **Phase 2 Work**: [LOI-24](https://linear.app/loist/issue/LOI-24/phase-2-implement-a2a-requesthandler-abstract-methods) - Implement the 7 abstract method stubs for full A2A compliance
 
 ---
 
