@@ -4,38 +4,111 @@
 
 ## Test Execution Environment
 
-### ALWAYS Use Local Pytest Execution
+### ALWAYS Use Docker for Test Execution
 
-**For development testing, ALWAYS run pytest locally**:
-- Install dev dependencies: `pip install -r requirements-dev.txt`
-- Start database service: `docker-compose up -d postgres`
-- Run tests: `pytest tests/ -v`
+**For all testing, ALWAYS run pytest inside the Docker container**:
+```bash
+# Start services
+docker-compose up -d
 
-**NEVER assume pytest is installed in Docker container**:
-- Dockerfile doesn't install pytest (production image only)
-- Use local Python environment for testing
-- Database service runs in Docker, tests run locally
+# Run tests inside container
+docker-compose exec mcp-server pytest tests/ -v
+```
 
-### Docker Services for Testing
+**NEVER use a local venv for testing**:
+- The local venv is outdated and has incorrect dependencies
+- Docker container has all dependencies properly configured
+- `PYTHONPATH=/app` is set correctly in Docker
 
-**Database service (PostgreSQL)**:
-- Runs in Docker: `docker-compose up -d postgres`
-- Exposed on: `localhost:5432`
-- Credentials: `loist_user` / `dev_password` / `loist_mvp`
-- Tests connect to `localhost:5432` (Docker exposed port)
+### Quick Commands
 
-**MCP Server service**:
-- Runs in Docker: `docker-compose up -d mcp-server`
-- Used for integration testing, not for running pytest
-- Does NOT have pytest installed
+```bash
+# All tests
+docker-compose exec mcp-server pytest tests/ -v
+
+# Unit tests only
+docker-compose exec mcp-server pytest tests/ -m unit -v
+
+# Specific test file
+docker-compose exec mcp-server pytest tests/test_exceptions.py -v
+
+# With coverage
+docker-compose exec mcp-server pytest tests/ --cov=src --cov-report=term-missing -v
+
+# Collect only (verify imports work)
+docker-compose exec mcp-server pytest tests/ --collect-only
+```
 
 ## Writing Tests
 
-### Test File Organization
+### Test File Location
 
+- **ALL tests go in `tests/` directory** - never in `src/` or project root
 - **Unit tests**: `tests/unit/test_*.py` (fast, isolated, no external dependencies)
 - **Integration tests**: `tests/integration/test_*.py` (component interactions)
 - **General tests**: `tests/test_*.py` (mixed categories)
+
+### Import Style (CRITICAL)
+
+**ALWAYS use standard imports from the `src` package**:
+
+```python
+# ✅ DO: Standard imports (PYTHONPATH=/app makes these work)
+from src.exceptions import MusicLibraryError, ValidationError
+from src.server import mcp
+from src.config import Config
+
+# ❌ DON'T: sys.path manipulation (breaks import resolution)
+import sys
+sys.path.insert(0, 'src')
+from server import mcp  # WRONG
+
+# ❌ DON'T: Relative imports from non-package directories
+from ..src.config import Config  # WRONG
+```
+
+### Test Structure Template
+
+```python
+"""Test module for [feature].
+
+Tests should be placed in the tests/ directory, not in src/ or project root.
+"""
+import pytest
+from unittest.mock import Mock, patch
+
+# Standard imports from src package
+from src.exceptions import ValidationError
+from src.services.metadata_service import MetadataService
+
+
+class TestFeatureName:
+    """Tests for [feature]."""
+    
+    def test_expected_behavior(self):
+        """Test that [expected behavior] works."""
+        # Arrange
+        input_data = {"key": "value"}
+        
+        # Act
+        result = function_under_test(input_data)
+        
+        # Assert
+        assert result is not None
+    
+    def test_error_handling(self):
+        """Test that errors are handled correctly."""
+        with pytest.raises(ValidationError):
+            function_under_test(invalid_input)
+
+
+# Async test pattern
+@pytest.mark.asyncio
+async def test_async_functionality():
+    """Test async functionality."""
+    result = await async_function()
+    assert result is not None
+```
 
 ### Test Markers (Auto-Assigned)
 
@@ -51,16 +124,41 @@
 - `@pytest.mark.requires_db` - Tests requiring database (auto-assigned)
 - `@pytest.mark.requires_gcs` - Tests requiring GCS (auto-assigned)
 
-### Database Tests
+## Configuration
+
+### Single Source of Truth: `pyproject.toml`
+
+All pytest configuration is in `pyproject.toml` (NOT `pytest.ini`):
+
+```toml
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+pythonpath = ["."]  # Single dot, array format for importlib mode
+addopts = "-v --tb=short --strict-markers --disable-warnings --import-mode=importlib"
+asyncio_mode = "auto"
+```
+
+**Key settings**:
+- `pythonpath = ["."]` - Array format required for `--import-mode=importlib`
+- `testpaths = ["tests"]` - Tests only from tests/ directory
+- `--import-mode=importlib` - Modern import mode (PEP 451)
+
+### Docker Environment
+
+Docker services set `PYTHONPATH=/app`:
+- **NEVER** use `PYTHONPATH=/app/src:/app` (breaks package resolution)
+- **NEVER** add `/app/src` separately (causes double imports)
+- The `src` directory is a package, accessed as `from src.module import ...`
+
+## Database Tests
 
 **REQUIREMENTS**:
-- Docker Compose PostgreSQL service running: `docker-compose up -d postgres`
-- Environment variables set (or use defaults):
-  - `DB_HOST=localhost`
-  - `DB_PORT=5432`
-  - `DB_NAME=loist_mvp`
-  - `DB_USER=loist_user`
-  - `DB_PASSWORD=dev_password`
+- Docker Compose services running: `docker-compose up -d`
+- Tests automatically connect to PostgreSQL service
 
 **PATTERNS**:
 ```python
@@ -74,228 +172,119 @@ def db_pool():
     # ... cleanup ...
 ```
 
-**CHECK**: Use `is_db_configured()` helper before running database tests
-
-### GCS Tests
-
-**REQUIREMENTS**:
-- `GOOGLE_APPLICATION_CREDENTIALS` environment variable set
-- Or use mocks for unit tests
-
-**PATTERNS**:
-```python
-@pytest.mark.requires_gcs
-def test_gcs_operation():
-    """Test GCS operation."""
-    # Test code here
-```
-
-### Unit Tests (No External Dependencies)
-
-**PATTERNS**:
-```python
-def test_validation_logic():
-    """Test validation without external dependencies."""
-    from unittest.mock import Mock, patch
-    
-    # Use mocks for external dependencies
-    mock_repo = Mock()
-    result = function_under_test(mock_repo)
-    assert result is not None
-```
-
-## Running Tests
-
-### Basic Commands
-
-```bash
-# All tests
-pytest tests/ -v
-
-# Unit tests only (fast, no database)
-pytest -m unit -v
-
-# Integration tests (requires database)
-pytest -m integration -v
-
-# Database tests (requires PostgreSQL running)
-pytest -m requires_db -v
-
-# Specific file
-pytest tests/test_exceptions.py -v
-
-# With coverage
-pytest --cov=src --cov-report=html tests/
-```
-
-### Database Setup Before Running Tests
-
-```bash
-# 1. Start database service
-docker-compose up -d postgres
-
-# 2. Verify connection (optional)
-docker-compose exec postgres psql -U loist_user -d loist_mvp -c "SELECT 1"
-
-# 3. Run database tests
-pytest -m requires_db -v
-```
-
-### Test Execution Checklist
-
-**Before running tests**:
-1. ✅ Install dev dependencies: `pip install -r requirements-dev.txt`
-2. ✅ Start database (if needed): `docker-compose up -d postgres`
-3. ✅ Set environment variables (if needed): `export DB_HOST=localhost ...`
-4. ✅ Run tests: `pytest tests/ -v`
-
-## Dependencies
-
-### Production Dependencies (`requirements.txt`)
-- **Does NOT include pytest** - Production image doesn't need testing tools
-- Includes: FastMCP, PostgreSQL drivers, GCS clients, etc.
-
-### Development Dependencies (`requirements-dev.txt`)
-- **Includes pytest and all testing tools**
-- Install with: `pip install -r requirements-dev.txt`
-- Required before running tests locally
-
-## PYTHONPATH
-
-**Local testing**: No PYTHONPATH needed (pytest.ini and conftest.py handle imports)
-**Docker testing**: Set `PYTHONPATH=/app/src:/app` (if running in container)
-
-## Test Fixtures
-
-### Available Fixtures (from conftest.py)
-
-- `db_pool` - Database connection pool (requires PostgreSQL running)
-- `sample_audio_metadata` - Standardized test data
-- `mock_repository` - Mock repository for unit tests
-- Auto-assigned markers based on file/function patterns
-
-### Using Fixtures
-
-```python
-def test_with_database(db_pool):
-    """Test using database fixture."""
-    with db_pool.get_connection() as conn:
-        # Test code here
-        pass
-
-def test_with_sample_data(sample_audio_metadata):
-    """Test using sample data fixture."""
-    assert sample_audio_metadata["title"] is not None
-```
-
-## Common Patterns
-
-### Unit Test Pattern
-
-```python
-from unittest.mock import Mock, patch
-
-def test_unit_functionality():
-    """Unit test with mocked dependencies."""
-    mock_dependency = Mock()
-    mock_dependency.method.return_value = "expected"
-    
-    result = function_under_test(mock_dependency)
-    assert result == "expected"
-    mock_dependency.method.assert_called_once()
-```
-
-### Integration Test Pattern
-
-```python
-def test_integration_with_database(db_pool):
-    """Integration test with real database."""
-    if not is_db_configured():
-        pytest.skip("Database not configured")
-    
-    with db_pool.get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT 1")
-            result = cur.fetchone()
-            assert result[0] == 1
-```
-
-### Async Test Pattern
-
-```python
-import pytest
-
-@pytest.mark.asyncio
-async def test_async_functionality():
-    """Test async functionality."""
-    result = await async_function()
-    assert result is not None
-```
-
 ## Troubleshooting
 
-### Tests Fail with Import Errors
+### Import Errors
 
-**Problem**: `ModuleNotFoundError` or import errors
-**Solution**: 
-- Check PYTHONPATH (usually not needed, pytest.ini handles it)
-- Verify you're in project root directory
-- Check that `src/` directory exists
+**Problem**: `ModuleNotFoundError` when running tests
 
-### Database Tests Fail
+**Solutions**:
+1. Verify you're running in Docker: `docker-compose exec mcp-server pytest ...`
+2. Check container is healthy: `docker-compose ps`
+3. Rebuild container if needed: `docker-compose up -d --build`
+4. Verify imports work: `docker-compose exec mcp-server python -c "from src.server import mcp"`
 
-**Problem**: `OperationalError` or connection refused
-**Solution**:
-1. Check PostgreSQL is running: `docker-compose ps postgres`
-2. Start if needed: `docker-compose up -d postgres`
-3. Verify connection: `docker-compose exec postgres psql -U loist_user -d loist_mvp`
-4. Check environment variables: `echo $DB_HOST`
+### Circular Import Errors
 
-### Pytest Not Found
+**Problem**: `ImportError: cannot import name 'X' from partially initialized module`
 
-**Problem**: `pytest: command not found`
-**Solution**:
-- Install dev dependencies: `pip install -r requirements-dev.txt`
-- Or install pytest directly: `pip install pytest`
+**Cause**: Usually a module name conflict (e.g., `src/exceptions.py` AND `src/exceptions/`)
 
-### Coverage Not Working
+**Solutions**:
+1. Check for file/package name conflicts in `src/`
+2. Ensure no `sys.path` manipulation in the failing module
+3. Use `--import-mode=importlib` (already configured in pyproject.toml)
 
-**Problem**: Coverage reports empty or missing
-**Solution**:
-- Install coverage plugin: `pip install pytest-cov`
-- Run with coverage: `pytest --cov=src tests/`
-- Check coverage config in `pytest.ini`
+### Container Restart Loop
 
-## CI/CD Testing
+**Problem**: mcp-server container keeps restarting
 
-**Cloud Build** runs tests differently:
-- Uses `python:3.11-slim` container (not Docker Compose)
-- Installs dependencies: `pip install -r requirements.txt` + test dependencies
-- Sets `PYTHONPATH=/workspace/src:/workspace`
-- Runs: `python -m pytest -m "not (requires_db or requires_gcs or slow or requires_tools)"`
+**Solutions**:
+1. Check logs: `docker-compose logs mcp-server`
+2. Rebuild after code changes: `docker-compose up -d --build`
+3. Verify healthcheck passes: 
+   ```bash
+   docker-compose exec mcp-server python -c "from src.server import mcp; print('OK')"
+   ```
 
-**For local development**, use the local testing approach above.
+### Tests Not Collected
+
+**Problem**: `pytest tests/ --collect-only` shows 0 items
+
+**Solutions**:
+1. Check test files are in `tests/` directory (not root or src/)
+2. Check test file names match `test_*.py`
+3. Check test function names match `test_*`
+4. Verify tests directory is mounted: `docker-compose exec mcp-server ls tests/`
+
+## Common Anti-Patterns to Avoid
+
+### ❌ DON'T: sys.path Manipulation
+
+```python
+# ❌ NEVER do this
+import sys
+import os
+sys.path.insert(0, os.path.dirname(__file__))
+sys.path.append('/app/src')
+```
+
+### ❌ DON'T: Put Tests in Wrong Locations
+
+```python
+# ❌ WRONG: Tests in src/
+src/test_my_feature.py
+
+# ❌ WRONG: Tests in project root
+test_my_feature.py
+
+# ✅ CORRECT: Tests in tests/
+tests/test_my_feature.py
+tests/unit/test_my_feature.py
+```
+
+### ❌ DON'T: Use Local venv
+
+```bash
+# ❌ WRONG: Using local venv
+source venv/bin/activate
+pytest tests/ -v
+
+# ✅ CORRECT: Using Docker
+docker-compose exec mcp-server pytest tests/ -v
+```
+
+### ❌ DON'T: Hardcode PYTHONPATH in Test Files
+
+```python
+# ❌ NEVER do this
+import os
+os.environ['PYTHONPATH'] = '/app/src:/app'
+```
 
 ## Quick Reference
 
 ```bash
-# Setup
-pip install -r requirements-dev.txt
-docker-compose up -d postgres
+# Start services
+docker-compose up -d
 
 # Run all tests
-pytest tests/ -v
+docker-compose exec mcp-server pytest tests/ -v
 
 # Run unit tests only
-pytest -m unit -v
+docker-compose exec mcp-server pytest tests/ -m unit -v
 
 # Run with coverage
-pytest --cov=src --cov-report=html tests/
+docker-compose exec mcp-server pytest tests/ --cov=src --cov-report=html -v
 
-# Run specific test
-pytest tests/test_exceptions.py::TestExceptionHandling::test_validation_error -v
+# Check container health
+docker-compose ps
+docker-compose logs mcp-server
+
+# Rebuild after changes
+docker-compose up -d --build
 ```
 
 ---
 
-**Remember**: Tests run **locally**, database runs in **Docker**. Never assume pytest is in the Docker container.
+**Remember**: Tests run **inside Docker**, always import from `src.*`, never manipulate `sys.path`.

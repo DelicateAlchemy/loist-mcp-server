@@ -257,9 +257,12 @@ docker-compose up -d
 # View logs
 docker-compose logs -f mcp-server
 
-# Run tests
-pytest tests/ -v
-pytest --cov=src --cov-report=html
+# Run tests (ALWAYS use Docker - never local venv)
+docker-compose exec mcp-server pytest tests/ -v
+docker-compose exec mcp-server pytest tests/ --cov=src --cov-report=term-missing
+
+# Verify imports work
+docker-compose exec mcp-server python -c "from src.server import mcp; print('OK')"
 
 # Health checks
 curl http://localhost:8080/health/ready
