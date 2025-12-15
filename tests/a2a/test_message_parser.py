@@ -24,7 +24,7 @@ except ImportError:
     FileWithUri = None
     FileWithBytes = None
 
-from src.a2a.message_parser import (
+from src.a2a_server.message_parser import (
     extract_audio_url,
     validate_audio_url,
     is_audio_url,

@@ -13,7 +13,26 @@ import re
 from typing import Optional
 from urllib.parse import urlparse
 
-from a2a.types import Message, TextPart, FilePart
+# Try to import A2A types, provide fallbacks if not available
+try:
+    from a2a.types import Message, TextPart, FilePart
+    A2A_AVAILABLE = True
+except ImportError:
+    A2A_AVAILABLE = False
+    # Create dummy types for when A2A is not available
+    class Message:
+        def __init__(self, id=None, role=None, parts=None):
+            self.id = id or "dummy"
+            self.role = role or "user"
+            self.parts = parts or []
+
+    class TextPart:
+        def __init__(self, text=""):
+            self.text = text
+
+    class FilePart:
+        def __init__(self, file=None):
+            self.file = file
 
 # Import existing security utilities
 from src.downloader.ssrf_protection import validate_ssrf, SSRFProtectionError
@@ -57,6 +76,10 @@ def extract_audio_url(message: Message) -> Optional[str]:
         >>> extract_audio_url(msg)
         'https://example.com/audio.mp3'
     """
+    if not A2A_AVAILABLE:
+        logger.warning("A2A SDK not available, cannot extract audio URL from message")
+        return None
+
     if not message.parts:
         logger.debug("Message has no parts")
         return None
