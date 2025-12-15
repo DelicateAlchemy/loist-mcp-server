@@ -623,15 +623,152 @@ a2a_tasks table:
 - A2A JSON-RPC endpoints structure
 - Audio processing workflow understanding
 
-**Implementation Steps**:
+### Design: Shared Processing API (what gets extracted)
+
+**Current reality**: The audio pipeline lives inside `src/tools/process_audio.py:process_audio_complete(...)` and is called by the MCP tool wrapper in `src/server.py`. There is no `process_audio_internal()` today; we need to define the shared surface area first.
+
+**Principle**: The shared layer must be **transport-agnostic** (no FastMCP, no A2A SDK types) and provide a **stable contract** for both MCP and A2A adapters.
+
+#### 1) Boundaries (what stays vs what moves)
+
+**Move into shared business layer (`src/business/`)**:
+- Core pipeline orchestration:
+  - download (including SSRF validation)
+  - metadata extraction / fallback / enrichment
+  - storage upload (audio + artwork)
+  - DB persistence + status transitions (processing/completed/failed)
+  - cleanup of temp files
+- Domain-level errors that are independent of transport
+
+**Keep in transport adapters**:
+- **MCP** adapter concerns:
+  - converting MCP tool args (`source`, `options`) into a shared request
+  - mapping shared errors into MCP `ProcessAudioException` (or MCP error dict)
+  - MCP-specific response shape / field names (e.g., `audioId` vs `audio_id` if applicable)
+- **A2A** adapter concerns:
+  - parsing `Message`/`Part` into a URL/options (Task 6)
+  - task status transitions in the A2A task store (`submitted → working → completed/failed`)
+  - mapping shared errors into A2A task failure artifacts / error payload
+
+#### 2) Shared function contract (canonical API)
+
+Create a single “unit of work” function that both adapters call:
+
+- **Name**: `process_audio_shared(...)` (replace the vague `process_audio_internal()` wording)
+- **Location**: `src/business/audio_processor.py`
+- **Signature (design-level)**:
+  - Input: a transport-neutral request object (URL, headers, filename hint, options)
+  - Output: a transport-neutral result object (audio_id, metadata, resources, timing)
+  - Errors: raise a shared exception type with a structured error payload
+
+**Key design choice**: The shared function should accept optional dependency overrides (DI) so we can unit test it without forcing end-to-end GCS/DB/network.
+
+#### 3) Data model (request/result/error)
+
+**Request fields** (minimum viable):
+- `url: str` (HTTP/HTTPS only)
+- `headers: dict[str, str] | None` (optional)
+- `filename: str | None` (optional filename hint/override)
+- `options: dict[str, Any]` (or a typed options model mirroring MCP options)
+
+**Result fields** (minimum viable):
+- `audio_id: str`
+- `metadata: dict[str, Any]` (or reuse existing typed metadata schemas if stable)
+- `resources: dict[str, Any]` (signed URLs / GCS URIs / artwork references)
+- `timing: dict[str, float]` (optional, but helps debug both transports)
+
+**Error fields** (minimum viable):
+- `code: str` (stable set; e.g., `VALIDATION_ERROR`, `FETCH_FAILED`, `TIMEOUT`, `SIZE_EXCEEDED`, `STORAGE_ERROR`, `DATABASE_ERROR`, `METADATA_ERROR`)
+- `message: str`
+- `details: dict[str, Any] | None`
+- `retryable: bool` (helps A2A decide whether to suggest retry)
+
+#### 3.1) Canonical naming + error codes (lock these down before refactor)
+
+**Canonical = shared = MCP internal**:
+- Use **snake_case** field names to match the existing Pydantic models in `src/tools/schemas.py`:
+  - `audio_id`, `processing_time`, `url_embed_link`, `audio_url`, `thumbnail_url`, `waveform_url`
+- Treat this as the **shared contract**. Adapters may remap if we ever want an external camelCase API later.
+- **Mirror note (anti-drift)**: The shared success/error payload should mirror the structure produced by `ProcessAudioOutput.model_dump()` and `ProcessAudioError.model_dump()` (snake_case) so MCP and A2A can reuse the same data shape end-to-end.
+
+**Canonical error code set**: reuse MCP’s existing `ErrorCode` enum values (do not invent new strings unless required):
+- `SIZE_EXCEEDED`, `INVALID_FORMAT`, `FETCH_FAILED`, `TIMEOUT`, `EXTRACTION_FAILED`, `STORAGE_FAILED`, `DATABASE_FAILED`, `VALIDATION_ERROR`
+
+#### 3.2) Mapping table (Shared ↔ MCP ↔ A2A)
+
+| Concept | Shared (canonical, snake_case) | MCP tool `process_audio_complete` | A2A task artifacts |
+|---|---|---|---|
+| Success flag | `success: bool` | `success` | artifact payload `success` (or artifact type implies success) |
+| Track ID | `audio_id: str` | `audio_id` | artifact payload `audio_id`; optionally also `task.metadata.audio_id` |
+| Metadata | `metadata: AudioMetadata` | `metadata` | artifact payload `metadata` |
+| Resources | `resources: AudioResources` | `resources` | artifact payload `resources` |
+| Embed link | `metadata.url_embed_link` | `metadata.url_embed_link` | artifact payload `metadata.url_embed_link` |
+| Processing time | `processing_time: float` | `processing_time` | artifact payload `processing_time` (optional) |
+| Error code | `error.code: ErrorCode` | `error` | failure artifact payload `error.code` |
+| Error message | `error.message: str` | `message` | failure artifact payload `error.message` |
+| Error details | `error.details: dict \| None` | `details` | failure artifact payload `error.details` |
+| Retry hint | `error.retryable: bool` (optional) | *(not currently present)* | failure artifact payload `error.retryable` |
+
+#### 4) Error mapping (shared → MCP vs A2A)
+
+**Shared layer raises**: `AudioProcessingError` (exception) that contains the structured error payload above.
+
+**MCP adapter**:
+- translate shared `AudioProcessingError(code=...)` into existing MCP `ProcessAudioException/ErrorCode` where possible
+- preserve `details` for client visibility
+
+**A2A adapter**:
+- mark task as `failed`
+- attach a failure artifact that contains the structured error payload (and optionally a short human-readable summary)
+- (optional) if `retryable=True`, include guidance in artifact metadata
+
+#### 5) Determinism / “identical results”
+
+The checklist says “identical results for same input”. In practice:
+- **If you generate a new UUID every run**, the results cannot be byte-for-byte identical.
+- Define “identical” as:
+  - same extracted metadata fields (excluding nondeterministic fields like timestamps)
+  - same stored resources (or same resource *structure* even if signed URLs differ)
+  - same DB row contents except IDs/time-based fields
+
+If strict determinism is needed, add an optional `audio_id` input to the shared request so both MCP and A2A can provide the same ID for the same operation.
+
+#### 6) Module layout (minimal, testable)
+
+**Required**:
+- `src/business/__init__.py`
+- `src/business/audio_processor.py`
+
+**Recommended (if it keeps `audio_processor.py` from becoming huge)**:
+- `src/business/audio_types.py` (request/result/error dataclasses/Pydantic models)
+- `src/business/deps.py` (dependency injection container / protocol definitions)
+
+If we want to keep the task strictly to two files for MVP, we can start with everything in `audio_processor.py` and split later.
+
+#### 7) Refactor plan (mechanical steps, low risk)
+
+1. **Introduce shared request/result/error types** (even if minimal dict-based initially).
+2. **Move pipeline orchestration** from `src/tools/process_audio.py` into `src/business/audio_processor.py:process_audio_shared`.
+3. Keep `src/tools/process_audio.py:process_audio_complete` as a thin adapter:
+   - validate MCP input schema
+   - call `process_audio_shared(...)`
+   - format output in the exact existing shape
+4. Update A2A handler to call `process_audio_shared(...)` using the URL extracted in Task 6.
+
+#### 8) Validation criteria (what “done” means)
+
+- Shared function exists: `src/business/audio_processor.py:process_audio_shared(...)`
+- `src/tools/process_audio.py:process_audio_complete(...)` calls shared function and contains **no duplicated pipeline logic** beyond adapter concerns
+- A2A handler calls the same shared function (after message parsing)
+- Define and document what “identical results” means (see determinism note above)
+
+### Implementation Steps
+
 1. Create `src/business/` directory for shared logic
-2. Extract `process_audio_internal()` function from MCP tools:
-   - Move core audio processing logic to `src/business/audio_processor.py`
-   - Function should accept audio_url and return standardized dict format
-   - Include error handling and validation
-3. Update existing MCP tools to call shared business logic
-4. Ensure A2A endpoints can also call the same shared functions
-5. Add proper async/await handling for both stdio and HTTP contexts
+2. Create `src/business/audio_processor.py` with `process_audio_shared(...)` + shared error type
+3. Refactor `src/tools/process_audio.py` to become an adapter around shared logic
+4. Update A2A handler to call shared function (using Task 6 URL extraction)
+5. Add minimal unit tests around shared logic with dependency injection (optional for MVP, but strongly recommended)
 
 **Bridge Architecture**:
 ```
@@ -660,7 +797,7 @@ a2a_tasks table:
 - No duplication between MCP and A2A implementations
 
 **Validation Criteria**:
-- [ ] Shared `process_audio_internal()` function exists
+- [ ] Shared `process_audio_shared()` function exists (transport-agnostic)
 - [ ] MCP tools call shared business logic
 - [ ] A2A endpoints can call shared business logic
 - [ ] Both MCP and A2A produce identical results

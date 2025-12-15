@@ -14,9 +14,9 @@ from typing import Optional
 from fastapi import FastAPI
 
 from a2a.server.apps import A2AFastAPIApplication
-from .agent_card import create_agent_card
-from .handler import LoistRequestHandler
-from .storage import get_task_store
+from src.a2a_server.agent_card import create_agent_card
+from src.a2a_server.handler import LoistRequestHandler
+from src.a2a_server.storage import get_task_store
 
 logger = logging.getLogger(__name__)
 
@@ -54,8 +54,8 @@ async def create_a2a_app(database_url: Optional[str] = None) -> FastAPI:
 
         # Create request handler
         logger.debug("🎛️ Creating request handler")
-        # TODO: Add audio_processor when implemented in T5
-        handler = LoistRequestHandler(task_store=task_store, audio_processor=None)
+        # Audio processing handled by shared business logic (src/business/audio_processor.py)
+        handler = LoistRequestHandler(task_store=task_store)
 
         # Configure A2A FastAPI application using SDK
         logger.debug("🔧 Configuring A2AFastAPIApplication")
@@ -109,3 +109,26 @@ async def create_a2a_app_from_env() -> FastAPI:
         FastAPI: Configured FastAPI application
     """
     return await create_a2a_app(database_url=None)
+
+
+if __name__ == "__main__":
+    import uvicorn
+    import asyncio
+    import os
+    import logging
+
+    # Configure logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+
+    # Get port from environment (default 8081 for A2A)
+    port = int(os.getenv("PORT", os.getenv("SERVER_PORT", "8081")))
+    host = os.getenv("SERVER_HOST", "0.0.0.0")
+
+    async def run():
+        app = await create_a2a_app_from_env()
+        config = uvicorn.Config(app, host=host, port=port, log_level="info")
+        server = uvicorn.Server(config)
+        await server.serve()
+
+    asyncio.run(run())

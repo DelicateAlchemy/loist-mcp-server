@@ -16,8 +16,8 @@ from urllib.parse import urlparse
 from a2a.types import Message, TextPart, FilePart
 
 # Import existing security utilities
-from ..downloader.ssrf_protection import validate_ssrf, SSRFProtectionError
-from ..downloader.validators import URLValidationError, validate_url
+from src.downloader.ssrf_protection import validate_ssrf, SSRFProtectionError
+from src.downloader.validators import URLValidationError, validate_url
 
 logger = logging.getLogger(__name__)
 

@@ -1,8 +1,10 @@
 # A2A MVP Implementation - Task Tracking
 
-**Status**: 7/11 tasks complete | **Last Updated**: 2025-12-12  
+**Status**: 7/16 tasks complete | **Last Updated**: 2025-12-12  
 **Branch**: `a2a-mvp` (from `origin/dev`)  
 **Spec Document**: [`a2a-mvp-implementation-tasks.md`](./a2a-mvp-implementation-tasks.md)
+
+**Refactored**: 2025-12-12 - Restructured to testing-first approach with missing CI/CD and E2E tasks added
 
 ---
 
@@ -111,11 +113,14 @@ gh pr create --base dev --head a2a-mvp \
 
 ## Test Plan
 - [x] Agent Card accessible (T2 complete)
-- [x] tasks/send creates task with status transitions (T7 complete)
+- [x] message/send creates task with status transitions (T7 complete)
 - [x] tasks/get returns status (T7 complete)
 - [x] MCP tools still work (T5 ensures shared logic)
 - [x] A2A server deployed (T8 complete - dual server configuration)
-- [ ] Full integration testing (blocked by T10)"
+- [ ] Unit/integration tests for A2A contract (TST1)
+- [ ] Local docker-compose E2E harness (E2E1)
+- [ ] Postman/Newman regression suite (PST1)
+- [ ] Full integration testing roll-up (TST2 - blocked by TST1, E2E1, PST1, CICD1, DOM1)"
 ```
 
 ---
@@ -126,17 +131,24 @@ gh pr create --base dev --head a2a-mvp \
 |----|------|--------|------------|---------|
 | T1 | Verify MCP Server Foundation | done | — | 2025-12-11 |
 | T2 | Create A2A Agent Card | done | T1 | 2025-12-11 |
-| T2.1 | Configure Domain Mapping | todo | T8 | |
-| T3 | Configure SDK Database Storage | todo | T1 | |
-| T4 | Configure SDK JSON-RPC Server | todo | T2, T3 | |
-| T5 | Create Shared Business Logic Layer | todo | T4 | |
-| T6 | Implement Message Parsing Utilities | todo | T4 | |
+| T3 | Configure SDK Database Storage | done | T1 | 2025-12-12 |
+| T4 | Configure SDK JSON-RPC Server | done | T2, T3 | 2025-12-12 |
+| T5 | Create Shared Business Logic Layer | done | T4 | 2025-12-12 |
+| T6 | Implement Message Parsing Utilities | done | T4 | 2025-12-12 |
 | T7 | Connect A2A Tasks to Audio Processing | done | T5, T6 | 2025-12-12 |
 | T8 | Update Docker Compose for Dual Servers | done | T2, T4 | 2025-12-12 |
-| T9 | Document Agent Discovery Strategy | todo | T2, T4 | |
-| T10 | Comprehensive A2A Testing | todo | T7, T8, T9 | |
+| R1 | Confirm Deployment Topology & Policy | todo | — | |
+| TST1 | A2A Unit/Integration Tests | todo | T4, T7 | |
+| E2E1 | Local Docker Compose E2E Harness | todo | TST1 | |
+| PST1 | Postman/Newman Regression Suite | todo | E2E1 | |
+| CICD1 | A2A CI/CD Build/Deploy Split | todo | T8, PST1 | |
+| DOM1 | Cloud Run Domain Mappings | todo | CICD1 | |
+| DOC1 | Agent Discovery Documentation | todo | TST1, E2E1, PST1 | |
+| TST2 | Comprehensive Testing Roll-up | todo | TST1, E2E1, PST1, CICD1, DOM1 | |
 
 **Status Values**: `todo` | `doing` | `done` | `blocked`
+
+**Note**: Tasks T1-T8 are complete. New testing-first structure added: R1 (deployment policy) → TST1 (unit tests) → E2E1 (local E2E) → PST1 (Postman) → CICD1 (CI/CD) → DOM1 (domain mapping) → DOC1 (docs) → TST2 (roll-up).
 
 ---
 
@@ -203,33 +215,29 @@ gh pr create --base dev --head a2a-mvp \
 
 ---
 
-### T2.1: Configure Domain Mapping
+### R1: Confirm Deployment Topology & Policy
 - **Status**: todo
-- **Blocked By**: T8
-- **Spec**: Configure a2a.loist.io and a2a.staging.loist.io domain mapping for A2A endpoints
+- **Blocked By**: —
+- **Spec**: Lock deployment assumptions before CI/CD implementation
 - **Branch Commit**: —
 
 **Validation Checklist**:
-- [ ] A2A Cloud Run services deployed (production and staging) - prerequisite from T8
-- [ ] Configure Cloud Run domain mapping for a2a.loist.io → A2A production service
-- [ ] Configure Cloud Run domain mapping for a2a.staging.loist.io → A2A staging service
-- [x] Update DNS CNAME records for a2a.loist.io and a2a.staging.loist.io
-- [ ] Update AgentCard URL to use https://a2a.loist.io/a2a for production
-- [ ] Update staging AgentCard URL to use https://a2a.staging.loist.io/a2a
-- [ ] Test agent discovery from external agents at /.well-known/agent-card.json
-- [ ] Ensure CORS and security headers work with new domains
+- [ ] Confirm Cloud Run service names: `a2a-staging`, `a2a-prod`
+- [ ] Confirm region: `us-central1` (matches existing MCP services)
+- [ ] Confirm deployment policy: `a2a-staging` auto-deploy on merges to `dev`; `a2a-prod` deploy on merges to `main`
+- [ ] Confirm authentication: `AUTH_ENABLED=false` for MVP (no JWT/Bearer tokens)
+- [ ] Document service account and secret requirements
+- [ ] Confirm Docker strategy: single Dockerfile with two targets/entrypoints (MCP vs A2A)
 
 **Files to Create/Modify**:
-- AgentCard URL configuration (production and staging variants)
-- Cloud Run domain mapping configuration
-- DNS CNAME record setup for subdomains
+- Deployment policy documentation (internal notes or ADR)
 
 **Notes**:
-- Using subdomain approach: a2a.loist.io and a2a.staging.loist.io mapped directly to A2A Cloud Run services
-- Currently using placeholder URL `https://api.loist.music/a2a` for development
-- Agent card will be accessible at https://a2a.loist.io/.well-known/agent-card.json
-- Using direct Cloud Run domain mapping (simpler than load balancer for MVP)
-- **Blocked by T8**: Domain mapping requires A2A Cloud Run services to exist first
+- **Deployment Shape**: 4 Cloud Run services total (MCP prod/staging + A2A prod/staging)
+- **Region**: `us-central1` (confirmed via `gcloud run services list`)
+- **DNS**: Already configured for `a2a.loist.io` and `a2a.staging.loist.io` (CNAME records exist)
+- **MVP Approach**: Direct Cloud Run domain mapping (no load balancer for quick wins)
+- **Docker Strategy**: Single Dockerfile with two targets/entrypoints to avoid repo churn while keeping services deployable independently
 
 ---
 
@@ -370,7 +378,7 @@ gh pr create --base dev --head a2a-mvp \
 - **Branch Commit**: Multiple commits - see implementation notes
 
 **Validation Checklist**:
-- [x] `tasks/send` extracts URL and creates task
+- [x] `message/send` extracts URL and creates task (note: SDK method is `message/send`, not `tasks/send`)
 - [x] Task status transitions: submitted → working → completed/failed
 - [x] Results stored in `a2a_tasks.artifacts`
 - [x] `audio_tracks` record created with `a2a_task_id` link
@@ -446,58 +454,242 @@ The A2A `RequestHandler` currently implements MVP stubs for 7 abstract methods t
 
 ---
 
-### T9: Document Agent Discovery Strategy
+### R1: Confirm Deployment Topology & Policy
 - **Status**: todo
-- **Blocked By**: T2, T4
-- **Spec**: [Task 9](./a2a-mvp-implementation-tasks.md#task-9-document-agent-discovery-strategy)
+- **Blocked By**: —
+- **Spec**: Lock deployment assumptions before CI/CD implementation
 - **Branch Commit**: —
 
 **Validation Checklist**:
-- [ ] README.md updated with A2A section
-- [ ] Agent Card endpoint documented
-- [ ] Authentication requirements explained
-- [ ] `docs/a2a-integration-guide.md` created
-- [ ] JSON-RPC examples included
-- [ ] Troubleshooting section added
+- [ ] Confirm Cloud Run service names: `a2a-staging`, `a2a-prod`
+- [ ] Confirm region: `us-central1` (matches existing MCP services)
+- [ ] Confirm deployment policy: `a2a-staging` auto-deploy on merges to `dev`; `a2a-prod` deploy on merges to `main`
+- [ ] Confirm authentication: `AUTH_ENABLED=false` for MVP (no JWT/Bearer tokens)
+- [ ] Document service account and secret requirements
+- [ ] Confirm Docker strategy: single Dockerfile with two targets/entrypoints (MCP vs A2A)
 
 **Files to Create/Modify**:
-- `README.md`
-- `docs/a2a-integration-guide.md`
+- Deployment policy documentation (internal notes or ADR)
 
 **Notes**:
-<!-- Agent: Add implementation notes here -->
+- **Deployment Shape**: 4 Cloud Run services total (MCP prod/staging + A2A prod/staging)
+- **Region**: `us-central1` (confirmed via `gcloud run services list`)
+- **DNS**: Already configured for `a2a.loist.io` and `a2a.staging.loist.io` (CNAME records exist)
+- **MVP Approach**: Direct Cloud Run domain mapping (no load balancer for quick wins)
+- **Docker Strategy**: Single Dockerfile with two targets/entrypoints to avoid repo churn while keeping services deployable independently
 
 ---
 
-### T10: Comprehensive A2A Testing
+### TST1: A2A Unit/Integration Tests
 - **Status**: todo
-- **Blocked By**: T7, T8, T9
-- **Spec**: [Task 10](./a2a-mvp-implementation-tasks.md#task-10-comprehensive-a2a-testing-and-validation)
+- **Blocked By**: T4, T7
+- **Spec**: Validate exact A2A SDK contract surface before E2E/Postman
 - **Branch Commit**: —
 
 **Validation Checklist**:
-- [ ] `curl /.well-known/agent-card.json` returns valid JSON
-- [ ] Agent Card validates against A2A v0.3 schema
-- [ ] `tasks/send` JSON-RPC request succeeds
-- [ ] `tasks/get` returns task with status
-- [ ] End-to-end: submit audio URL → get completed task with metadata
-- [ ] MCP tools still work via stdio
-- [ ] Both servers run without conflicts
-- [ ] Error responses follow JSON-RPC format
+- [ ] `message/send` happy path creates/advances task (not `tasks/send` - SDK method is `message/send`)
+- [ ] `tasks/get` polling returns correct state transitions (submitted → working → completed/failed)
+- [ ] JSON-RPC error envelope: HTTP 200 status with `{error: {code, message, data}}` object
+- [ ] Agent card validates with `AgentCard.model_validate()` (Pydantic validation)
+- [ ] Error codes match SDK expectations (-32700 JSON parse, -32600 invalid request, -32601 method not found, -32602 invalid params, -32000+ server errors)
+- [ ] Negative test cases: invalid params, unknown method, task not found
 
-**MVP Completion Checklist**:
-- [ ] Agent Card accessible at standard endpoint
-- [ ] Task creation and polling work
-- [ ] Audio processing integration complete
-- [ ] Documentation updated
-- [ ] Dual deployment stable
-
-**Files to Create**:
-- `tests/test_a2a_integration.py`
-- `scripts/test_a2a_curl.sh`
+**Files to Create/Modify**:
+- `tests/a2a/test_jsonrpc_contract.py` (new)
+- `tests/a2a/test_agent_card_validation.py` (new)
+- Update existing integration tests if needed
 
 **Notes**:
-<!-- Agent: Add implementation notes here -->
+- **Contract Focus**: Test the exact JSON-RPC methods exposed by `A2AFastAPIApplication` (per DeepWiki research)
+- **Key Methods**: `message/send`, `tasks/get` (primary MVP methods)
+- **Error Format**: All errors return HTTP 200 with JSON-RPC error object (not HTTP 4xx/5xx)
+- **Agent Card**: Must validate against `AgentCard` Pydantic model from SDK
+- **Fast & Deterministic**: These tests should run quickly without Docker/network dependencies
+
+---
+
+### E2E1: Local Docker Compose E2E Harness
+- **Status**: todo
+- **Blocked By**: TST1
+- **Spec**: Scripted end-to-end test against real docker-compose environment
+- **Branch Commit**: —
+
+**Validation Checklist**:
+- [ ] Script starts docker-compose and waits for readiness (both MCP and A2A servers)
+- [ ] Script POSTs `message/send` JSON-RPC request to A2A server (`POST /`)
+- [ ] Script polls `tasks/get` until terminal state (completed/failed)
+- [ ] Script asserts task artifacts contain expected audio metadata
+- [ ] Script asserts DB linkage: `audio_tracks.a2a_task_id` ↔ `task.metadata.audio_track_id`
+- [ ] Script handles errors gracefully (failed tasks, timeouts)
+- [ ] Script can run in CI (non-interactive, exit codes)
+
+**Files to Create**:
+- `scripts/test_a2a_e2e.sh` (or Python script)
+- `tests/e2e/test_a2a_docker_compose.py` (optional - structured test version)
+
+**Notes**:
+- **Foundation for CI**: This becomes the baseline E2E test that runs in Cloud Build
+- **Real Environment**: Uses actual HTTP, real Postgres, real GCS (or mocks)
+- **Polling Strategy**: Should handle async task processing (may take seconds)
+- **Assertions**: Focus on contract correctness (task state, artifacts, DB linkage) not implementation details
+
+---
+
+### PST1: Postman/Newman Regression Suite
+- **Status**: todo
+- **Blocked By**: E2E1
+- **Spec**: Shareable Postman collection + environments, runnable via Newman in CI
+- **Branch Commit**: —
+
+**Validation Checklist**:
+- [ ] Postman collection created with all A2A endpoints
+- [ ] Environments: `local` (docker-compose), `staging` (Cloud Run), `prod` (Cloud Run)
+- [ ] Request: `GET /.well-known/agent-card.json` (and deprecated `/.well-known/agent.json` if supported)
+- [ ] Request: `POST /` with `message/send` JSON-RPC (new task)
+- [ ] Request: `POST /` with `tasks/get` JSON-RPC (poll task)
+- [ ] Negative cases: invalid params, unknown method, task not found (expect JSON-RPC error object)
+- [ ] Newman runner script works in CI
+- [ ] Collection validates against A2A v0.3 contract
+
+**Files to Create**:
+- `postman/a2a-collection.json`
+- `postman/a2a-environments.json` (local, staging, prod)
+- `scripts/run_postman_tests.sh` (Newman runner)
+
+**Notes**:
+- **Mirror MCP Discipline**: Similar to your "55 tests passed" Postman suite for MCP
+- **Shareable**: Collection can be imported by external agents for integration testing
+- **CI Integration**: Newman allows running Postman tests in Cloud Build
+- **Environment Variables**: Use Postman env vars for base URLs, auth tokens (if added later)
+
+---
+
+### CICD1: A2A CI/CD Build/Deploy Split
+- **Status**: todo
+- **Blocked By**: T8, PST1
+- **Spec**: Separate Cloud Build triggers for A2A services (staging/prod), single Dockerfile with two targets
+- **Branch Commit**: —
+
+**Validation Checklist**:
+- [ ] Single Dockerfile with two targets/entrypoints: `mcp` and `a2a`
+- [ ] Cloud Build trigger for `a2a-staging`: branch `dev`, path filter `src/a2a_server/**` (or appropriate paths)
+- [ ] Cloud Build trigger for `a2a-prod`: branch `main`, path filter `src/a2a_server/**`
+- [ ] Build steps: build Docker image with correct target, push to Artifact Registry, deploy to Cloud Run
+- [ ] Deploy to `us-central1` region
+- [ ] Environment variables configured (DATABASE_URL, GCS config, AUTH_ENABLED=false)
+- [ ] Service account and secrets configured
+- [ ] Health check endpoint configured (Agent Card endpoint)
+- [ ] Both services deploy successfully
+
+**Files to Create/Modify**:
+- `Dockerfile` (add A2A target/entrypoint) or `Dockerfile.a2a` (if separate file preferred)
+- `cloudbuild.yaml` (or separate `cloudbuild-a2a.yaml`) with parameterized service name
+- Cloud Build trigger configuration (via `gcloud` or Terraform)
+
+**Notes**:
+- **Docker Strategy**: Single Dockerfile with two targets keeps repo simple while allowing independent deployment
+- **Trigger Policy**: Staging auto-deploys on `dev` merges; prod deploys on `main` merges
+- **Path Filters**: Only rebuild/deploy A2A when A2A code changes (efficiency)
+- **Service Names**: `a2a-staging` and `a2a-prod` in `us-central1`
+- **Prerequisites**: Requires R1 (deployment policy) to be confirmed first
+
+---
+
+### DOM1: Cloud Run Domain Mappings (Refined T2.1)
+- **Status**: todo
+- **Blocked By**: CICD1
+- **Spec**: Configure direct Cloud Run domain mappings (MVP - no load balancer)
+- **Branch Commit**: —
+
+**Validation Checklist**:
+- [ ] A2A Cloud Run services deployed (`a2a-staging`, `a2a-prod`) - prerequisite from CICD1
+- [ ] Configure Cloud Run domain mapping: `a2a.staging.loist.io` → `a2a-staging` service
+- [ ] Configure Cloud Run domain mapping: `a2a.loist.io` → `a2a-prod` service
+- [ ] Wait for TLS certificate provisioning (Google-managed certs)
+- [ ] Update AgentCard URL to use `https://a2a.loist.io` for production
+- [ ] Update staging AgentCard URL to use `https://a2a.staging.loist.io`
+- [ ] Test agent discovery: `curl https://a2a.loist.io/.well-known/agent-card.json`
+- [ ] Test agent discovery: `curl https://a2a.staging.loist.io/.well-known/agent-card.json`
+- [ ] Verify CORS and security headers work with new domains
+- [ ] Validate TLS certificate includes both hostnames (if using shared cert)
+
+**Files to Create/Modify**:
+- AgentCard URL configuration (production and staging variants in `src/a2a_server/agent_card.py`)
+- Cloud Run domain mapping commands/scripts
+
+**Notes**:
+- **MVP Approach**: Direct Cloud Run domain mapping (simpler than load balancer for quick wins)
+- **DNS**: Already configured (CNAME records exist for both subdomains)
+- **Region**: `us-central1` supports direct domain mapping (confirmed)
+- **TLS**: Google-managed certificates (automatic provisioning, may take 5-30 minutes)
+- **Blocked by CICD1**: Domain mapping requires A2A Cloud Run services to exist first
+- **Validation**: Use `curl -vI` to verify TLS and routing
+
+---
+
+### DOC1: Agent Discovery Documentation (Refined T9)
+- **Status**: todo
+- **Blocked By**: TST1, E2E1, PST1
+- **Spec**: Document agent discovery and integration guide after contract stabilizes
+- **Branch Commit**: —
+
+**Validation Checklist**:
+- [ ] README.md updated with A2A section (high-level overview, link to detailed guide)
+- [ ] `docs/a2a-integration-guide.md` created with:
+  - Agent Card endpoint documentation (`/.well-known/agent-card.json`)
+  - JSON-RPC examples: `message/send` (not `tasks/send`), `tasks/get`
+  - Authentication requirements (currently disabled for MVP)
+  - Environment endpoints (staging vs prod)
+  - Troubleshooting section
+  - Error handling examples (JSON-RPC error format)
+- [ ] Code examples are tested and functional
+- [ ] Cross-references to related docs
+
+**Files to Create/Modify**:
+- `README.md` (add A2A section)
+- `docs/a2a-integration-guide.md` (new comprehensive guide)
+
+**Notes**:
+- **Deferred Until After Testing**: Documentation written after contract is validated via TST1, E2E1, PST1
+- **Keep README High-Level**: Detailed content goes in `docs/a2a-integration-guide.md` (per documentation management rules)
+- **Real Examples**: Use actual JSON-RPC request/response examples from Postman collection
+- **Contract Accuracy**: Ensure all examples use `message/send` (not `tasks/send`)
+
+---
+
+### TST2: Comprehensive Testing Roll-up (Refined T10)
+- **Status**: todo
+- **Blocked By**: TST1, E2E1, PST1, CICD1, DOM1
+- **Spec**: Run complete test suite end-to-end and document results
+- **Branch Commit**: —
+
+**Validation Checklist**:
+- [ ] Run unit/integration tests (TST1) - all pass
+- [ ] Run local docker-compose E2E harness (E2E1) - all pass
+- [ ] Run Postman/Newman suite against staging (PST1) - all pass
+- [ ] Smoke test prod: `curl https://a2a.loist.io/.well-known/agent-card.json` returns valid JSON
+- [ ] Smoke test prod: Agent Card validates against A2A v0.3 schema
+- [ ] Smoke test prod: `message/send` JSON-RPC request succeeds
+- [ ] Smoke test prod: `tasks/get` returns task with status
+- [ ] End-to-end prod: submit audio URL → get completed task with metadata
+- [ ] MCP tools still work via stdio (regression check)
+- [ ] Both servers run without conflicts (local and Cloud Run)
+- [ ] Error responses follow JSON-RPC format (HTTP 200 + error object)
+- [ ] Document known gaps: streaming/push notification stubs (Phase 2 work)
+
+**Files to Create**:
+- `docs/a2a-test-results.md` (test execution results and coverage)
+- Update test documentation with roll-up summary
+
+**Notes**:
+- **Roll-up Task**: This is the "comprehensive testing" that validates everything works together
+- **Not a Single Task**: TST2 is the validation that all previous testing tasks (TST1, E2E1, PST1) pass in real environments
+- **Production Smoke Tests**: Light validation that prod deployment works (not full regression)
+- **Known Gaps**: Explicitly document MVP stubs (streaming, push notifications) that need Phase 2 implementation
+- **Test Results**: Record pass/fail counts, coverage metrics, any flaky tests
+
+---
+
 
 ---
 
@@ -626,6 +818,41 @@ Agent: Add entries here as you work. Format:
 - T10: Comprehensive A2A testing (end-to-end validation, JSON-RPC compliance)
 - **Phase 2 Work**: [LOI-24](https://linear.app/loist/issue/LOI-24/phase-2-implement-a2a-requesthandler-abstract-methods) - Implement the 7 abstract method stubs for full A2A compliance
 
+### 2025-12-12 - Refactored Task List: Testing-First Approach
+**Tasks Worked On**: Task list refactoring (planning)
+**Completed**: Task list restructure approved and applied
+**Key Decisions**:
+- **Testing-First Structure**: Identified missing tasks (TST1, E2E1, PST1, CICD1) and reordered to prioritize testing before CI/CD and domain mapping
+- **Contract Correction**: Fixed `tasks/send` → `message/send` discrepancy (SDK method is `message/send`, not `tasks/send`)
+- **Deployment Policy Locked**: Confirmed 4 Cloud Run services (MCP + A2A, prod + staging), region `us-central1`, auto-deploy staging on `dev`, prod on `main`
+- **Docker Strategy**: Single Dockerfile with two targets/entrypoints (MVP compromise to avoid repo churn)
+- **Domain Mapping Simplified**: Direct Cloud Run domain mapping (no load balancer for MVP quick wins)
+- **Task Renaming**: T2.1 → DOM1 (refined scope), T9 → DOC1 (deferred until after testing), T10 → TST2 (roll-up validation)
+**Research Completed**:
+- ✅ GCP Cloud Run domain mapping patterns (Perplexity research)
+- ✅ Cloud Build monorepo best practices (Perplexity research)
+- ✅ A2A SDK JSON-RPC contract surface (DeepWiki research - confirmed `message/send` method)
+**New Tasks Added**:
+- **R1**: Confirm Deployment Topology & Policy (locks assumptions before CI/CD)
+- **TST1**: A2A Unit/Integration Tests (contract validation)
+- **E2E1**: Local Docker Compose E2E Harness (real HTTP + DB)
+- **PST1**: Postman/Newman Regression Suite (shareable, CI-runnable)
+- **CICD1**: A2A CI/CD Build/Deploy Split (Cloud Build triggers, Docker strategy)
+- **DOM1**: Cloud Run Domain Mappings (refined T2.1, blocked by CICD1)
+- **DOC1**: Agent Discovery Documentation (refined T9, deferred until after testing)
+- **TST2**: Comprehensive Testing Roll-up (refined T10, validates all previous testing)
+**Blockers/Issues**:
+- None - refactoring complete and approved
+**Next Steps**:
+- **R1**: Confirm deployment topology and policy (quick decision task)
+- **TST1**: Add/strengthen unit/integration tests for A2A contract
+- **E2E1**: Create local docker-compose E2E harness
+- **PST1**: Build Postman/Newman regression suite
+- **CICD1**: Implement A2A CI/CD with Cloud Build triggers
+- **DOM1**: Configure Cloud Run domain mappings (after CICD1)
+- **DOC1**: Write documentation after contract stabilizes
+- **TST2**: Run comprehensive test roll-up
+
 ---
 
 ## Open Questions
@@ -634,8 +861,11 @@ Agent: Add entries here as you work. Format:
 
 | ID | Question | Status | Answer |
 |----|----------|--------|--------|
-| Q1 | Port for A2A server - 8080 or 8081? | open | MCP uses 8080, suggest 8081 for A2A |
-| Q2 | SDK version pinning strategy? | open | — |
+| Q1 | Port for A2A server - 8080 or 8081? | resolved | A2A uses 8081 (T8 complete) |
+| Q2 | SDK version pinning strategy? | resolved | Using `a2a-sdk[postgresql]==0.3.20` (T3 complete) |
+| Q3 | Deployment topology (services, region, policy)? | resolved | 4 services (MCP + A2A, prod + staging), us-central1, auto-deploy staging on dev, prod on main (R1) |
+| Q4 | Docker strategy (separate vs shared Dockerfile)? | resolved | Single Dockerfile with two targets/entrypoints (MVP compromise) (R1) |
+| Q5 | Domain mapping approach (LB vs direct)? | resolved | Direct Cloud Run domain mapping for MVP (no load balancer) (DOM1) |
 
 ---
 
@@ -644,19 +874,29 @@ Agent: Add entries here as you work. Format:
 ```
 T1 (Foundation)
 ├── T2 (Agent Card)
-│   ├── T2.1 (Domain Mapping)
 │   └── T4 (JSON-RPC Server) ←── T3 (Database)
-│   │   ├── T5 (Business Logic)
-│   │   │   └── T7 (Processing Integration) ←── T6 (Message Parser)
-│   │   ├── T6 (Message Parser)
-│   │   └── T8 (Docker Compose)
-│   └── T9 (Documentation)
-└── T3 (Database)
-
-T10 (Testing) ←── T7, T8, T9
+│       ├── T5 (Business Logic)
+│       │   └── T7 (Processing Integration) ←── T6 (Message Parser)
+│       ├── T6 (Message Parser)
+│       └── T8 (Docker Compose)
+│
+R1 (Deployment Policy) [parallel with T1-T8]
+│
+TST1 (Unit/Integration Tests) ←── T4, T7
+└── E2E1 (Local E2E Harness)
+    └── PST1 (Postman/Newman)
+        └── CICD1 (CI/CD Build/Deploy) ←── T8
+            └── DOM1 (Domain Mappings)
+│
+DOC1 (Documentation) ←── TST1, E2E1, PST1
+│
+TST2 (Comprehensive Roll-up) ←── TST1, E2E1, PST1, CICD1, DOM1
 ```
 
-**Critical Path**: T1 → T2 → T4 → T5 → T6 → T7 → T8 → T10
+**Critical Path (Testing-First)**: 
+- **Foundation**: T1 → T2 → T3 → T4 → T5 → T6 → T7 → T8 ✅ (complete)
+- **Testing**: TST1 → E2E1 → PST1 → CICD1 → DOM1 → TST2
+- **Documentation**: DOC1 (parallel with testing, after TST1/E2E1/PST1)
 
 ---
 

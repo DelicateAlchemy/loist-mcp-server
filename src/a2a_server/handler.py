@@ -23,9 +23,9 @@ from a2a.types import (
 )
 
 # Import exception framework
-from ..exceptions.handler import ExceptionHandler
-from ..exceptions.config import ExceptionConfig
-from ..exceptions.context import ExceptionContext, OperationType
+from src.exceptions.handler import ExceptionHandler
+from src.exceptions.config import ExceptionConfig
+from src.exceptions.context import ExceptionContext, OperationType
 
 logger = logging.getLogger(__name__)
 
@@ -293,3 +293,52 @@ class LoistRequestHandler(RequestHandler):
         )
 
         return task
+
+    # Required abstract method implementations (MVP stubs)
+    async def on_cancel_task(self, task_id: str) -> None:
+        """Cancel a task. MVP implementation - mark as canceled."""
+        raise NotImplementedError("Task cancellation not implemented in MVP")
+
+    async def on_delete_task_push_notification_config(self, task_id: str, config_id: str) -> None:
+        """Delete push notification config for a task. MVP implementation."""
+        raise NotImplementedError("Push notifications not implemented in MVP")
+
+    async def on_get_task_push_notification_config(self, task_id: str, config_id: str) -> dict:
+        """Get push notification config for a task. MVP implementation."""
+        raise NotImplementedError("Push notifications not implemented in MVP")
+
+    async def on_list_task_push_notification_config(self, task_id: str) -> list:
+        """List push notification configs for a task. MVP implementation."""
+        raise NotImplementedError("Push notifications not implemented in MVP")
+
+    async def on_message_send_stream(self, params: MessageSendParams) -> None:
+        """Send message with streaming. MVP implementation."""
+        raise NotImplementedError("Message streaming not implemented in MVP")
+
+    async def on_resubscribe_to_task(self, task_id: str) -> None:
+        """Resubscribe to task updates. MVP implementation."""
+        raise NotImplementedError("Task resubscription not implemented in MVP")
+
+    async def on_set_task_push_notification_config(self, task_id: str, config: dict) -> str:
+        """Set push notification config for a task. MVP implementation."""
+        raise NotImplementedError("Push notifications not implemented in MVP")
+
+    def _create_success_artifact(self, result) -> dict:
+        """Create success artifact from processing result."""
+        return {
+            "type": "audio_processing_result",
+            "audio_id": result.audio_id,
+            "metadata": result.metadata.model_dump() if hasattr(result.metadata, 'model_dump') else result.metadata,
+            "resources": result.resources.model_dump() if hasattr(result.resources, 'model_dump') else result.resources,
+            "processing_time": result.processing_time
+        }
+
+    def _create_error_artifact(self, error: Exception) -> dict:
+        """Create error artifact from exception."""
+        if hasattr(error, 'to_dict'):
+            return {"type": "audio_processing_error", **error.to_dict()}
+        return {
+            "type": "audio_processing_error",
+            "message": str(error),
+            "error_type": type(error).__name__
+        }
