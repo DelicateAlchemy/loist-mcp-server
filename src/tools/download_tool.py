@@ -32,8 +32,6 @@ from src.converter import (
 )
 
 # Import database operations
-import sys
-sys.path.append(str(Path(__file__).parent.parent))
 from database import get_audio_metadata_by_id
 
 logger = logging.getLogger(__name__)

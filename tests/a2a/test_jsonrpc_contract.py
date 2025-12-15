@@ -14,36 +14,9 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 
-# Set up import path before attempting A2A imports
-import sys
-import os
-
-# Ensure site-packages is in path (as suggested in debugging guide)
-site_packages = '/usr/local/lib/python3.11/site-packages'
-if site_packages not in sys.path:
-    sys.path.insert(0, site_packages)
-    print(f"[DEBUG] Added {site_packages} to sys.path")
-
-# Also ensure /app is in path
-if '/app' not in sys.path:
-    sys.path.insert(0, '/app')
-    print(f"[DEBUG] Added /app to sys.path")
-
-print(f"[DEBUG] sys.path[0] = {sys.path[0]}")
-print(f"[DEBUG] PYTHONPATH = {os.environ.get('PYTHONPATH', 'NOT SET')}")
-
 # Try to import a2a types, skip tests if not available
-print(f"\n[DEBUG] Starting A2A import attempt in pytest context")
 try:
-    print(f"[DEBUG] Attempting: import a2a")
     import a2a
-    print(f"[DEBUG] ✓ import a2a succeeded")
-
-    print(f"[DEBUG] Attempting: from a2a.types import Message")
-    from a2a.types import Message
-    print(f"[DEBUG] ✓ from a2a.types import Message succeeded")
-
-    print(f"[DEBUG] Attempting: full A2A imports")
     from a2a.types import (
         MessageSendParams,
         TaskQueryParams,
@@ -59,10 +32,8 @@ try:
     from src.a2a_server.agent_card import create_agent_card
     from src.a2a_server.handler import LoistRequestHandler
     A2A_AVAILABLE = True
-    print(f"[DEBUG] ✓ All A2A imports succeeded, A2A_AVAILABLE = True")
 except ImportError as e:
     A2A_AVAILABLE = False
-    print(f"[DEBUG] ✗ A2A import failed: {e}")
     # Create dummy types for pytest collection
     MessageSendParams = None
     TaskQueryParams = None
@@ -76,8 +47,6 @@ except ImportError as e:
     create_a2a_app = None
     create_agent_card = None
     LoistRequestHandler = None
-
-print(f"[DEBUG] Final A2A_AVAILABLE = {A2A_AVAILABLE}")
 
 # Try to import business types, skip tests if not available
 try:

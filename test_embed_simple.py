@@ -7,9 +7,6 @@ import sys
 from pathlib import Path
 import uuid
 
-# Add the src directory to the path
-sys.path.insert(0, str(Path(__file__).parent / "src"))
-
 def generate_embed_html(metadata, audio_id, stream_url, thumbnail_url):
     """Generate embed HTML with Open Graph and Twitter Card tags"""
     

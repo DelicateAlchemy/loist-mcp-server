@@ -68,11 +68,13 @@ skips = ["B101", "B601"]  # Skip assert checks and shell usage
 # Scans against Safety DB for known vulnerabilities in dependencies
 
 [tool.pytest.ini_options]
+minversion = "8.0"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --tb=short --strict-markers --disable-warnings"
+pythonpath = ["."]
+addopts = "-v --tb=short --strict-markers --disable-warnings --import-mode=importlib"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 markers = [

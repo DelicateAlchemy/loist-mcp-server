@@ -15,9 +15,6 @@ import os
 import sys
 import logging
 
-# Add src to path
-sys.path.insert(0, 'src')
-
 from a2a.types import MessageSendParams, TaskState, TaskStatus, Message
 from a2a.server.tasks import DatabaseTaskStore
 from business.audio_processor import AudioProcessingRequest, AudioProcessingError

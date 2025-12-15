@@ -11,9 +11,6 @@ import json
 import time
 from pathlib import Path
 
-# Add src to path
-sys.path.insert(0, 'src')
-
 # Test audio URL (temporary, will expire)
 TEST_AUDIO_URL = "http://tmpfiles.org/dl/4845257/dcd082_07herotolerance.mp3"
 

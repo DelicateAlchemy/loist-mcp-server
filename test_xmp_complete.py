@@ -9,9 +9,6 @@ import tempfile
 import requests
 from pathlib import Path
 
-# Add src to path
-sys.path.insert(0, '/app/src')
-
 from metadata import (
     extract_metadata_with_fallback,
     enhance_metadata_with_xmp,

@@ -77,7 +77,7 @@ EXPOSE 8080
 
 # Health check (for Docker, Cloud Run uses HTTP probes)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import sys; sys.path.insert(0, 'src'); from server import mcp; print('healthy')" || exit 1
+    CMD python -c "from src.server import mcp; print('healthy')" || exit 1
 
 # Run the FastMCP server using the runner script
 CMD ["python", "run_server.py"]

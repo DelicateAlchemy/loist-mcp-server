@@ -7,9 +7,6 @@ import sys
 from pathlib import Path
 import uuid
 
-# Add the src directory to the path
-sys.path.insert(0, str(Path(__file__).parent / "src"))
-
 async def test_embed_with_mock_gcs():
     """Test embed page with mocked GCS responses"""
     try:

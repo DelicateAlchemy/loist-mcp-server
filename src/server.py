@@ -8,12 +8,6 @@ import sys
 import time
 from pathlib import Path
 
-# Add parent directory to Python path for imports (needed for Docker)
-# When running from /app/src/server.py, this ensures /app is on the path
-app_dir = Path(__file__).parent.parent
-if str(app_dir) not in sys.path:
-    sys.path.insert(0, str(app_dir))
-
 import logging
 from contextlib import asynccontextmanager
 from typing import Optional
