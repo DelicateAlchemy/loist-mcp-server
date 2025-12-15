@@ -162,24 +162,26 @@ class LoistRequestHandler(RequestHandler):
                 logger.info(f"🎵 Calling shared audio processing for task {task.id}")
                 result = await process_audio_shared(shared_request)
                 
-                # Mark task as completed with result artifact
+                # Mark task as completed and store results in metadata
                 task.status = TaskStatus(state=TaskState.completed)
-                task.artifacts = [self._create_success_artifact(result)]
-                # Store bidirectional link: audio_track_id in task metadata
-                task.metadata = {"audio_track_id": result.audio_id}
+                # Store audio processing results in task metadata (SDK-compliant approach)
+                task.metadata = {
+                    "audio_track_id": result.audio_id,
+                    "processing_result": result.model_dump() if hasattr(result, 'model_dump') else result
+                }
                 logger.info(f"✅ Audio processing completed for task {task.id}, audio_id: {result.audio_id}")
                 
             except SharedAudioProcessingError as e:
                 # Handle shared processing errors
                 logger.error(f"❌ Audio processing failed for task {task.id}: {e.message}")
                 task.status = TaskStatus(state=TaskState.failed, message=e.message)
-                task.artifacts = [self._create_error_artifact(e)]
-                
+                task.metadata = {"error": e.to_dict() if hasattr(e, 'to_dict') else {"message": str(e)}}
+
             except Exception as e:
                 # Handle unexpected errors
                 logger.exception(f"❌ Unexpected error processing task {task.id}: {e}")
                 task.status = TaskStatus(state=TaskState.failed, message=f"Unexpected error: {str(e)}")
-                task.artifacts = [self._create_error_artifact(e)]
+                task.metadata = {"error": {"message": str(e), "type": type(e).__name__}}
 
             # Save final task state with artifacts
             try:
@@ -215,7 +217,7 @@ class LoistRequestHandler(RequestHandler):
         Returns:
             Task or None: Task object if found, None otherwise
         """
-        task_id = params.task_id
+        task_id = params.id
         logger.info(f"📋 Processing tasks/get request for task {task_id}")
 
         # Create exception context for this operation
@@ -323,22 +325,3 @@ class LoistRequestHandler(RequestHandler):
         """Set push notification config for a task. MVP implementation."""
         raise NotImplementedError("Push notifications not implemented in MVP")
 
-    def _create_success_artifact(self, result) -> dict:
-        """Create success artifact from processing result."""
-        return {
-            "type": "audio_processing_result",
-            "audio_id": result.audio_id,
-            "metadata": result.metadata.model_dump() if hasattr(result.metadata, 'model_dump') else result.metadata,
-            "resources": result.resources.model_dump() if hasattr(result.resources, 'model_dump') else result.resources,
-            "processing_time": result.processing_time
-        }
-
-    def _create_error_artifact(self, error: Exception) -> dict:
-        """Create error artifact from exception."""
-        if hasattr(error, 'to_dict'):
-            return {"type": "audio_processing_error", **error.to_dict()}
-        return {
-            "type": "audio_processing_error",
-            "message": str(error),
-            "error_type": type(error).__name__
-        }
