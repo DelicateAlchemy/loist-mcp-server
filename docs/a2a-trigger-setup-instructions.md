@@ -24,6 +24,7 @@
 4. Under **Configuration**:
    - Change from **"Autodetect"** to **"Cloud Build configuration file (yaml or json)"**
    - Set **Cloud Build configuration file location**: `cloudbuild-a2a-staging.yaml`
+   - **IMPORTANT**: Make sure the path is just `cloudbuild-a2a-staging.yaml` (at repository root), NOT `loist-mcp-server/cloudbuild-a2a-staging.yaml`
 5. Click **"Save"**
 
 ### A2A Staging Trigger (If Creating New)
@@ -59,6 +60,7 @@
 4. Under **Configuration**:
    - Change from **"Autodetect"** to **"Cloud Build configuration file (yaml or json)"**
    - Set **Cloud Build configuration file location**: `cloudbuild-a2a-prod.yaml`
+   - **IMPORTANT**: Make sure the path is just `cloudbuild-a2a-prod.yaml` (at repository root), NOT `loist-mcp-server/cloudbuild-a2a-prod.yaml`
 5. Click **"Save"**
 
 ### A2A Production Trigger (If Creating New)
