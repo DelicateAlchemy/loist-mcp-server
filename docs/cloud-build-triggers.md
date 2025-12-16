@@ -51,7 +51,7 @@ The project uses GitHub-connected Cloud Build triggers for automated CI/CD deplo
 
 **Configuration**:
 - **Branch Pattern**: `^main$` (main branch only)
-- **Path Filter**: `src/a2a_server/**` (only A2A code changes)
+- **Path Filter**: `src/a2a_server/**,cloudbuild-a2a-prod.yaml` (A2A code or config changes)
 - **Build Config**: `cloudbuild-a2a-prod.yaml`
 - **Service Account**: `loist-music-library-sa@loist-music-library.iam.gserviceaccount.com`
 - **Approval**: Not required (automated deployment)
@@ -68,7 +68,7 @@ The project uses GitHub-connected Cloud Build triggers for automated CI/CD deplo
 
 **Configuration**:
 - **Branch Pattern**: `^dev$` (dev branch only)
-- **Path Filter**: `src/a2a_server/**` (only A2A code changes)
+- **Path Filter**: `src/a2a_server/**,cloudbuild-a2a-staging.yaml` (A2A code or config changes)
 - **Build Config**: `cloudbuild-a2a-staging.yaml`
 - **Service Account**: `loist-music-library-sa@loist-music-library.iam.gserviceaccount.com`
 - **Approval**: Not required (automated deployment)
@@ -115,7 +115,7 @@ Push to dev → GitHub webhook → Cloud Build trigger → Build image → Deplo
 Push to main (A2A code) → GitHub webhook → Cloud Build trigger → Build A2A image → Deploy to Cloud Run (a2a-prod)
 ```
 
-1. Developer pushes A2A code changes to `main` branch (`src/a2a_server/**`)
+1. Developer pushes A2A code or config changes to `main` branch (`src/a2a_server/**` or `cloudbuild-a2a-prod.yaml`)
 2. GitHub sends webhook to Cloud Build
 3. Cloud Build executes `cloudbuild-a2a-prod.yaml`:
    - Builds Docker image with `--target a2a`
@@ -129,7 +129,7 @@ Push to main (A2A code) → GitHub webhook → Cloud Build trigger → Build A2A
 Push to dev (A2A code) → GitHub webhook → Cloud Build trigger → Build A2A image → Deploy to Cloud Run (a2a-staging)
 ```
 
-1. Developer pushes A2A code changes to `dev` branch (`src/a2a_server/**`)
+1. Developer pushes A2A code or config changes to `dev` branch (`src/a2a_server/**` or `cloudbuild-a2a-staging.yaml`)
 2. GitHub sends webhook to Cloud Build
 3. Cloud Build executes `cloudbuild-a2a-staging.yaml`:
    - Builds Docker image with `--target a2a`
