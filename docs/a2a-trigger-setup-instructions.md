@@ -13,7 +13,20 @@
 
 ## Manual Setup via Cloud Console
 
-### A2A Staging Trigger
+### ⚠️ IMPORTANT: Fix Existing A2A Staging Trigger
+
+**Issue**: The trigger was created with `autodetect: true` and is using the wrong config file (`cloudbuild.yaml` instead of `cloudbuild-a2a-staging.yaml`).
+
+**Fix**:
+1. Go to [Cloud Build Triggers](https://console.cloud.google.com/cloud-build/triggers?project=loist-music-library)
+2. Click on **`a2a-staging-deployment`** trigger
+3. Click **"Edit"**
+4. Under **Configuration**:
+   - Change from **"Autodetect"** to **"Cloud Build configuration file (yaml or json)"**
+   - Set **Cloud Build configuration file location**: `cloudbuild-a2a-staging.yaml`
+5. Click **"Save"**
+
+### A2A Staging Trigger (If Creating New)
 
 1. Go to [Cloud Build Triggers](https://console.cloud.google.com/cloud-build/triggers?project=loist-music-library)
 2. Click **"Create Trigger"**
@@ -25,7 +38,7 @@
      - Repository: `DelicateAlchemy/loist-mcp-server`
      - Branch: `^dev$`
    - **Configuration**: 
-     - Type: Cloud Build configuration file
+     - **IMPORTANT**: Select **"Cloud Build configuration file (yaml or json)"** (NOT "Autodetect")
      - Location: Repository
      - Cloud Build configuration file location: `cloudbuild-a2a-staging.yaml`
    - **Advanced** → **Included files filter**: 
@@ -35,7 +48,20 @@
    - **Require approval**: Unchecked
 4. Click **"Create"**
 
-### A2A Production Trigger
+### ⚠️ IMPORTANT: Fix Existing A2A Production Trigger
+
+**Issue**: The trigger may have been created with `autodetect: true` and could be using the wrong config file.
+
+**Fix**:
+1. Go to [Cloud Build Triggers](https://console.cloud.google.com/cloud-build/triggers?project=loist-music-library)
+2. Click on **`a2a-prod-deployment`** trigger
+3. Click **"Edit"**
+4. Under **Configuration**:
+   - Change from **"Autodetect"** to **"Cloud Build configuration file (yaml or json)"**
+   - Set **Cloud Build configuration file location**: `cloudbuild-a2a-prod.yaml`
+5. Click **"Save"**
+
+### A2A Production Trigger (If Creating New)
 
 1. Go to [Cloud Build Triggers](https://console.cloud.google.com/cloud-build/triggers?project=loist-music-library)
 2. Click **"Create Trigger"**
@@ -47,7 +73,7 @@
      - Repository: `DelicateAlchemy/loist-mcp-server`
      - Branch: `^main$`
    - **Configuration**: 
-     - Type: Cloud Build configuration file
+     - **IMPORTANT**: Select **"Cloud Build configuration file (yaml or json)"** (NOT "Autodetect")
      - Location: Repository
      - Cloud Build configuration file location: `cloudbuild-a2a-prod.yaml`
    - **Advanced** → **Included files filter**: 
