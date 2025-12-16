@@ -103,6 +103,7 @@ async def get_task_store(database_url: Optional[str] = None, exception_handler: 
     Convenience function to get configured task store.
 
     Uses DATABASE_URL environment variable if no URL provided.
+    Falls back to constructing URL from DB_* environment variables (same logic as database/pool.py).
 
     Args:
         database_url: Optional database URL override
@@ -127,8 +128,27 @@ async def get_task_store(database_url: Optional[str] = None, exception_handler: 
     if not database_url:
         database_url = os.getenv("DATABASE_URL")
 
+    # If DATABASE_URL not set, construct from individual DB_* environment variables
+    # (same logic as database/pool.py for consistency)
     if not database_url:
-        error = ValueError("Database URL not provided and DATABASE_URL environment variable not set")
+        db_host = os.getenv("DB_HOST")
+        db_port = os.getenv("DB_PORT", "5432")
+        db_name = os.getenv("DB_NAME")
+        db_user = os.getenv("DB_USER")
+        db_password = os.getenv("DB_PASSWORD")
+        db_connection_name = os.getenv("DB_CONNECTION_NAME")
+
+        # PRIORITY 1: Cloud SQL Proxy connection (preferred for Cloud Run)
+        if db_connection_name and db_name and db_user and db_password:
+            logger.info(f"✅ Constructing Cloud SQL Proxy URL from environment variables: {db_connection_name}")
+            database_url = f"postgresql://{db_user}:{db_password}@/{db_name}?host=/cloudsql/{db_connection_name}"
+        # PRIORITY 2: Direct connection via individual components (fallback)
+        elif db_host and db_name and db_user and db_password:
+            logger.info(f"✅ Constructing direct database URL from environment variables: {db_host}:{db_port}")
+            database_url = f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
+
+    if not database_url:
+        error = ValueError("Database URL not provided and DATABASE_URL environment variable not set. Also checked DB_CONNECTION_NAME, DB_NAME, DB_USER, DB_PASSWORD, and DB_HOST environment variables.")
         exception_handler.handle_and_raise(error, exc_context)
 
     # Basic validation
