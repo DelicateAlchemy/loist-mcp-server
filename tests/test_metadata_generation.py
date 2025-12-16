@@ -9,10 +9,6 @@ import json
 from bs4 import BeautifulSoup
 from unittest.mock import Mock, patch
 from pathlib import Path
-import sys
-
-# Add src to path for imports
-sys.path.append(str(Path(__file__).parent.parent / "src"))
 
 from starlette.templating import Jinja2Templates
 from starlette.requests import Request

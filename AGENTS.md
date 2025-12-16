@@ -38,6 +38,15 @@
 - **VERIFY** container health before operations
 - **USE** `docker-compose logs -f mcp-server` for debugging
 
+### Testing (CRITICAL)
+- **ALWAYS** run tests inside Docker: `docker-compose exec mcp-server pytest tests/ -v`
+- **NEVER** use local venv for testing (outdated dependencies, wrong paths)
+- **NEVER** add `sys.path.insert/append` calls in test files or source code
+- **ALWAYS** use standard imports: `from src.exceptions import ...` (NOT `from exceptions import ...`)
+- **ALWAYS** put test files in `tests/` directory (NEVER in `src/` or project root)
+- Configuration is in `pyproject.toml` (NOT `pytest.ini`)
+- **VERIFY** imports work: `docker-compose exec mcp-server python -c "from src.server import mcp"`
+
 ### Documentation Management
 - **UPDATE** README.md for high-impact changes (new features, breaking changes, installation changes)
 - **CREATE** separate docs/ files for detailed content (>500 words, technical depth, reference material)
@@ -115,9 +124,16 @@ docker-compose logs -f mcp-server
 curl http://localhost:8080/health/ready
 curl http://localhost:8080/health/database
 
-# Testing
-pytest tests/ -v
-pytest --cov=src --cov-report=html
+# Testing (ALWAYS use Docker)
+docker-compose exec mcp-server pytest tests/ -v
+docker-compose exec mcp-server pytest tests/ -m unit -v
+docker-compose exec mcp-server pytest tests/ --cov=src --cov-report=term-missing
+
+# Verify imports work
+docker-compose exec mcp-server python -c "from src.server import mcp; print('OK')"
+
+# Rebuild after code changes
+docker-compose up -d --build
 ```
 
 ## Related Documentation

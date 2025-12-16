@@ -273,48 +273,41 @@ The project implements a multi-layer testing approach with comprehensive pytest 
 
 #### Quick Start
 
-1. **Install development dependencies**:
+1. **Start all services**:
    ```bash
-   pip install -r requirements-dev.txt
+   docker-compose up -d
    ```
 
-2. **Start database service**:
+2. **Run tests** (always inside Docker):
    ```bash
-   docker-compose up -d postgres
+   docker-compose exec mcp-server pytest tests/ -v
    ```
 
-3. **Run tests**:
-   ```bash
-   # Using helper script (recommended)
-   ./scripts/run-tests.sh
-
-   # Or directly with pytest
-   pytest tests/ -v
-   ```
+> ⚠️ **IMPORTANT**: Always run tests inside Docker. The local venv is outdated.
 
 #### Test Categories
 
-- **Unit Tests**: `pytest -m unit` (fast, no external dependencies)
-- **Integration Tests**: `pytest -m integration` (requires database)
-- **Database Tests**: `pytest -m requires_db` (requires PostgreSQL running)
-- **GCS Tests**: `pytest -m requires_gcs` (requires GCS credentials)
+- **Unit Tests**: `docker-compose exec mcp-server pytest tests/ -m unit -v`
+- **Integration Tests**: `docker-compose exec mcp-server pytest tests/ -m integration -v`
+- **Database Tests**: `docker-compose exec mcp-server pytest tests/ -m requires_db -v`
+- **GCS Tests**: `docker-compose exec mcp-server pytest tests/ -m requires_gcs -v`
 
 #### Test Execution
 
-**Important**: Tests run **locally** (not in Docker container). The database service runs in Docker.
+**Important**: Tests run **inside Docker** with correct dependencies and PYTHONPATH configuration.
 
 ```bash
 # All tests
-pytest tests/ -v
+docker-compose exec mcp-server pytest tests/ -v
 
 # Unit tests only (fast, no database)
-pytest -m unit -v
+docker-compose exec mcp-server pytest tests/ -m unit -v
 
 # Integration tests (requires database)
-pytest -m integration -v
+docker-compose exec mcp-server pytest tests/ -m integration -v
 
 # With coverage
-pytest --cov=src --cov-report=html tests/
+docker-compose exec mcp-server pytest tests/ --cov=src --cov-report=term-missing
 ```
 
 #### Test Infrastructure
@@ -356,17 +349,17 @@ Comprehensive documentation is available in the `docs/` directory:
 ### Key Development Commands
 
 ```bash
-# Run full test suite
-pytest
+# Run full test suite (inside Docker)
+docker-compose exec mcp-server pytest tests/ -v
 
 # Run with performance monitoring
-pytest --durations=10
+docker-compose exec mcp-server pytest tests/ --durations=10
 
 # Run database integration tests
-pytest tests/test_database_operations_integration.py
+docker-compose exec mcp-server pytest tests/test_database_operations_integration.py -v
 
 # Generate coverage report
-pytest --cov=src --cov-report=html && open htmlcov/index.html
+docker-compose exec mcp-server pytest tests/ --cov=src --cov-report=term-missing
 
 # Run security scanning
 ./scripts/security-scan.sh
@@ -952,18 +945,20 @@ uv pip install -e ".[dev]"
 
 ### Running Tests
 
+> ⚠️ **IMPORTANT**: Always run tests inside Docker. The local venv is outdated.
+
 ```bash
-# Install testing dependencies first (if not already installed)
-pip install pytest pytest-asyncio pytest-mock pytest-cov
+# Start services first
+docker-compose up -d
 
 # Run all tests
-pytest tests/
+docker-compose exec mcp-server pytest tests/ -v
 
 # Run tests with coverage report
-pytest --cov=src --cov-report=html
+docker-compose exec mcp-server pytest tests/ --cov=src --cov-report=term-missing
 
 # Run specific test file
-pytest tests/test_process_audio_complete.py
+docker-compose exec mcp-server pytest tests/test_process_audio_complete.py -v
 ```
 
 ### Code Quality & Static Analysis

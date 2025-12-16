@@ -33,6 +33,7 @@ def save_audio_metadata(
     audio_gcs_path: str,
     thumbnail_gcs_path: Optional[str] = None,
     track_id: Optional[str] = None,
+    a2a_task_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Save audio metadata to PostgreSQL database.
@@ -57,6 +58,10 @@ def save_audio_metadata(
         audio_gcs_path: Full GCS path (gs://bucket/path) to audio file
         thumbnail_gcs_path: Optional GCS path to thumbnail/artwork
         track_id: Optional UUID string for the track (generates new if None)
+        a2a_task_id: Optional A2A task ID (UUID) for linking audio track to A2A task.
+            Must be a valid UUID format. Links to SDK-managed a2a_tasks table.
+            No foreign key constraint exists - referential integrity enforced at
+            application level. Only populated for audio tracks processed via A2A endpoints.
     
     Returns:
         Dictionary containing the saved track information:
@@ -134,6 +139,13 @@ def save_audio_metadata(
         except ValueError:
             raise ValidationError(f"Invalid track_id format: {track_id}")
     
+    # Validate a2a_task_id UUID format if provided
+    if a2a_task_id is not None:
+        try:
+            uuid.UUID(a2a_task_id)
+        except ValueError:
+            raise ValidationError(f"Invalid a2a_task_id format: {a2a_task_id}")
+    
     # Prepare data for insertion
     insert_data = {
         'id': track_id,
@@ -158,6 +170,8 @@ def save_audio_metadata(
         'isrc': metadata.get('isrc'),
         # Filename preservation
         'original_filename': metadata.get('original_filename'),
+        # A2A task linking
+        'a2a_task_id': a2a_task_id,
     }
     
     # Execute insert with transaction management
@@ -170,20 +184,20 @@ def save_audio_metadata(
                         id, status, artist, title, album, genre, year,
                         duration_seconds, channels, sample_rate, bitrate,
                         format, file_size_bytes, audio_gcs_path, thumbnail_gcs_path,
-                        composer, publisher, record_label, isrc, original_filename
+                        composer, publisher, record_label, isrc, original_filename, a2a_task_id
                     ) VALUES (
                         %(id)s, %(status)s, %(artist)s, %(title)s, %(album)s,
                         %(genre)s, %(year)s, %(duration_seconds)s, %(channels)s,
                         %(sample_rate)s, %(bitrate)s, %(format)s, %(file_size_bytes)s,
                         %(audio_gcs_path)s, %(thumbnail_gcs_path)s,
                         %(composer)s, %(publisher)s, %(record_label)s, %(isrc)s,
-                        %(original_filename)s
+                        %(original_filename)s, %(a2a_task_id)s
                     )
                     RETURNING
                         id, status, artist, title, album, genre, year,
                         duration_seconds, channels, sample_rate, bitrate,
                         format, file_size_bytes, audio_gcs_path, thumbnail_gcs_path,
-                        composer, publisher, record_label, isrc, original_filename,
+                        composer, publisher, record_label, isrc, original_filename, a2a_task_id,
                         created_at, updated_at
                 """
                 

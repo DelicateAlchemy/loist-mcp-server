@@ -68,12 +68,83 @@ services:
     restart: unless-stopped
     
     healthcheck:
-      test: ["CMD", "python", "-c", "import sys; sys.path.insert(0, 'src'); from server import mcp; print('healthy')"]
+      test: ["CMD", "python", "-c", "from src.server import mcp; print('healthy')"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
-    
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    networks:
+      - mcp-network
+
+  # A2A HTTP Server (Agent-to-Agent protocol)
+  a2a-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: music-library-a2a
+    ports:
+      - "8081:8081"
+    environment:
+      # Server Configuration
+      - SERVER_HOST=0.0.0.0
+      - SERVER_PORT=8081
+      - PORT=8081  # For uvicorn compatibility
+
+      # Logging
+      - LOG_LEVEL=DEBUG
+      - LOG_FORMAT=text
+
+      # Database Configuration (shared with MCP server)
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=loist_mvp
+      - DB_USER=loist_user
+      - DB_PASSWORD=dev_password
+      - DATABASE_URL=postgresql://loist_user:dev_password@postgres:5432/loist_mvp
+
+      # Python
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+
+      # Google Cloud Storage Configuration (shared with MCP server)
+      - GCS_BUCKET_NAME=loist-mvp-audio-files
+      - GCS_PROJECT_ID=loist-mvp-dev
+      - GCS_REGION=us-central1
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/service-account-key.json
+
+    volumes:
+      # Mount source code for live development
+      - ./src:/app/src
+      # Mount database migrations and config
+      - ./database:/app/database:ro
+      # Mount tests for live testing during development
+      - ./tests:/app/tests:ro
+      # Mount for local storage
+      - ./storage:/app/storage
+      # Mount GCS service account key for local testing
+      - ./service-account-key.json:/app/service-account-key.json:ro
+
+    command: python -m src.a2a_server.app
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8081/.well-known/agent-card.json').raise_for_status()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
     networks:
       - mcp-network
 
@@ -89,6 +160,12 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U loist_user -d loist_mvp"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
     networks:
       - mcp-network
 

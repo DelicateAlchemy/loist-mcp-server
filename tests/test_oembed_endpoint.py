@@ -16,10 +16,6 @@ from starlette.testclient import TestClient
 from starlette.responses import JSONResponse
 
 # Import the server module to test
-import sys
-from pathlib import Path
-sys.path.append(str(Path(__file__).parent.parent / "src"))
-
 from server import mcp
 
 

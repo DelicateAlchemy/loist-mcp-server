@@ -9,11 +9,6 @@ import datetime
 from pathlib import Path
 from unittest.mock import MagicMock
 
-# Add the src directory to Python path
-parent_dir = Path(__file__).parent
-if str(parent_dir) not in sys.path:
-    sys.path.insert(0, str(parent_dir))
-
 # Import the actual server components
 from src.server import mcp
 from src.exceptions import (

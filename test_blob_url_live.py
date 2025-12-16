@@ -7,10 +7,6 @@ import sys
 import os
 from pathlib import Path
 
-# Add project root to Python path
-project_root = Path(__file__).parent
-sys.path.insert(0, str(project_root))
-
 # Set up environment like run_server.py does
 if not os.getenv('GOOGLE_CLOUD_PROJECT'):
     os.environ.setdefault('DATABASE_URL', 'postgresql://loist_user:dev_password@localhost:5432/loist_mvp')

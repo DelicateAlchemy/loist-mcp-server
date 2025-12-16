@@ -7,9 +7,6 @@ import sys
 from pathlib import Path
 import uuid
 
-# Add the src directory to the path
-sys.path.insert(0, str(Path(__file__).parent / "src"))
-
 async def test_audio_metadata_extraction():
     """Test metadata extraction without GCS upload"""
     try:

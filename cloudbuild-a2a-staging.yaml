@@ -1,0 +1,387 @@
+# Google Cloud Build Configuration for A2A Staging Environment
+# Optimized staging deployment for A2A agent server: Test → Build → Push → Deploy
+# Triggered on dev branch changes to src/a2a_server/**
+
+steps:
+  # Step 1: Run Unit Tests (A2A Staging)
+  - name: 'python:3.11-slim'
+    id: 'run-unit-tests'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "🧪 Running unit tests (A2A staging)..."
+
+        # Install system dependencies for testing
+        apt-get update && apt-get install -y --no-install-recommends \
+          build-essential \
+          && rm -rf /var/lib/apt/lists/*
+
+        # Install Python dependencies
+        pip install --upgrade pip
+        pip install -r requirements.txt
+
+        # Install test dependencies
+        pip install pytest-cov pytest-xdist pytest-html
+
+        # Create test results directory
+        mkdir -p test-results/unit coverage-reports
+
+        # Run unit tests only (relaxed threshold for staging)
+        echo "📊 Running unit tests (A2A staging)..."
+        python -m pytest \
+          -m "not (requires_db or requires_gcs or slow)" \
+          --cov=. \
+          --cov-report=html:coverage-reports/htmlcov \
+          --cov-report=xml:coverage-reports/coverage.xml \
+          --cov-report=term-missing \
+          --cov-fail-under=65 \
+          --junitxml=test-results/unit/junit.xml \
+          --html=test-results/unit/pytest-report.html \
+          --self-contained-html \
+          -v \
+          --tb=short \
+          --strict-markers \
+          --disable-warnings \
+          --maxfail=10 \
+          --durations=10 \
+          tests/
+
+        # Store test exit code
+        test_result=$?
+        echo "Unit test exit code: $test_result"
+
+        # Generate test summary
+        cat > test-results/unit/test-summary.json << EOF
+        {
+          "timestamp": "$(date -Iseconds)",
+          "commit": "$COMMIT_SHA",
+          "branch": "dev",
+          "environment": "a2a-staging",
+          "test_suite": "unit",
+          "test_results": {
+            "exit_code": "$test_result",
+            "coverage_required": 65,
+            "tests_run": "unit_only"
+          }
+        }
+        EOF
+
+        # For staging, only warn on test failures (don't block deployment)
+        if [ "$test_result" -ne 0 ]; then
+          echo "⚠️ Unit tests failed with exit code $test_result (A2A staging - continuing deployment)"
+          echo "Check test artifacts for details"
+        else
+          echo "✅ Unit tests passed successfully"
+        fi
+
+  # Step 1.5: Run Database Tests with TestContainers (A2A Staging)
+  - name: 'python:3.11-slim'
+    id: 'run-database-tests'
+    entrypoint: 'bash'
+    env:
+      - 'DOCKER_HOST=unix:///var/run/docker.sock'
+    args:
+      - '-c'
+      - |
+        echo "🗄️ Running database tests with testcontainers (A2A staging)..."
+
+        # Install system dependencies
+        apt-get update && apt-get install -y --no-install-recommends \
+          build-essential \
+          docker.io \
+          && rm -rf /var/lib/apt/lists/*
+
+        # Start Docker daemon
+        service docker start
+        sleep 5
+
+        # Install Python dependencies
+        pip install --upgrade pip
+        pip install -r requirements.txt
+
+        # Install database testing dependencies
+        pip install testcontainers[postgresql] pytest-cov pytest-html
+
+        # Create test results directory
+        mkdir -p test-results/database coverage-reports
+
+        # Run database tests with testcontainers (relaxed threshold for staging)
+        echo "📊 Running database integration tests (A2A staging)..."
+        python -m pytest \
+          -m "requires_db" \
+          --cov=. \
+          --cov-report=html:coverage-reports/db-htmlcov \
+          --cov-report=xml:coverage-reports/db-coverage.xml \
+          --cov-report=term-missing \
+          --cov-fail-under=60 \
+          --junitxml=test-results/database/junit.xml \
+          --html=test-results/database/pytest-report.html \
+          --self-contained-html \
+          -v \
+          --tb=short \
+          --strict-markers \
+          --disable-warnings \
+          --maxfail=5 \
+          --durations=15 \
+          tests/
+
+        # Store test exit code
+        test_result=$?
+        echo "Database test exit code: $test_result"
+
+        # Generate test summary
+        cat > test-results/database/test-summary.json << EOF
+        {
+          "timestamp": "$(date -Iseconds)",
+          "commit": "$COMMIT_SHA",
+          "branch": "dev",
+          "environment": "a2a-staging",
+          "test_suite": "database",
+          "test_results": {
+            "exit_code": "$test_result",
+            "coverage_required": 60,
+            "tests_run": "database_integration"
+          }
+        }
+        EOF
+
+        # For staging, only warn on test failures (don't block deployment)
+        if [ "$test_result" -ne 0 ]; then
+          echo "⚠️ Database tests failed with exit code $test_result (A2A staging - continuing deployment)"
+          echo "Check test artifacts for details"
+        else
+          echo "✅ Database tests passed successfully"
+        fi
+
+  # Step 2: Run Static Analysis and Code Quality Checks (A2A Staging)
+  - name: 'python:3.11-slim'
+    id: 'static-analysis'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        echo "🔍 Running static analysis and code quality checks (A2A staging)..."
+
+        # Install system dependencies
+        apt-get update && apt-get install -y --no-install-recommends \
+          build-essential \
+          && rm -rf /var/lib/apt/lists/*
+
+        # Install Python dependencies
+        pip install --upgrade pip
+        pip install -r requirements.txt
+
+        # Install static analysis tools
+        pip install mypy flake8 black isort pylint bandit
+
+        # Create analysis results directory
+        mkdir -p analysis-results
+
+        echo "📏 Running code formatting checks..."
+        # Check black formatting (don't auto-fix in CI)
+        python -m black --check --diff --color src/ tests/ scripts/
+
+        echo "🔧 Running import sorting checks..."
+        # Check import sorting
+        python -m isort --check-only --diff --color src/ tests/ scripts/
+
+        echo "🐍 Running type checking..."
+        # Run mypy type checking
+        python -m mypy src/ --config-file mypy.ini
+
+        echo "🎯 Running code quality checks..."
+        # Run flake8
+        python -m flake8 src/ tests/ --config .flake8
+
+        echo "🛡️ Running security scanning..."
+        # Run bandit security scanning
+        python -m bandit -r src/ -f json -o analysis-results/security-scan.json
+
+        echo "📊 Generating analysis summary..."
+        cat > analysis-results/analysis-summary.json << EOF
+        {
+          "timestamp": "$(date -Iseconds)",
+          "commit": "$COMMIT_SHA",
+          "branch": "dev",
+          "environment": "a2a-staging",
+          "tools_run": ["black", "isort", "mypy", "flake8", "bandit"]
+        }
+        EOF
+
+        echo "✅ Static analysis completed successfully"
+
+  # Step 3: Build Docker image with A2A target
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-image'
+    args: [
+      'build',
+      # Target A2A stage
+      '--target', 'a2a',
+      # Enable BuildKit for better performance and caching
+      '--build-arg', 'BUILDKIT_INLINE_CACHE=1',
+      # Use cache from previous A2A builds
+      '--cache-from', 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/a2a-staging:latest',
+      # Enable BuildKit cache mounts for faster builds
+      '--build-arg', 'BUILDKIT_PROGRESS=plain',
+      # Optimized tagging: commit SHA and latest only
+      '-t', 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/a2a-staging:${_COMMIT_SHA}',
+      '-t', 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/a2a-staging:latest',
+      # Build context
+      '.'
+    ]
+    env:
+      - 'DOCKER_BUILDKIT=1'
+    timeout: '600s'
+
+  # Step 4: Store Test Artifacts and Reports (A2A Staging)
+  - name: 'gcr.io/cloud-builders/gsutil'
+    id: 'store-artifacts'
+    args: [
+      '-m', 'cp', '-r',
+      'test-results/',
+      'coverage-reports/',
+      'analysis-results/',
+      'gs://$PROJECT_ID-build-artifacts-a2a-staging/$COMMIT_SHA/'
+    ]
+    waitFor: ['run-unit-tests', 'run-database-tests', 'static-analysis']
+    allowFailure: true  # Don't fail build if artifact upload fails
+
+  # Step 5: Push Docker image to Google Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'push-image'
+    args: ['push', '--all-tags', 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/a2a-staging']
+    waitFor: ['build-image']
+
+  # Step 6: Ensure staging database exists
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'create-staging-db'
+    entrypoint: 'bash'
+    args: ['scripts/create-staging-database.sh']
+    env:
+      - 'CLOUDSDK_CORE_PROJECT=loist-music-library'
+
+  # Step 7: Run Database Migrations
+  - name: 'python:3.11-slim'
+    id: 'run-migrations'
+    entrypoint: 'bash'
+    secretEnv: ['DB_PASSWORD_STAGING', 'DB_CONNECTION_NAME_STAGING']
+    args:
+      - '-c'
+      - |
+        echo "🗄️ Running database migrations for A2A staging..."
+
+        # Install dependencies
+        apt-get update && apt-get install -y --no-install-recommends \
+          wget \
+          ca-certificates \
+          && rm -rf /var/lib/apt/lists/*
+
+        # Install Python dependencies for migrations
+        pip install --upgrade pip
+        pip install psycopg2-binary
+
+        # Download Cloud SQL Auth Proxy
+        echo "📥 Downloading Cloud SQL Auth Proxy..."
+        wget -q https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.20.0/cloud-sql-proxy.linux.amd64 -O /cloud-sql-proxy
+        chmod +x /cloud-sql-proxy
+
+        # Start Cloud SQL Proxy in background
+        echo "🔌 Starting Cloud SQL Proxy..."
+        /cloud-sql-proxy --port=5432 "$$DB_CONNECTION_NAME_STAGING" &
+        PROXY_PID=$$!
+
+        # Wait for proxy to be ready
+        echo "⏳ Waiting for Cloud SQL Proxy..."
+        sleep 10
+
+        # Run migrations
+        echo "🚀 Running migrations..."
+
+        # Construct DATABASE_URL for the migration script
+        export DATABASE_URL="postgresql://music_library_user:$$DB_PASSWORD_STAGING@127.0.0.1:5432/loist_mvp_staging"
+
+        # Run the Python migration script
+        python database/migrate.py --action=up
+        migration_result=$$?
+
+        # Show migration status
+        echo "📋 Migration status:"
+        python database/migrate.py --action=status || true
+
+        # Clean up proxy
+        kill $$PROXY_PID 2>/dev/null || true
+
+        if [ $$migration_result -eq 0 ]; then
+          echo "✅ Migrations completed successfully"
+        else
+          echo "⚠️ Migration failed with exit code $$migration_result"
+          echo "Continuing deployment anyway (migrations may already be applied)"
+        fi
+    waitFor: ['create-staging-db']
+
+  # Step 8: Deploy to A2A staging Cloud Run
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'deploy-a2a-staging'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'a2a-staging'
+      - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/a2a-staging:${_COMMIT_SHA}'
+      - '--region=us-central1'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--memory=1Gi'  # Smaller resources for staging
+      - '--cpu=1'
+      - '--timeout=300s'
+      - '--concurrency=40'
+      - '--max-instances=3'
+      - '--min-instances=0'
+      - '--port=8081'
+      # Health check: use Agent Card endpoint with enhanced reliability parameters
+      - '--liveness-probe=httpGet.path=/.well-known/agent-card.json,httpGet.port=8081,initialDelaySeconds=0,failureThreshold=3,timeoutSeconds=1,periodSeconds=60'
+      # Explicit command override to ensure correct startup
+      - '--command=/usr/local/bin/python'
+      - '--args=/app/src/a2a_server/app.py'
+      # Set environment variables
+      - '--set-env-vars=LOG_LEVEL=DEBUG,AUTH_ENABLED=false,GOOGLE_CLOUD_PROJECT=$PROJECT_ID'
+      - '--set-env-vars=GCS_PROJECT_ID=$PROJECT_ID,GCS_REGION=us-central1,GCS_SIGNED_URL_EXPIRATION=900'
+      - '--set-env-vars=SERVER_HOST=0.0.0.0,SERVER_PORT=8081'
+      - '--set-env-vars=DB_NAME=loist_mvp_staging,DB_USER=music_library_user,DB_PORT=5432'
+      - '--service-account=mcp-music-library-sa@$PROJECT_ID.iam.gserviceaccount.com'
+      # Update secrets
+      - '--update-secrets=DB_CONNECTION_NAME=db-connection-name-staging:latest'
+      - '--update-secrets=DB_PASSWORD=db-password-staging:latest'
+      - '--update-secrets=GCS_BUCKET_NAME=gcs-bucket-name-staging:latest'
+      - '--update-secrets=BEARER_TOKEN=mcp-bearer-token-staging:latest'
+      - '--quiet'
+    waitFor: ['run-migrations']
+
+# Automatically tag and push images
+images:
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/a2a-staging:${_COMMIT_SHA}'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/a2a-staging:latest'
+
+# Build options and configuration
+options:
+  machineType: 'E2_HIGHCPU_8'  # Faster builds, same cost as default
+  logging: CLOUD_LOGGING_ONLY
+
+substitutions:
+  _COMMIT_SHA: 'local-test'
+
+# Build timeout
+timeout: '600s'  # 10 minutes
+
+tags:
+  - 'a2a-staging'
+  - 'a2a'
+  - 'staging'
+
+# Secrets for database migrations
+availableSecrets:
+  secretManager:
+    - versionName: projects/loist-music-library/secrets/db-password-staging/versions/latest
+      env: 'DB_PASSWORD_STAGING'
+    - versionName: projects/loist-music-library/secrets/db-connection-name-staging/versions/latest
+      env: 'DB_CONNECTION_NAME_STAGING'

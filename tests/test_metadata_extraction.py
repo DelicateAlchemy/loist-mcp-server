@@ -1224,7 +1224,8 @@ class TestMetadataQualityValidationAfterEnhancement:
 
     def test_quality_validation_with_title_allowed(self):
         """Test that files with titles pass validation even with low quality scores."""
-        from src.tools.process_audio import _validate_metadata_quality_after_enhancement
+        from src.business import audio_processor
+        _validate_metadata_quality_after_enhancement = audio_processor._validate_metadata_quality_after_enhancement
 
         # Low quality metadata but has title
         metadata = {
@@ -1242,7 +1243,8 @@ class TestMetadataQualityValidationAfterEnhancement:
 
     def test_quality_validation_without_title_fails(self):
         """Test that files without titles fail validation."""
-        from src.tools.process_audio import _validate_metadata_quality_after_enhancement
+        from src.business import audio_processor
+        _validate_metadata_quality_after_enhancement = audio_processor._validate_metadata_quality_after_enhancement
         from src.metadata.extractor import MetadataExtractionError
 
         # No title at all

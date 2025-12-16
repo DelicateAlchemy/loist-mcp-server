@@ -26,20 +26,20 @@ The `tests/` directory is organized to reflect the different types of testing:
 
 ### Prerequisites
 
-Ensure you have all the development dependencies installed:
+1. **Docker and Docker Compose** installed
+2. **Start the development environment**:
+   ```bash
+   docker-compose up -d
+   ```
 
-```bash
-# Make sure you are in the project's root directory
-# and have activated your virtual environment.
-pip install -r requirements-dev.txt
-```
+> ⚠️ **IMPORTANT**: Always run tests inside Docker. The local venv is outdated and has incorrect dependencies.
 
 ### Running All Tests
 
 To run the entire test suite, use the following command from the project root:
 
 ```bash
-pytest
+docker-compose exec mcp-server pytest tests/ -v
 ```
 
 ### Running Specific Tests
@@ -48,26 +48,25 @@ You can run tests in a specific directory or file:
 
 ```bash
 # Run all unit tests
-pytest tests/unit/
+docker-compose exec mcp-server pytest tests/unit/ -v
 
 # Run a specific test file
-pytest tests/integration/test_database_operations_integration.py
+docker-compose exec mcp-server pytest tests/integration/test_database_operations_integration.py -v
 
 # Run a specific test function by name
-pytest -k "test_search_library"
+docker-compose exec mcp-server pytest tests/ -k "test_search_library" -v
 ```
 
 ### Test Coverage
 
-To measure code coverage, use the `pytest-cov` plugin (included in `requirements-dev.txt`):
+To measure code coverage:
 
 ```bash
 # Run tests and generate a coverage report
-pytest --cov=src --cov=database
+docker-compose exec mcp-server pytest tests/ --cov=src --cov=database
 
-# For a more detailed HTML report:
-pytest --cov=src --cov=database --cov-report=html
-# Then open `htmlcov/index.html` in your browser.
+# For a more detailed terminal report:
+docker-compose exec mcp-server pytest tests/ --cov=src --cov=database --cov-report=term-missing
 ```
 
 ### Running Tests by Environment

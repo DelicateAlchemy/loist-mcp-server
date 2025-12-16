@@ -81,31 +81,31 @@ The tool executes the following stages in sequence:
 ```json
 {
   "success": true,
-  "audioId": "550e8400-e29b-41d4-a716-446655440000",
+  "audio_id": "550e8400-e29b-41d4-a716-446655440000",
   "metadata": {
-    "Product": {
-      "Artist": "The Beatles",
-      "Title": "Hey Jude",
-      "Album": "Hey Jude",
-      "MBID": null,
-      "Genre": ["Rock"],
-      "Year": 1968
+    "product": {
+      "artist": "The Beatles",
+      "title": "Hey Jude",
+      "album": "Hey Jude",
+      "mbid": null,
+      "genre": ["Rock"],
+      "year": 1968
     },
-    "Format": {
-      "Duration": 431.0,
-      "Channels": 2,
-      "Sample rate": 44100,
-      "Bitrate": 320000,
-      "Format": "MP3"
+    "format": {
+      "duration": 431.0,
+      "channels": 2,
+      "sample_rate": 44100,
+      "bitrate": 320000,
+      "format": "MP3"
     },
-    "urlEmbedLink": "https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000"
+    "url_embed_link": "https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000"
   },
   "resources": {
-    "audio": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/stream",
-    "thumbnail": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/thumbnail",
-    "waveform": null
+    "audio_url": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/stream",
+    "thumbnail_url": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/thumbnail",
+    "waveform_url": null
   },
-  "processingTime": 2.45
+  "processing_time": 2.45
 }
 ```
 
@@ -152,9 +152,9 @@ result = await process_audio_complete({
 })
 
 if result["success"]:
-    print(f"Audio ID: {result['audioId']}")
-    print(f"Artist: {result['metadata']['Product']['Artist']}")
-    print(f"Title: {result['metadata']['Product']['Title']}")
+    print(f"Audio ID: {result['audio_id']}")
+    print(f"Artist: {result['metadata']['product']['artist']}")
+    print(f"Title: {result['metadata']['product']['title']}")
 else:
     print(f"Error: {result['error']} - {result['message']}")
 ```
@@ -250,7 +250,7 @@ source = {
 result = await process_audio_complete(input_data)
 
 if result["success"]:
-    processing_time = result["processingTime"]
+    processing_time = result["processing_time"]
     
     if processing_time > 30:
         # Log slow processing for optimization
@@ -393,7 +393,7 @@ AND updated_at < NOW() - INTERVAL '5 minutes';
 
 | Issue | Cause | Solution |
 |-------|-------|----------|
-| Slow processing | Large file or slow network | Increase timeout, monitor `processingTime` |
+| Slow processing | Large file or slow network | Increase timeout, monitor `processing_time` |
 | Format errors | Unsupported or corrupted file | Validate format before calling tool |
 | Storage failures | GCS permissions or quota | Check service account permissions |
 | Database errors | Connection pool exhaustion | Increase pool size or reduce concurrency |
