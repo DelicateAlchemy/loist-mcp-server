@@ -82,3 +82,23 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 # Run the FastMCP server using the runner script
 CMD ["python", "run_server.py"]
 
+
+# ============================================================================
+# Stage 3: A2A Server - A2A agent server image
+# ============================================================================
+FROM runtime AS a2a
+
+# Override environment variables for A2A server
+ENV SERVER_PORT=8081 \
+    PORT=8081
+
+# Expose A2A server port
+EXPOSE 8081
+
+# Health check for A2A server (Agent Card endpoint)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8081/.well-known/agent-card.json')" || exit 1
+
+# Run the A2A server
+CMD ["python", "src/a2a_server/app.py"]
+

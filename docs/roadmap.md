@@ -2,7 +2,7 @@
 
 **Status**: This document tracks future enhancements and feature requests that are **not part of the current MVP**. Items here are considered for future phases when current functionality proves successful.
 
-**Last Updated**: December 2025
+**Last Updated**: December 15, 2025
 
 ---
 
@@ -182,6 +182,45 @@ The Music Library MCP Server has a solid MVP foundation with core audio processi
 
 ---
 
+## Deployment & Infrastructure
+
+### A2A Custom Domain Mapping
+**Priority**: Low | **Phase**: Future (Post-MVP)
+
+**Current State**: ✅ MVP uses direct `.run.app` URLs
+- A2A services deployed to Cloud Run with direct URLs
+- Agent Card configured with `.run.app` URLs for MVP
+- Services: `a2a-staging` and `a2a-prod` in `us-central1` region
+
+**Future Enhancement**:
+- Custom domain mapping for A2A services (`a2a.loist.io`, `a2a.staging.loist.io`)
+- Application Load Balancer setup for `us-central1` region (native domain mapping not supported)
+- Update Agent Card URLs to use custom domains
+- Update Postman environment files with custom domain URLs
+- Production branding and polish
+
+**Technical Requirements**:
+- **Regional Limitation**: Native Cloud Run domain mappings not supported in `us-central1` (only `us-east1`, `us-east4`, `us-west1`)
+- **Load Balancer Required**: Custom domains in `us-central1` require Application Load Balancer
+- **Cost**: Additional ~$20-50/month for Load Balancer infrastructure
+- **Implementation**: Follow same pattern as MCP custom domain setup (see `docs/custom-domain-mapping-guide.md`)
+
+**Use Cases**:
+- Professional branding for production A2A services
+- Simplified agent discovery URLs
+- Consistent domain naming across services
+
+**Related**:
+- [`docs/custom-domain-mapping-guide.md`](../docs/custom-domain-mapping-guide.md) - Load Balancer setup guide for MCP services
+- [`docs/a2a-mvp-tasks.md`](../docs/a2a-mvp-tasks.md) - A2A MVP implementation (DOM1 task deferred)
+
+**Deferred Rationale**:
+- MVP focus on functionality over branding
+- Direct `.run.app` URLs sufficient for MVP testing and integration
+- Load Balancer adds complexity and cost that can be deferred until production polish needed
+
+---
+
 ## Decision Framework
 
 ### When to Implement Roadmap Items
@@ -239,6 +278,8 @@ The Music Library MCP Server has a solid MVP foundation with core audio processi
 
 - [`docs/mcp-architecture.md`](../docs/mcp-architecture.md) - Current architecture
 - [`docs/a2a-integration-analysis.md`](../docs/a2a-integration-analysis.md) - A2A protocol analysis
+- [`docs/a2a-mvp-tasks.md`](../docs/a2a-mvp-tasks.md) - A2A MVP implementation tracking
+- [`docs/custom-domain-mapping-guide.md`](../docs/custom-domain-mapping-guide.md) - Custom domain setup guide
 - [`docs/api-endpoint-refactoring.md`](../docs/api-endpoint-refactoring.md) - Recent architecture decisions
 - [`README.md`](../README.md) - Project overview and current features</contents>
 </xai:function_call name="search_replace">
