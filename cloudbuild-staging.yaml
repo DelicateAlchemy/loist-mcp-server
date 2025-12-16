@@ -286,7 +286,7 @@ steps:
         
         # Download Cloud SQL Auth Proxy
         echo "📥 Downloading Cloud SQL Auth Proxy..."
-        wget -q https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.8.1/cloud-sql-proxy.linux.amd64 -O /cloud-sql-proxy
+        wget -q https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.20.0/cloud-sql-proxy.linux.amd64 -O /cloud-sql-proxy
         chmod +x /cloud-sql-proxy
         
         # Start Cloud SQL Proxy in background

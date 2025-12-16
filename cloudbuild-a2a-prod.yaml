@@ -326,8 +326,8 @@ steps:
       - '--max-instances=10'
       - '--min-instances=0'
       - '--port=8081'
-      # Health check: use Agent Card endpoint
-      - '--liveness-probe=httpGet.path=/.well-known/agent-card.json,periodSeconds=60'
+      # Health check: use Agent Card endpoint with enhanced reliability parameters
+      - '--liveness-probe=httpGet.path=/.well-known/agent-card.json,httpGet.port=8081,initialDelaySeconds=0,failureThreshold=3,timeoutSeconds=1,periodSeconds=60'
       # Explicit command override to ensure correct startup
       - '--command=/usr/local/bin/python'
       - '--args=/app/src/a2a_server/app.py'

@@ -283,7 +283,7 @@ steps:
 
         # Download Cloud SQL Auth Proxy
         echo "📥 Downloading Cloud SQL Auth Proxy..."
-        wget -q https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.8.1/cloud-sql-proxy.linux.amd64 -O /cloud-sql-proxy
+        wget -q https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.20.0/cloud-sql-proxy.linux.amd64 -O /cloud-sql-proxy
         chmod +x /cloud-sql-proxy
 
         # Start Cloud SQL Proxy in background
@@ -338,8 +338,8 @@ steps:
       - '--max-instances=3'
       - '--min-instances=0'
       - '--port=8081'
-      # Health check: use Agent Card endpoint
-      - '--liveness-probe=httpGet.path=/.well-known/agent-card.json,periodSeconds=60'
+      # Health check: use Agent Card endpoint with enhanced reliability parameters
+      - '--liveness-probe=httpGet.path=/.well-known/agent-card.json,httpGet.port=8081,initialDelaySeconds=0,failureThreshold=3,timeoutSeconds=1,periodSeconds=60'
       # Explicit command override to ensure correct startup
       - '--command=/usr/local/bin/python'
       - '--args=/app/src/a2a_server/app.py'
