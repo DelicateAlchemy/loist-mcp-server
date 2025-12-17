@@ -189,7 +189,6 @@ Then open the provided localhost URL in your browser and configure the connectio
 |------|----------|------------|
 | `get_embed_url` | Generate embed URLs | 🔗 Different templates, devices |
 | `list_embed_templates` | List available templates | 📋 Template enumeration |
-| `check_waveform_availability` | Waveform status | 📊 Availability checking |
 
 ### MCP Resources to Test
 

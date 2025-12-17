@@ -381,29 +381,7 @@ print(templates["templates"][0]["name"])
 }
 ```
 
-### 11. check_waveform_availability
-**Status:** ✅ Valid MCP Schema
-
-**Description:** Check if waveform is available for an audio track.
-
-**Note:** DEPRECATED: This tool is deprecated. Use get_embed_url instead.
-
-**Input Schema:**
-```json
-{
-  "properties": {
-    "audio_id": {
-      "type": "string"
-    }
-  },
-  "required": [
-    "audio_id"
-  ],
-  "type": "object"
-}
-```
-
-### 12. download_audio
+### 11. download_audio
 **Status:** ✅ Valid MCP Schema
 
 **Description:** Download audio track in specified format with conversion.
@@ -494,7 +472,7 @@ All schemas follow JSON Schema best practices:
 - **Core CRUD**: `process_audio_complete`, `get_audio_metadata`, `update_metadata`, `delete_audio`
 - **Search/Query**: `search_library`
 - **Download/Export**: `download_audio`
-- **Embed/Player**: `get_embed_url`, `list_embed_templates`, `check_waveform_availability`
+- **Embed/Player**: `get_embed_url`, `list_embed_templates`
 - **Monitoring**: `health_check`, `get_waveform_metrics_tool`, `get_circuit_breaker_status`
 
 ### Schema Design Patterns

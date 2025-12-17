@@ -217,7 +217,6 @@ fastapi_app = app.build()
    - ❌ `health_check` - Use HTTP endpoint instead
    - ❌ `get_waveform_metrics_tool` - Use HTTP endpoint instead
    - ❌ `get_circuit_breaker_status` - Use HTTP endpoint instead
-   - ❌ `check_waveform_availability` - Deprecated, to be removed
    - ❌ `list_embed_templates` - Utility, not core workflow
 5. Add serviceEndpoint with JSON-RPC protocol
 6. Include authentication configuration (bearer token)

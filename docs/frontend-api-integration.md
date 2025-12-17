@@ -679,49 +679,6 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
 
 ---
 
-#### 20. Check Waveform Availability (MCP Tool via HTTP) **DEPRECATED**
-
-> **⚠️ DEPRECATED**: This tool is deprecated. Use `get_embed_url` with `template: "waveform"` instead.
-
-```http
-POST /mcp/tools/check_waveform_availability
-Content-Type: application/json
-Authorization: Bearer {token}  # If AUTH_ENABLED=true
-```
-
-**Request Body**:
-```json
-{
-  "audio_id": "550e8400-e29b-41d4-a716-446655440000"
-}
-```
-
-**Response**: Same as `get_embed_url` (PlayerConfig shape)
-```json
-{
-  "success": true,
-  "audio_id": "550e8400-e29b-41d4-a716-446655440000",
-  "mode": "waveform",
-  "device": "auto",
-  "context": "embed",
-  "waveform_available": true,
-  "urls": {
-    "embed": "https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000",
-    "waveform": "https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000/waveform",
-    "artwork": "https://storage.googleapis.com/bucket/artwork.jpg?X-Goog-Signature=...",
-    "waveform_svg": "https://storage.googleapis.com/bucket/waveform.svg?X-Goog-Signature=..."
-  },
-  "metadata": {
-    "title": "Song Title",
-    "artist": "Artist Name",
-    "album": "Album Name",
-    "duration_seconds": 180.5
-  }
-}
-```
-
----
-
 ## MCP Resources (Audio Streaming & Artwork)
 
 ### Overview
@@ -1210,11 +1167,11 @@ export const api = {
       body: {}
     }),
 
-  checkWaveformAvailability: (audioId: string) =>
+  getEmbedUrlWaveform: (audioId: string) =>
     apiRequest({
       method: 'POST',
-      path: '/mcp/tools/check_waveform_availability',
-      body: { audio_id: audioId }
+      path: '/mcp/tools/get_embed_url',
+      body: { audio_id: audioId, template: 'waveform', device: 'auto' }
     })
 };
 ```

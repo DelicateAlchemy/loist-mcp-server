@@ -1648,16 +1648,6 @@ async def list_embed_templates() -> dict:
             "message": "Failed to retrieve template information"
         }
 
-
-@mcp.tool()
-async def check_waveform_availability(audio_id: str) -> dict:
-    """
-    Check if waveform is available for an audio track.
-    DEPRECATED: This tool is deprecated. Use get_embed_url instead.
-    """
-    from src.tools.embed_tools import check_waveform_availability_logic
-    return await check_waveform_availability_logic(audio_id)
-
 @mcp.custom_route("/oembed", methods=["GET"])
 async def oembed_endpoint(request):
     """

@@ -127,10 +127,3 @@ async def get_embed_url_logic(audio_id: str, template: str = "standard", device:
             "message": "Failed to generate embed URL", "audio_id": audio_id
         }
 
-async def check_waveform_availability_logic(audio_id: str) -> dict:
-    """
-    Logic for checking waveform availability.
-    """
-    logger.warning(f"check_waveform_availability is deprecated. Use get_embed_url instead for audio_id: {audio_id}")
-    result = await get_embed_url_logic(audio_id, template="waveform", device="auto")
-    return result

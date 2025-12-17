@@ -154,7 +154,7 @@ Infrastructure (PostgreSQL, GCS)
 
 ### P3.2 Tool Consolidation (Minimal Action)
 - [STATUS: done] **P3.2.1** Review current 12 tools vs desired 4-tool MVP architecture (completed via research)
-- [STATUS: pending] **P3.2.2** Remove deprecated `check_waveform_availability` tool from server.py
+- [STATUS: done] **P3.2.2** Remove deprecated `check_waveform_availability` tool from server.py (completed LOI-21)
 - [STATUS: pending] **P3.2.3** Move operational tools (`health_check`, `get_waveform_metrics_tool`, `get_circuit_breaker_status`) to HTTP-only endpoints
 - [STATUS: pending] **P3.2.4** Document rationale: "Keep granular tools for token efficiency; operational tools via HTTP only"
 

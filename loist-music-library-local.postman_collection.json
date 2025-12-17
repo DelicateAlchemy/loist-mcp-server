@@ -1823,7 +1823,7 @@
 					"response": []
 				},
 				{
-					"name": "Check Waveform Availability",
+					"name": "Get Embed URL (Waveform)",
 					"request": {
 						"method": "POST",
 						"header": [
@@ -1838,7 +1838,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"check_waveform_availability\",\n    \"arguments\": {\n      \"audio_id\": \"{{audio_id}}\"\n    }\n  }\n}"
+							"raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"get_embed_url\",\n    \"arguments\": {\n      \"audio_id\": \"{{audio_id}}\",\n      \"template\": \"waveform\",\n      \"device\": \"auto\"\n    }\n  }\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/mcp",
@@ -1849,7 +1849,7 @@
 								"mcp"
 							]
 						},
-						"description": "Check if waveform is available for an audio track. Verifies waveform generation status and provides access information if the waveform exists."
+						"description": "Get embed URL with waveform template. Replaces deprecated check_waveform_availability tool. Verifies waveform generation status and provides access information if the waveform exists."
 					},
 					"event": [
 						{

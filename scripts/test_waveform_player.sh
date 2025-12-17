@@ -377,20 +377,20 @@ asyncio.run(test())
         log_error "get_embed_url MCP tool failed"
     fi
 
-    # Test check_waveform_availability
-    log_info "Testing check_waveform_availability MCP tool..."
+    # Test get_embed_url with waveform template (replaces deprecated check_waveform_availability)
+    log_info "Testing get_embed_url with waveform template..."
     result=$(docker-compose exec -T mcp-server python3 -c "
 import sys
 sys.path.insert(0, '/app')
 import asyncio
-from src.server import check_waveform_availability
+from src.server import get_embed_url
 
 async def test():
-    result = await check_waveform_availability('$TEST_AUDIO_ID')
+    result = await get_embed_url('$TEST_AUDIO_ID', template='waveform', device='auto')
     if result.get('success'):
         print('SUCCESS')
-        print(f'Waveform available: {result.get(\"waveformAvailable\", \"N/A\")}')
-        if result.get('waveformUrl'):
+        print(f'Waveform available: {result.get(\"waveform_available\", \"N/A\")}')
+        if result.get('urls', {}).get('waveform'):
             print('Waveform URL available')
     else:
         print('FAILED')
@@ -400,10 +400,10 @@ asyncio.run(test())
 " 2>/dev/null)
 
     if echo "$result" | grep -q "SUCCESS"; then
-        log_success "check_waveform_availability MCP tool works"
+        log_success "get_embed_url with waveform template works"
         echo "$result" | grep -E "(Waveform available|Waveform URL)" | sed 's/^/  /'
     else
-        log_error "check_waveform_availability MCP tool failed"
+        log_error "get_embed_url with waveform template failed"
     fi
 }
 

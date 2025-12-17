@@ -3,7 +3,7 @@
 ## TL;DR
 
 - **Single canonical type**: `PlayerConfig` returned by `get_embed_url` (static embed configuration, not runtime UI state)
-- **Deprecate redundancy**: `check_waveform_availability` → thin wrapper around `get_embed_url`
+- **Removed redundancy**: `check_waveform_availability` has been removed (LOI-21). Use `get_embed_url` with `template="waveform"` instead.
 - **Keep dual endpoints**: Simple embeds (`/embed/{id}`) vs rich waveform (`/embed/{id}/waveform`); consider query-param unification later
 - **Backend-only embeds**: Open SaaS frontend is a consumer only; embed HTML served solely by backend
 
@@ -34,7 +34,7 @@ The TypeScript type definitions below represent API response contracts. The Pyth
 | **`update_metadata`** | Modify track information | `audio_id`, `metadata` (fields to update) | Updated metadata confirmation |
 | **`get_embed_url`** | Generate shareable embed links | `audio_id`, `template`, `device` | Embed URL, waveform status, metadata |
 | **`list_embed_templates`** | Template capabilities for frontend | None | Available templates with features/devices |
-| **`check_waveform_availability`** | Waveform generation status | `audio_id` | Waveform availability, URLs, metadata |
+| **`get_embed_url` (with `template="waveform"`)** | Waveform generation status | `audio_id`, `template`, `device` | Waveform availability, URLs, metadata |
 | **`download_audio`** | Format conversion & download | `input_data` (audioId, format, preset) | Signed download URL, file info |
 
 ### Audio Streaming Resources
@@ -62,7 +62,7 @@ The TypeScript type definitions below represent API response contracts. The Pyth
 ## Problems Identified
 
 ### Redundant MCP Tools
-- `check_waveform_availability` duplicates functionality already in `get_embed_url`
+- ~~`check_waveform_availability`~~ (removed LOI-21) - Use `get_embed_url` with `template="waveform"` instead
 - Both validate audio_id existence and check waveform availability
 - Both return similar metadata structures and handle same error cases
 
@@ -117,7 +117,7 @@ type PlayerConfig = {
 
 - `get_embed_url(audio_id, template?, device?)` → **PRIMARY**: Returns complete `PlayerConfig` (URLs + waveform_available + metadata)
 - `list_embed_templates()` → **STATIC**: Returns template/device capabilities; never queries track-specific data
-- `check_waveform_availability(audio_id)` → **DEPRECATED**: Thin wrapper around `get_embed_url` for backward compatibility only
+- ~~`check_waveform_availability(audio_id)`~~ → **REMOVED** (LOI-21): Use `get_embed_url(audio_id, template="waveform", device="auto")` instead
 
 ### Dual Player Behavior
 

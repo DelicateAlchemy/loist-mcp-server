@@ -65,7 +65,6 @@ Infrastructure (PostgreSQL, GCS)
 | `download_audio` | Download with format conversion | ✅ Working | Additional |
 | `get_embed_url` | Generate embed URLs with templates | ✅ Working | Embed support |
 | `list_embed_templates` | List available embed templates | ✅ Working | Embed support |
-| `check_waveform_availability` | Check waveform availability (deprecated) | ✅ Working | Legacy |
 | `get_waveform_metrics_tool` | Waveform generation metrics | ✅ Working | Monitoring |
 | `get_circuit_breaker_status` | Circuit breaker status | ✅ Working | Monitoring |
 
