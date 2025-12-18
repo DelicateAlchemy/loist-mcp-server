@@ -22,21 +22,29 @@ PROD_EXISTS=$(gcloud builds triggers list --project="$PROJECT_ID" --filter="name
 # Create A2A Staging Trigger
 if [ -z "$STAGING_EXISTS" ]; then
   echo "📦 Creating A2A staging trigger..."
-  gcloud builds triggers create github \
+  
+  # Use import method because direct create sometimes fails with INVALID_ARGUMENT
+  TEMP_DIR=$(mktemp -d)
+  cat > "$TEMP_DIR/trigger-staging.yaml" << EOF
+description: Deploy A2A agent server to staging on dev branch
+filename: cloudbuild-a2a-staging.yaml
+github:
+  name: loist-mcp-server
+  owner: DelicateAlchemy
+  push:
+    branch: ^dev$
+name: a2a-staging-deployment
+serviceAccount: projects/$PROJECT_ID/serviceAccounts/$SERVICE_ACCOUNT
+EOF
+  
+  gcloud beta builds triggers import \
     --project="$PROJECT_ID" \
-    --name="a2a-staging-deployment" \
-    --description="Deploy A2A agent server to staging on dev branch" \
-    --repo-name="loist-mcp-server" \
-    --repo-owner="DelicateAlchemy" \
-    --branch-pattern="^dev$" \
-    --build-config="cloudbuild-a2a-staging.yaml" \
-    --service-account="$SERVICE_ACCOUNT" \
-    --no-require-approval
-
+    --source="$TEMP_DIR/trigger-staging.yaml"
+  
+  rm -rf "$TEMP_DIR"
   echo "✅ A2A staging trigger created"
 else
   echo "⚠️  A2A staging trigger already exists, skipping creation"
-  echo "   Use ./scripts/update-a2a-trigger-paths.sh to update it"
 fi
 
 echo ""
@@ -44,21 +52,29 @@ echo ""
 # Create A2A Production Trigger
 if [ -z "$PROD_EXISTS" ]; then
   echo "📦 Creating A2A production trigger..."
-  gcloud builds triggers create github \
+  
+  # Use import method because direct create sometimes fails with INVALID_ARGUMENT
+  TEMP_DIR=$(mktemp -d)
+  cat > "$TEMP_DIR/trigger-prod.yaml" << EOF
+description: Deploy A2A agent server to production on main branch
+filename: cloudbuild-a2a-prod.yaml
+github:
+  name: loist-mcp-server
+  owner: DelicateAlchemy
+  push:
+    branch: ^main$
+name: a2a-prod-deployment
+serviceAccount: projects/$PROJECT_ID/serviceAccounts/$SERVICE_ACCOUNT
+EOF
+  
+  gcloud beta builds triggers import \
     --project="$PROJECT_ID" \
-    --name="a2a-prod-deployment" \
-    --description="Deploy A2A agent server to production on main branch" \
-    --repo-name="loist-mcp-server" \
-    --repo-owner="DelicateAlchemy" \
-    --branch-pattern="^main$" \
-    --build-config="cloudbuild-a2a-prod.yaml" \
-    --service-account="$SERVICE_ACCOUNT" \
-    --no-require-approval
-
+    --source="$TEMP_DIR/trigger-prod.yaml"
+  
+  rm -rf "$TEMP_DIR"
   echo "✅ A2A production trigger created"
 else
   echo "⚠️  A2A production trigger already exists, skipping creation"
-  echo "   Use ./scripts/update-a2a-trigger-paths.sh to update it"
 fi
 
 echo ""
@@ -74,6 +90,8 @@ echo ""
 echo "✅ A2A triggers setup complete!"
 echo ""
 echo "Triggers configured:"
-echo "  - a2a-staging-deployment: Triggers on dev branch for src/a2a_server/** or cloudbuild-a2a-staging.yaml"
-echo "  - a2a-prod-deployment: Triggers on main branch for src/a2a_server/** or cloudbuild-a2a-prod.yaml"
+echo "  - a2a-staging-deployment: Triggers on ANY push to dev branch (mirrors MCP staging trigger)"
+echo "  - a2a-prod-deployment: Triggers on ANY push to main branch (mirrors MCP production trigger)"
+echo ""
+echo "Note: Triggers fire on any code change, not just A2A code, to support branch merges."
 
