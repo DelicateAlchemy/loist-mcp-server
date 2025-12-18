@@ -223,3 +223,46 @@ if config.log_level.upper() == "DEBUG":
     print(f"[CONFIG DEBUG] EMBED_BASE_URL env var = {os.getenv('EMBED_BASE_URL', 'NOT SET')}", file=sys.stderr)
     print(f"[CONFIG DEBUG] .env file exists = {os.path.exists('.env')}", file=sys.stderr)
 
+
+def get_safe_temp_dir() -> str:
+    """
+    Get a safe temporary directory path, validating it exists and is writable.
+
+    Returns:
+        Path to temporary directory (guaranteed to exist and be writable)
+
+    Raises:
+        PermissionError: If no writable temp directory is available
+    """
+    import tempfile
+    from pathlib import Path
+
+    logger = logging.getLogger(__name__)
+    tmpdir = os.environ.get('TMPDIR', '/app/tmp')
+    tmp_path = Path(tmpdir)
+
+    # Try to use the specified directory
+    try:
+        if not tmp_path.exists():
+            tmp_path.mkdir(parents=True, exist_ok=True)
+            logger.info(f"Created TMPDIR directory: {tmpdir}")
+
+        # Test write access
+        test_file = tmp_path / '.tmp_write_test'
+        test_file.write_text('test')
+        test_file.unlink()
+
+        logger.debug(f"Using TMPDIR: {tmpdir}")
+        return str(tmpdir)
+    except (PermissionError, OSError) as e:
+        logger.warning(f"TMPDIR {tmpdir} is not usable: {e}, falling back to system temp")
+
+    # Fallback to system temp directory
+    try:
+        system_temp = tempfile.gettempdir()
+        logger.warning(f"Using system temp directory: {system_temp}")
+        return system_temp
+    except Exception as e:
+        logger.error(f"Failed to get any temp directory: {e}")
+        raise PermissionError("No writable temporary directory available")
+

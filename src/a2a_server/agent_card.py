@@ -23,8 +23,8 @@ def create_agent_card() -> AgentCard:
 
         # Capabilities
         capabilities=AgentCapabilities(
-            streaming=False,
-            pushNotifications=False,
+            streaming=True,  # Partial support - simplified event yielding
+            pushNotifications=True,  # Full CRUD support via PushConfigStore
             stateTransitionHistory=True
         ),
 

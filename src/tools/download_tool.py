@@ -6,6 +6,7 @@ with on-the-fly conversion and metadata embedding.
 """
 
 import logging
+import os
 import uuid
 from typing import Dict, Any, Optional
 from pathlib import Path
@@ -16,6 +17,7 @@ from .schemas import (
     AudioMetadata,
     AudioResources,
 )
+from src.config import get_safe_temp_dir
 from src.exceptions import ValidationError, ResourceNotFoundError
 from src.error_utils import handle_tool_error
 from src.storage import generate_signed_url, parse_gcs_path, download_audio_file
@@ -146,7 +148,8 @@ def download_audio(input_data: Dict[str, Any]) -> Dict[str, Any]:
         logger.info(f"Converting {audio_id} from {source_format} to {target_format} (preset: {preset})")
 
         # Create temp directory
-        temp_dir = tempfile.mkdtemp(prefix="mcp_download_")
+        temp_dir = tempfile.mkdtemp(prefix="mcp_download_", dir=get_safe_temp_dir())
+        logger.debug(f"Created temp directory for download tool: {temp_dir}")
         source_path = None
         output_path = None
         artwork_path = None

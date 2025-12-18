@@ -762,7 +762,7 @@ class MetadataExtractor:
             # Determine file extension from MIME type
             mime_type = selected_artwork.mime
             extension = MetadataExtractor._mime_to_extension(mime_type)
-            
+
             # Create destination path
             if destination:
                 dest_path = Path(destination)
@@ -773,7 +773,8 @@ class MetadataExtractor:
                 )
                 dest_path = Path(temp_file.name)
                 temp_file.close()
-            
+                logger.debug(f"Created temp artwork file: {dest_path}")
+
             # Save artwork
             dest_path.parent.mkdir(parents=True, exist_ok=True)
             dest_path.write_bytes(selected_artwork.data)
@@ -822,7 +823,7 @@ class MetadataExtractor:
             # Determine file extension from MIME type
             mime_type = selected_picture.mime
             extension = MetadataExtractor._mime_to_extension(mime_type)
-            
+
             # Create destination path
             if destination:
                 dest_path = Path(destination)
@@ -833,7 +834,8 @@ class MetadataExtractor:
                 )
                 dest_path = Path(temp_file.name)
                 temp_file.close()
-            
+                logger.debug(f"Created temp artwork file: {dest_path}")
+
             # Save artwork
             dest_path.parent.mkdir(parents=True, exist_ok=True)
             dest_path.write_bytes(selected_picture.data)
@@ -888,7 +890,8 @@ class MetadataExtractor:
                 )
                 dest_path = Path(temp_file.name)
                 temp_file.close()
-            
+                logger.debug(f"Created temp artwork file: {dest_path}")
+
             # Save artwork
             dest_path.parent.mkdir(parents=True, exist_ok=True)
             dest_path.write_bytes(cover)
@@ -942,7 +945,8 @@ class MetadataExtractor:
                 )
                 dest_path = Path(temp_file.name)
                 temp_file.close()
-            
+                logger.debug(f"Created temp artwork file: {dest_path}")
+
             # Save picture data
             dest_path.parent.mkdir(parents=True, exist_ok=True)
             dest_path.write_bytes(picture_data)

@@ -230,7 +230,8 @@ class HTTPDownloader:
             )
             dest_path = Path(temp_file.name)
             temp_file.close()
-        
+            logger.debug(f"Created temp download file: {dest_path}")
+
         logger.info(f"Downloading from {url} to {dest_path}")
         
         try:

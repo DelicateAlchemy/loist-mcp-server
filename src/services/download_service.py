@@ -28,6 +28,7 @@ from src.converter import (
 from src.storage import download_audio_file, generate_signed_url, parse_gcs_path
 from database import get_audio_metadata_by_id
 from src.exceptions import ResourceNotFoundError
+from src.config import get_safe_temp_dir
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +85,8 @@ async def prepare_audio_download(audio_id: str, target_format: str, preset: Opti
     # Conversion is needed
     logger.info(f"Service: Converting {audio_id} from {source_format} to {target_format} (preset: {preset})")
 
-    temp_dir = tempfile.mkdtemp(prefix="loist_download_")
+    temp_dir = tempfile.mkdtemp(prefix="loist_download_", dir=get_safe_temp_dir())
+    logger.debug(f"Created temp directory for download conversion: {temp_dir}")
     source_path = Path(temp_dir) / f"source_{audio_id}{Path(audio_gcs_path).suffix}"
     output_ext = get_file_extension(target_format)
     output_path = Path(temp_dir) / f"converted_{audio_id}{output_ext}"

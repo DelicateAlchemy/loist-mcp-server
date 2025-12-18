@@ -41,6 +41,10 @@ RUN apt-get update && \
 # Create non-root user for security
 RUN useradd --create-home --shell /bin/bash --uid 1000 fastmcpuser
 
+# Create /tmp directory with proper permissions for tempfile operations
+# This is required for Cloud Run where /tmp may not exist or be writable
+RUN mkdir -p /tmp && chmod 1777 /tmp
+
 # Copy wheels from builder stage
 COPY --from=builder /wheels /wheels
 
@@ -61,6 +65,10 @@ COPY --chown=fastmcpuser:fastmcpuser tests/ ./tests/
 # Copy templates directory
 COPY --chown=fastmcpuser:fastmcpuser templates/ ./templates/
 
+# Create application temp directory (owned by fastmcpuser)
+# This provides an alternative temp location if /tmp has issues
+RUN mkdir -p /app/tmp && chown fastmcpuser:fastmcpuser /app/tmp
+
 # Switch to non-root user
 USER fastmcpuser
 
@@ -70,7 +78,8 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app \
     SERVER_HOST=0.0.0.0 \
     SERVER_PORT=8080 \
-    LOG_LEVEL=INFO
+    LOG_LEVEL=INFO \
+    TMPDIR=/app/tmp
 
 # Expose port (Cloud Run automatically maps to $PORT)
 EXPOSE 8080

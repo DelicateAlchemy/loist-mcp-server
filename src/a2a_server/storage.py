@@ -10,9 +10,12 @@ Created: $(date)
 
 import logging
 import os
-from typing import Optional
-from sqlalchemy.ext.asyncio import create_async_engine
+import uuid
+from typing import Optional, List, Tuple
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy import text
 from a2a.server.tasks import DatabaseTaskStore
+from a2a.types import PushNotificationConfig
 
 # Import exception framework
 from src.exceptions.handler import ExceptionHandler
@@ -157,3 +160,218 @@ async def get_task_store(database_url: Optional[str] = None, exception_handler: 
         exception_handler.handle_and_raise(error, exc_context)
 
     return await create_task_store(database_url, exception_handler=exception_handler)
+
+
+class PushConfigStore:
+    """
+    Storage for push notification configurations.
+    
+    Provides async database operations for managing push notification configs
+    associated with A2A tasks. Uses async SQLAlchemy to match the pattern
+    used by DatabaseTaskStore.
+    """
+    
+    def __init__(self, engine, exception_handler: Optional[ExceptionHandler] = None):
+        """
+        Initialize push config store.
+        
+        Args:
+            engine: SQLAlchemy async engine (from DatabaseTaskStore)
+            exception_handler: Exception handler for consistent error handling
+        """
+        self.engine = engine
+        self.exception_handler = exception_handler or ExceptionHandler(
+            ExceptionConfig().for_development()
+        )
+        self._session_factory = async_sessionmaker(
+            engine,
+            class_=AsyncSession,
+            expire_on_commit=False
+        )
+        logger.info("🔧 PushConfigStore initialized")
+    
+    async def set_info(
+        self,
+        task_id: str,
+        push_notification_config: PushNotificationConfig,
+        config_id: Optional[str] = None
+    ) -> None:
+        """
+        Set or update push notification configuration for a task.
+        
+        Args:
+            task_id: A2A task ID
+            push_notification_config: Push notification configuration from SDK
+            config_id: Optional config ID (if not provided, uses config.id or generates one)
+        
+        Raises:
+            Exception: If database operation fails
+        """
+        exc_context = ExceptionContext(
+            operation="set_push_config",
+            component="a2a.storage",
+            operation_type=OperationType.DATABASE_QUERY,
+        )
+        
+        try:
+            # Use provided config_id, or from config, or generate one
+            final_config_id = config_id or getattr(push_notification_config, 'id', None) or str(uuid.uuid4())
+            
+            # Extract config fields
+            url = push_notification_config.url
+            token = getattr(push_notification_config, 'token', None)
+            authentication = None
+            if hasattr(push_notification_config, 'authentication') and push_notification_config.authentication:
+                # Convert authentication to JSONB-compatible dict
+                if hasattr(push_notification_config.authentication, 'model_dump'):
+                    authentication = push_notification_config.authentication.model_dump()
+                else:
+                    authentication = dict(push_notification_config.authentication)
+            
+            async with self._session_factory() as session:
+                # Upsert: insert or update if (task_id, config_id) exists
+                # Build SQL with conditional JSONB cast for authentication
+                if authentication is not None:
+                    sql = """
+                        INSERT INTO push_notification_configs (task_id, config_id, url, token, authentication, updated_at)
+                        VALUES (:task_id, :config_id, :url, :token, :authentication::jsonb, NOW())
+                        ON CONFLICT (task_id, config_id)
+                        DO UPDATE SET
+                            url = EXCLUDED.url,
+                            token = EXCLUDED.token,
+                            authentication = EXCLUDED.authentication,
+                            updated_at = NOW()
+                    """
+                else:
+                    sql = """
+                        INSERT INTO push_notification_configs (task_id, config_id, url, token, authentication, updated_at)
+                        VALUES (:task_id, :config_id, :url, :token, NULL, NOW())
+                        ON CONFLICT (task_id, config_id)
+                        DO UPDATE SET
+                            url = EXCLUDED.url,
+                            token = EXCLUDED.token,
+                            authentication = EXCLUDED.authentication,
+                            updated_at = NOW()
+                    """
+                
+                await session.execute(
+                    text(sql),
+                    {
+                        "task_id": task_id,
+                        "config_id": final_config_id,
+                        "url": url,
+                        "token": token,
+                        "authentication": authentication
+                    }
+                )
+                await session.commit()
+                logger.info(f"✅ Push notification config set for task {task_id}, config_id {final_config_id}")
+        
+        except Exception as e:
+            logger.error(f"❌ Failed to set push notification config for task {task_id}: {e}")
+            self.exception_handler.handle_and_raise(e, exc_context)
+    
+    async def get_info(self, task_id: str) -> List[Tuple[Optional[str], PushNotificationConfig]]:
+        """
+        Get push notification configurations for a task.
+        
+        Args:
+            task_id: A2A task ID
+        
+        Returns:
+            List of tuples: (config_id, PushNotificationConfig)
+        
+        Raises:
+            Exception: If database operation fails
+        """
+        exc_context = ExceptionContext(
+            operation="get_push_config",
+            component="a2a.storage",
+            operation_type=OperationType.DATABASE_QUERY,
+        )
+        
+        try:
+            async with self._session_factory() as session:
+                result = await session.execute(
+                    text("""
+                        SELECT config_id, url, token, authentication
+                        FROM push_notification_configs
+                        WHERE task_id = :task_id
+                        ORDER BY created_at
+                    """),
+                    {"task_id": task_id}
+                )
+                rows = result.fetchall()
+                
+                configs = []
+                for row in rows:
+                    config_id, url, token, auth_dict = row
+                    # Reconstruct PushNotificationConfig from database fields
+                    # Note: PushNotificationConfig structure may vary by SDK version
+                    # We'll create a dict that matches the expected structure
+                    config_dict = {"url": url}
+                    if token:
+                        config_dict["token"] = token
+                    if auth_dict:
+                        config_dict["authentication"] = auth_dict
+                    if config_id:
+                        config_dict["id"] = config_id
+                    
+                    # Create PushNotificationConfig object
+                    push_config = PushNotificationConfig(**config_dict)
+                    configs.append((config_id, push_config))
+                
+                logger.debug(f"✅ Retrieved {len(configs)} push notification config(s) for task {task_id}")
+                return configs
+        
+        except Exception as e:
+            logger.error(f"❌ Failed to get push notification config for task {task_id}: {e}")
+            self.exception_handler.handle_and_raise(e, exc_context)
+    
+    async def delete_info(self, task_id: str, config_id: Optional[str] = None) -> None:
+        """
+        Delete push notification configuration(s) for a task.
+        
+        Args:
+            task_id: A2A task ID
+            config_id: Optional config ID. If None, deletes all configs for the task.
+        
+        Raises:
+            Exception: If database operation fails
+        """
+        exc_context = ExceptionContext(
+            operation="delete_push_config",
+            component="a2a.storage",
+            operation_type=OperationType.DATABASE_QUERY,
+        )
+        
+        try:
+            async with self._session_factory() as session:
+                if config_id:
+                    # Delete specific config
+                    result = await session.execute(
+                        text("""
+                            DELETE FROM push_notification_configs
+                            WHERE task_id = :task_id AND config_id = :config_id
+                        """),
+                        {"task_id": task_id, "config_id": config_id}
+                    )
+                    deleted_count = result.rowcount
+                    logger.info(f"✅ Deleted push notification config {config_id} for task {task_id}")
+                else:
+                    # Delete all configs for task
+                    result = await session.execute(
+                        text("""
+                            DELETE FROM push_notification_configs
+                            WHERE task_id = :task_id
+                        """),
+                        {"task_id": task_id}
+                    )
+                    deleted_count = result.rowcount
+                    logger.info(f"✅ Deleted {deleted_count} push notification config(s) for task {task_id}")
+                
+                await session.commit()
+        
+        except Exception as e:
+            logger.error(f"❌ Failed to delete push notification config for task {task_id}: {e}")
+            self.exception_handler.handle_and_raise(e, exc_context)

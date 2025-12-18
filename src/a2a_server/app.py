@@ -16,7 +16,7 @@ from fastapi import FastAPI
 from a2a.server.apps import A2AFastAPIApplication
 from src.a2a_server.agent_card import create_agent_card
 from src.a2a_server.handler import LoistRequestHandler
-from src.a2a_server.storage import get_task_store
+from src.a2a_server.storage import get_task_store, PushConfigStore
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +48,10 @@ async def create_a2a_app(database_url: Optional[str] = None) -> FastAPI:
         logger.debug("📦 Initializing task store")
         task_store = await get_task_store(database_url)
 
+        # Initialize push config store (uses same engine as task store)
+        logger.debug("📬 Initializing push config store")
+        push_config_store = PushConfigStore(engine=task_store.engine)
+
         # Create agent card
         logger.debug("🆔 Creating agent card")
         agent_card = create_agent_card()
@@ -55,7 +59,10 @@ async def create_a2a_app(database_url: Optional[str] = None) -> FastAPI:
         # Create request handler
         logger.debug("🎛️ Creating request handler")
         # Audio processing handled by shared business logic (src/business/audio_processor.py)
-        handler = LoistRequestHandler(task_store=task_store)
+        handler = LoistRequestHandler(
+            task_store=task_store,
+            push_config_store=push_config_store
+        )
 
         # Configure A2A FastAPI application using SDK
         logger.debug("🔧 Configuring A2AFastAPIApplication")
