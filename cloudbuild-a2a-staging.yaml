@@ -354,6 +354,7 @@ steps:
       - '--update-secrets=DB_PASSWORD=db-password-staging:latest'
       - '--update-secrets=GCS_BUCKET_NAME=gcs-bucket-name-staging:latest'
       - '--update-secrets=BEARER_TOKEN=mcp-bearer-token-staging:latest'
+      - '--add-cloudsql-instances=loist-music-library:us-central1:loist-music-library-db-staging'
       - '--quiet'
     waitFor: ['run-migrations']
 

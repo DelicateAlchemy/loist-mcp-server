@@ -357,6 +357,7 @@ steps:
       - '--update-secrets=BEARER_TOKEN=mcp-bearer-token-staging:latest'
       # Remove GOOGLE_APPLICATION_CREDENTIALS secret if it exists (separate from env vars)
       - '--remove-secrets=GOOGLE_APPLICATION_CREDENTIALS'
+      - '--add-cloudsql-instances=loist-music-library:us-central1:loist-music-library-db-staging'
       - '--quiet'
     waitFor: ['run-migrations']
 

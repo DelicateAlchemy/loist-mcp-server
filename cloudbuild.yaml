@@ -384,6 +384,7 @@ steps:
       - '--update-secrets=DB_PASSWORD=${_DB_PASSWORD}:latest'
       - '--update-secrets=GCS_BUCKET_NAME=${_GCS_BUCKET_NAME}:latest'
       - '--update-secrets=BEARER_TOKEN=${_BEARER_TOKEN}:latest'
+      - '--add-cloudsql-instances=loist-music-library:us-central1:loist-music-library-db'
       - '--quiet'
     waitFor: ['push-image']
 
