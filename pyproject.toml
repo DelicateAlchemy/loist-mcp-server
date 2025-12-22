@@ -73,8 +73,9 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-pythonpath = ["."]
-addopts = "-v --tb=short --strict-markers --disable-warnings --import-mode=importlib"
+# pythonpath = ["."]  # Commented out - causes issues with site-packages imports
+# PYTHONPATH=/app is set in docker-compose.yml, which is sufficient
+addopts = "-v --tb=short --strict-markers --disable-warnings"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 markers = [

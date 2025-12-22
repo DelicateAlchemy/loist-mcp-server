@@ -45,7 +45,7 @@ class TestMetadataExtractorInitialization:
 class TestID3TagExtraction:
     """Test ID3 tag extraction from MP3 files."""
     
-    @patch('mutagen.id3.ID3')
+    @patch('src.metadata.extractor.ID3')
     def test_extract_id3_artist(self, mock_id3):
         """Test extracting artist from ID3 tags."""
         from src.metadata import MetadataExtractor
@@ -67,7 +67,7 @@ class TestID3TagExtraction:
         finally:
             temp_path.unlink()
     
-    @patch('mutagen.id3.ID3')
+    @patch('src.metadata.extractor.ID3')
     def test_extract_id3_all_fields(self, mock_id3):
         """Test extracting all ID3 fields."""
         from src.metadata import MetadataExtractor
@@ -97,7 +97,7 @@ class TestID3TagExtraction:
         finally:
             temp_path.unlink()
     
-    @patch('mutagen.id3.ID3')
+    @patch('src.metadata.extractor.ID3')
     def test_extract_id3_year_from_tyer(self, mock_id3):
         """Test extracting year from TYER tag (ID3v2.3)."""
         from src.metadata import MetadataExtractor
@@ -126,12 +126,12 @@ class TestID3TagExtraction:
         with pytest.raises(MetadataExtractionError, match="File not found"):
             MetadataExtractor.extract_id3_tags("/nonexistent/file.mp3")
     
-    @patch('mutagen.id3.ID3')
-    @patch('mutagen.mp3.MP3')
-    def test_extract_id3_no_tags(self, mock_mp3, mock_id3):
+    @patch('src.metadata.extractor.MP3')
+    @patch('src.metadata.extractor.ID3')
+    def test_extract_id3_no_tags(self, mock_id3, mock_mp3):
         """Test handling files with no ID3 tags."""
         from src.metadata import MetadataExtractor
-        from mutagen.id3 import ID3NoHeaderError
+        from src.metadata.extractor import ID3NoHeaderError
         
         # Mock ID3 to raise no header error
         mock_id3.side_effect = ID3NoHeaderError()
@@ -158,7 +158,7 @@ class TestID3TagExtraction:
 class TestMetadataExtraction:
     """Test complete metadata extraction."""
     
-    @patch('mutagen.File')
+    @patch('src.metadata.extractor.MutagenFile')
     def test_extract_metadata_mp3(self, mock_file):
         """Test extracting metadata from MP3."""
         from src.metadata import MetadataExtractor
@@ -213,7 +213,7 @@ class TestMetadataExtraction:
         with pytest.raises(MetadataExtractionError, match="File not found"):
             MetadataExtractor.extract("/nonexistent/audio.mp3")
     
-    @patch('mutagen.File')
+    @patch('src.metadata.extractor.MutagenFile')
     def test_extract_metadata_uses_filename_as_title(self, mock_file):
         """Test that filename is used as title when tag is missing."""
         from src.metadata import MetadataExtractor
@@ -223,6 +223,10 @@ class TestMetadataExtraction:
         mock_audio.tags = {}
         mock_audio.info = Mock()
         mock_audio.info.length = 100.0
+        mock_audio.info.channels = 2
+        mock_audio.info.sample_rate = 44100
+        mock_audio.info.bitrate = 320000
+        mock_audio.info.bits_per_sample = 16
         mock_file.return_value = mock_audio
         
         with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False, prefix='My_Song_') as f:
@@ -231,7 +235,7 @@ class TestMetadataExtraction:
         
         try:
             with patch.object(MetadataExtractor, 'extract_id3_tags', return_value={'artist': None, 'title': None, 'album': None, 'genre': None, 'year': None}):
-                metadata = MetadataExtractor.extract(temp_path)
+                metadata = MetadataExtractor.extract(temp_path, validate_quality=False)
                 
                 # Should use filename stem as title
                 assert metadata['title'] == temp_path.stem
@@ -239,11 +243,11 @@ class TestMetadataExtraction:
             temp_path.unlink()
 
 
-class TestConvenienceFunctions:
-    """Test convenience wrapper functions."""
+class TestConvenienceFunctionsBasic:
+    """Test convenience wrapper functions - basic cases."""
     
     @patch.object(Path, 'exists', return_value=True)
-    @patch('mutagen.File')
+    @patch('src.metadata.extractor.MutagenFile')
     def test_extract_metadata_function(self, mock_file, mock_exists):
         """Test extract_metadata convenience function."""
         from src.metadata import extract_metadata
@@ -253,16 +257,20 @@ class TestConvenienceFunctions:
         mock_audio.tags = {}
         mock_audio.info = Mock()
         mock_audio.info.length = 100.0
+        mock_audio.info.channels = 2
+        mock_audio.info.sample_rate = 44100
+        mock_audio.info.bitrate = 320000
+        mock_audio.info.bits_per_sample = 16
         mock_file.return_value = mock_audio
         
-        with patch('src.metadata.extractor.MetadataExtractor.extract_id3_tags', return_value={}):
+        with patch('src.metadata.extractor.MetadataExtractor.extract_id3_tags', return_value={'artist': 'Artist', 'title': 'Title', 'album': 'Album'}):
             metadata = extract_metadata("test.mp3")
             
             assert metadata is not None
             assert 'format' in metadata
     
     @patch.object(Path, 'exists', return_value=True)
-    @patch('mutagen.id3.ID3')
+    @patch('src.metadata.extractor.ID3')
     def test_extract_id3_tags_function(self, mock_id3, mock_exists):
         """Test extract_id3_tags convenience function."""
         from src.metadata import extract_id3_tags
@@ -282,7 +290,7 @@ class TestConvenienceFunctions:
 class TestErrorHandling:
     """Test error handling for various scenarios."""
     
-    @patch('mutagen.File')
+    @patch('src.metadata.extractor.MutagenFile')
     def test_extract_metadata_none_result(self, mock_file):
         """Test handling when Mutagen returns None."""
         from src.metadata import MetadataExtractor, MetadataExtractionError
@@ -300,7 +308,7 @@ class TestErrorHandling:
         finally:
             temp_path.unlink()
     
-    @patch('mutagen.id3.ID3')
+    @patch('src.metadata.extractor.ID3')
     def test_extract_id3_invalid_year_format(self, mock_id3):
         """Test handling invalid year formats."""
         from src.metadata import MetadataExtractor
@@ -436,7 +444,7 @@ class TestMetadataQualityAssessment:
 class TestMetadataQualityError:
     """Test MetadataQualityError exception."""
     
-    @patch('mutagen.File')
+    @patch('src.metadata.extractor.MutagenFile')
     def test_quality_threshold_exception(self, mock_file):
         """Test MetadataQualityError when quality threshold not met."""
         from src.metadata import MetadataExtractor, MetadataQualityError
@@ -446,6 +454,10 @@ class TestMetadataQualityError:
         mock_audio.tags = {}
         mock_audio.info = Mock()
         mock_audio.info.length = 100.0
+        mock_audio.info.channels = 2
+        mock_audio.info.sample_rate = 44100
+        mock_audio.info.bitrate = 320000
+        mock_audio.info.bits_per_sample = 16
         mock_file.return_value = mock_audio
         
         with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as f:
@@ -463,7 +475,7 @@ class TestMetadataQualityError:
         finally:
             temp_path.unlink()
     
-    @patch('mutagen.File')
+    @patch('src.metadata.extractor.MutagenFile')
     def test_quality_threshold_pass(self, mock_file):
         """Test that extraction passes when quality threshold is met."""
         from src.metadata import MetadataExtractor
@@ -473,6 +485,10 @@ class TestMetadataQualityError:
         mock_audio.tags = {}
         mock_audio.info = Mock()
         mock_audio.info.length = 100.0
+        mock_audio.info.channels = 2
+        mock_audio.info.sample_rate = 44100
+        mock_audio.info.bitrate = 320000
+        mock_audio.info.bits_per_sample = 16
         mock_file.return_value = mock_audio
         
         with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as f:
@@ -528,7 +544,7 @@ class TestMetadataRepair:
         assert repaired['genre'] == 'Rock'
         assert repaired['bitrate'] == 320
     
-    @patch('mutagen.File')
+    @patch('src.metadata.extractor.MutagenFile')
     def test_extract_with_fallback_success(self, mock_file):
         """Test extract_with_fallback when repair is successful."""
         from src.metadata import MetadataExtractor
@@ -538,6 +554,10 @@ class TestMetadataRepair:
         mock_audio.tags = {}
         mock_audio.info = Mock()
         mock_audio.info.length = 100.0
+        mock_audio.info.channels = 2
+        mock_audio.info.sample_rate = 44100
+        mock_audio.info.bitrate = 320000
+        mock_audio.info.bits_per_sample = 16
         mock_file.return_value = mock_audio
         
         with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as f:
@@ -556,7 +576,7 @@ class TestMetadataRepair:
         finally:
             temp_path.unlink()
     
-    @patch('mutagen.File')
+    @patch('src.metadata.extractor.MutagenFile')
     def test_extract_with_fallback_repair(self, mock_file):
         """Test extract_with_fallback when repair is needed."""
         from src.metadata import MetadataExtractor, MetadataQualityError
@@ -566,6 +586,10 @@ class TestMetadataRepair:
         mock_audio.tags = {}
         mock_audio.info = Mock()
         mock_audio.info.length = 100.0
+        mock_audio.info.channels = 2
+        mock_audio.info.sample_rate = 44100
+        mock_audio.info.bitrate = 320000
+        mock_audio.info.bits_per_sample = 16
         mock_file.return_value = mock_audio
         
         with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as f:
@@ -587,7 +611,7 @@ class TestConvenienceFunctions:
     """Test convenience wrapper functions."""
     
     @patch.object(Path, 'exists', return_value=True)
-    @patch('mutagen.File')
+    @patch('src.metadata.extractor.MutagenFile')
     def test_extract_metadata_function(self, mock_file, mock_exists):
         """Test extract_metadata convenience function."""
         from src.metadata import extract_metadata
@@ -597,6 +621,10 @@ class TestConvenienceFunctions:
         mock_audio.tags = {}
         mock_audio.info = Mock()
         mock_audio.info.length = 100.0
+        mock_audio.info.channels = 2
+        mock_audio.info.sample_rate = 44100
+        mock_audio.info.bitrate = 320000
+        mock_audio.info.bits_per_sample = 16
         mock_file.return_value = mock_audio
         
         with patch('src.metadata.extractor.MetadataExtractor.extract_id3_tags', return_value={
@@ -609,7 +637,7 @@ class TestConvenienceFunctions:
             assert '_quality_report' in metadata
     
     @patch.object(Path, 'exists', return_value=True)
-    @patch('mutagen.File')
+    @patch('src.metadata.extractor.MutagenFile')
     def test_extract_metadata_with_fallback_function(self, mock_file, mock_exists):
         """Test extract_metadata_with_fallback convenience function."""
         from src.metadata import extract_metadata_with_fallback
@@ -619,6 +647,10 @@ class TestConvenienceFunctions:
         mock_audio.tags = {}
         mock_audio.info = Mock()
         mock_audio.info.length = 100.0
+        mock_audio.info.channels = 2
+        mock_audio.info.sample_rate = 44100
+        mock_audio.info.bitrate = 320000
+        mock_audio.info.bits_per_sample = 16
         mock_file.return_value = mock_audio
         
         with patch('src.metadata.extractor.MetadataExtractor.extract_id3_tags', return_value={
@@ -662,7 +694,7 @@ class TestConvenienceFunctions:
 class TestTechnicalSpecExtraction:
     """Test technical specification extraction."""
     
-    @patch('mutagen.File')
+    @patch('src.metadata.extractor.MutagenFile')
     def test_extract_duration(self, mock_file):
         """Test duration extraction."""
         from src.metadata import MetadataExtractor
@@ -671,6 +703,10 @@ class TestTechnicalSpecExtraction:
         mock_audio.tags = {}
         mock_audio.info = Mock()
         mock_audio.info.length = 245.678
+        mock_audio.info.channels = 2
+        mock_audio.info.sample_rate = 44100
+        mock_audio.info.bitrate = 320000
+        mock_audio.info.bits_per_sample = 16
         mock_file.return_value = mock_audio
         
         with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as f:
@@ -679,13 +715,13 @@ class TestTechnicalSpecExtraction:
         
         try:
             with patch.object(MetadataExtractor, 'extract_id3_tags', return_value={}):
-                metadata = MetadataExtractor.extract(temp_path)
+                metadata = MetadataExtractor.extract(temp_path, validate_quality=False)
                 
                 assert metadata['duration'] == 245.678
         finally:
             temp_path.unlink()
     
-    @patch('mutagen.File')
+    @patch('src.metadata.extractor.MutagenFile')
     def test_extract_channels(self, mock_file):
         """Test channel count extraction."""
         from src.metadata import MetadataExtractor
@@ -693,7 +729,11 @@ class TestTechnicalSpecExtraction:
         mock_audio = Mock()
         mock_audio.tags = {}
         mock_audio.info = Mock()
+        mock_audio.info.length = 100.0
         mock_audio.info.channels = 2  # Stereo
+        mock_audio.info.sample_rate = 44100
+        mock_audio.info.bitrate = 320000
+        mock_audio.info.bits_per_sample = 16
         mock_file.return_value = mock_audio
         
         with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as f:
@@ -702,13 +742,13 @@ class TestTechnicalSpecExtraction:
         
         try:
             with patch.object(MetadataExtractor, 'extract_id3_tags', return_value={}):
-                metadata = MetadataExtractor.extract(temp_path)
+                metadata = MetadataExtractor.extract(temp_path, validate_quality=False)
                 
                 assert metadata['channels'] == 2
         finally:
             temp_path.unlink()
     
-    @patch('mutagen.File')
+    @patch('src.metadata.extractor.MutagenFile')
     def test_extract_sample_rate(self, mock_file):
         """Test sample rate extraction."""
         from src.metadata import MetadataExtractor
@@ -716,7 +756,11 @@ class TestTechnicalSpecExtraction:
         mock_audio = Mock()
         mock_audio.tags = {}
         mock_audio.info = Mock()
+        mock_audio.info.length = 100.0
+        mock_audio.info.channels = 2
         mock_audio.info.sample_rate = 44100  # CD quality
+        mock_audio.info.bitrate = 320000
+        mock_audio.info.bits_per_sample = 16
         mock_file.return_value = mock_audio
         
         with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as f:
@@ -725,13 +769,13 @@ class TestTechnicalSpecExtraction:
         
         try:
             with patch.object(MetadataExtractor, 'extract_id3_tags', return_value={}):
-                metadata = MetadataExtractor.extract(temp_path)
+                metadata = MetadataExtractor.extract(temp_path, validate_quality=False)
                 
                 assert metadata['sample_rate'] == 44100
         finally:
             temp_path.unlink()
     
-    @patch('mutagen.File')
+    @patch('src.metadata.extractor.MutagenFile')
     def test_extract_bitrate(self, mock_file):
         """Test bitrate extraction."""
         from src.metadata import MetadataExtractor
@@ -739,7 +783,11 @@ class TestTechnicalSpecExtraction:
         mock_audio = Mock()
         mock_audio.tags = {}
         mock_audio.info = Mock()
+        mock_audio.info.length = 100.0
+        mock_audio.info.channels = 2
+        mock_audio.info.sample_rate = 44100
         mock_audio.info.bitrate = 320000  # 320 kbps
+        mock_audio.info.bits_per_sample = 16
         mock_file.return_value = mock_audio
         
         with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as f:
@@ -748,14 +796,14 @@ class TestTechnicalSpecExtraction:
         
         try:
             with patch.object(MetadataExtractor, 'extract_id3_tags', return_value={}):
-                metadata = MetadataExtractor.extract(temp_path)
+                metadata = MetadataExtractor.extract(temp_path, validate_quality=False)
                 
                 # Should convert to kbps
                 assert metadata['bitrate'] == 320
         finally:
             temp_path.unlink()
     
-    @patch('mutagen.File')
+    @patch('src.metadata.extractor.MutagenFile')
     def test_extract_bit_depth(self, mock_file):
         """Test bit depth extraction."""
         from src.metadata import MetadataExtractor
@@ -763,6 +811,10 @@ class TestTechnicalSpecExtraction:
         mock_audio = Mock()
         mock_audio.tags = {}
         mock_audio.info = Mock()
+        mock_audio.info.length = 100.0
+        mock_audio.info.channels = 2
+        mock_audio.info.sample_rate = 44100
+        mock_audio.info.bitrate = 320000
         mock_audio.info.bits_per_sample = 16  # CD quality
         mock_file.return_value = mock_audio
         
@@ -772,13 +824,13 @@ class TestTechnicalSpecExtraction:
         
         try:
             with patch.object(MetadataExtractor, 'extract_vorbis_comments', return_value={}):
-                metadata = MetadataExtractor.extract(temp_path)
+                metadata = MetadataExtractor.extract(temp_path, validate_quality=False)
                 
                 assert metadata['bit_depth'] == 16
         finally:
             temp_path.unlink()
     
-    @patch('mutagen.File')
+    @patch('src.metadata.extractor.MutagenFile')
     def test_extract_all_technical_specs(self, mock_file):
         """Test extracting all technical specifications."""
         from src.metadata import MetadataExtractor
@@ -799,7 +851,7 @@ class TestTechnicalSpecExtraction:
         
         try:
             with patch.object(MetadataExtractor, 'extract_vorbis_comments', return_value={}):
-                metadata = MetadataExtractor.extract(temp_path)
+                metadata = MetadataExtractor.extract(temp_path, validate_quality=False)
                 
                 assert metadata['duration'] == 180.5
                 assert metadata['channels'] == 2

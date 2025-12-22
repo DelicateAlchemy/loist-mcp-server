@@ -196,6 +196,46 @@ For convenience, especially for web frontends, a set of RESTful endpoints are pr
 - `GET /api/tracks/{audioId}/stream` - Get signed streaming URL
 - `GET /api/tracks/{audioId}/thumbnail` - Get signed thumbnail URL
 
+## A2A Agent-to-Agent Protocol
+
+The server implements the **A2A (Agent-to-Agent) v0.3 specification** for agent discovery and task coordination, enabling other AI agents to discover and interact with this music processing service programmatically.
+
+### Agent Discovery
+
+Agents can discover this service's capabilities through the standard A2A discovery endpoint:
+
+```bash
+# Get agent card with capabilities and skills
+curl https://a2a-staging-{PROJECT_ID}.us-central1.run.app/.well-known/agent-card.json
+```
+
+### Key Features
+
+- **Agent Card**: A2A v0.3 compliant discovery document with 6 core skills
+- **JSON-RPC API**: Standard protocol for agent-to-agent task coordination
+- **Async Task Processing**: Background audio processing with status polling
+- **Shared Business Logic**: Same processing pipeline used by MCP and A2A interfaces
+
+### Core Skills
+
+The agent exposes these capabilities for other agents:
+
+- `process_audio_complete` - Full audio processing with metadata extraction
+- `search_library` - Advanced text search with filters
+- `get_audio_metadata` - Retrieve complete track metadata
+- `update_metadata` - Edit metadata fields
+- `delete_audio` - Remove tracks from library
+- `get_embed_url` - Generate embeddable player URLs
+
+### Environment Endpoints
+
+**Staging**: `https://a2a-staging-{PROJECT_ID}.us-central1.run.app`  
+**Production**: `https://a2a-prod-{PROJECT_ID}.us-central1.run.app`
+
+### Integration Guide
+
+📚 **[Complete A2A Integration Guide](docs/a2a-integration-guide.md)** - Step-by-step integration instructions, JSON-RPC examples, authentication details, and troubleshooting.
+
 ### Key Architectural Improvements
 
 #### Repository Pattern Implementation
@@ -733,6 +773,21 @@ await update_metadata({
 - 🔄 Docker containerization
 - 🔄 PostgreSQL integration
 - 🔄 Google Cloud Storage integration
+
+### Future Scope
+
+#### A2A Push Notification Config Store Migration
+
+**Current State**: The A2A Phase 2 implementation uses a custom `PushConfigStore` class with raw SQL for managing push notification configurations.
+
+**Future Enhancement**: Migrate to the A2A SDK's built-in `DatabasePushNotificationConfigStore` which provides:
+- SQLAlchemy ORM models (instead of raw SQL)
+- Encryption support via `cryptography.fernet` for sensitive configuration data
+- Better alignment with SDK patterns and best practices
+
+**Status**: Current custom implementation works correctly for MVP. Migration is a future improvement for enhanced security and SDK alignment.
+
+**Related Documentation**: See archived code reviews in `docs/archive/a2a-code-reviews/` for detailed implementation analysis.
 
 ## Docker
 

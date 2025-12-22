@@ -120,7 +120,8 @@ async def a2a_app(mock_task_store, mock_audio_processing_result):
 @pytest.fixture
 async def client(a2a_app):
     """HTTP client for testing the A2A FastAPI app."""
-    async with httpx.AsyncClient(app=a2a_app, base_url="http://test") as client:
+    transport = httpx.ASGITransport(app=a2a_app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
 
 
@@ -139,7 +140,7 @@ def _create_sample_message():
     if not A2A_AVAILABLE:
         raise RuntimeError("A2A SDK required")
     return Message(
-        id=str(uuid.uuid4()),
+        messageId=str(uuid.uuid4()),
         role="user",
         parts=[
             TextPart(type="text", text="Please process this audio: https://example.com/test.mp3")

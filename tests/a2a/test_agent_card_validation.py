@@ -65,9 +65,9 @@ class TestAgentCardPydanticValidation:
         card = create_agent_card()
 
         assert card.capabilities is not None
-        assert card.capabilities.streaming is False  # MVP doesn't support streaming
-        assert card.capabilities.pushNotifications is False  # MVP doesn't support push notifications
-        assert card.capabilities.stateTransitionHistory is True  # Tasks have state transitions
+        assert card.capabilities.streaming is True  # MVP supports streaming
+        assert card.capabilities.push_notifications is True  # MVP supports push notifications
+        assert card.capabilities.state_transition_history is True  # Tasks have state transitions
 
     def test_agent_card_input_output_modes(self):
         """Test Agent Card input/output mode specifications."""
@@ -150,7 +150,8 @@ class TestAgentCardEndpoint:
 
         # Test the endpoint
         import httpx
-        async with httpx.AsyncClient(app=app, base_url="http://test") as client:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.get("/.well-known/agent-card.json")
 
             assert response.status_code == 200
@@ -168,7 +169,8 @@ class TestAgentCardEndpoint:
             return card.model_dump()
 
         import httpx
-        async with httpx.AsyncClient(app=app, base_url="http://test") as client:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.get("/.well-known/agent-card.json")
 
             assert response.headers.get("content-type", "").startswith("application/json")
@@ -186,7 +188,8 @@ class TestAgentCardEndpoint:
             return card.model_dump()
 
         import httpx
-        async with httpx.AsyncClient(app=app, base_url="http://test") as client:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.get("/.well-known/agent-card.json")
 
             # Should be valid JSON
@@ -208,7 +211,8 @@ class TestAgentCardEndpoint:
             return card.model_dump()
 
         import httpx
-        async with httpx.AsyncClient(app=app, base_url="http://test") as client:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.get("/.well-known/agent-card.json")
 
             data = response.json()
