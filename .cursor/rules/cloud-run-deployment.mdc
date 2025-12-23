@@ -1,0 +1,85 @@
+# Cloud Run Deployment Configuration
+
+**For production deployments, explicitly set `--execution-environment=gen2` for guaranteed compatibility.**
+
+## Execution Environment
+
+### Production Services
+
+**Always explicitly set execution environment for production:**
+
+```yaml
+# In cloudbuild-*.yaml deploy steps
+args:
+  - 'run'
+  - 'deploy'
+  - 'service-name'
+  - '--execution-environment=gen2'  # REQUIRED for production
+  # ... other args ...
+```
+
+**Why Gen2 for Production:**
+- Full Linux kernel compatibility (no gVisor emulation)
+- Guaranteed Cloud SQL Unix socket compatibility
+- Predictable behavior for database connections
+- Better for services with 512 MiB+ memory (all our services)
+
+### Staging Services
+
+**Staging can use auto-selection or explicit Gen2:**
+
+```yaml
+# Staging: Auto-selection acceptable (Cloud Run chooses based on features)
+# OR explicitly set Gen2 for consistency with production
+- '--execution-environment=gen2'  # Optional but recommended
+```
+
+## Current Service Configuration
+
+| Service | Memory | Execution Environment | Status |
+|---------|--------|----------------------|--------|
+| `a2a-staging` | 1Gi | Auto-selected (likely Gen2) | ✅ Deployed |
+| `a2a-prod` | 2Gi | **MUST SET** `gen2` | ⚠️ Not yet deployed |
+| `music-library-mcp` | 2Gi | Auto-selected | ✅ Deployed |
+| `music-library-mcp-staging` | 1Gi | Auto-selected | ✅ Deployed |
+
+## Verification
+
+**Check current execution environment:**
+
+```bash
+gcloud run services describe SERVICE_NAME --region=us-central1 \
+  --format="value(spec.template.metadata.annotations.run.googleapis.com/execution-environment)"
+```
+
+- Empty output = Auto-selected (Cloud Run chose based on features)
+- `gen1` = First generation (gVisor)
+- `gen2` = Second generation (full Linux)
+
+## Cloud Build Configuration
+
+**Production Cloud Build configs must include:**
+
+```yaml
+# cloudbuild-a2a-prod.yaml, cloudbuild.yaml
+- '--execution-environment=gen2'
+```
+
+**Staging Cloud Build configs (recommended):**
+
+```yaml
+# cloudbuild-a2a-staging.yaml, cloudbuild-staging.yaml
+- '--execution-environment=gen2'  # Recommended for consistency
+```
+
+## Rationale
+
+- **Cloud SQL Unix sockets**: Gen2 provides full Linux compatibility for reliable database connections
+- **Memory requirements**: All services have ≥1Gi (eligible for Gen2)
+- **Predictability**: Explicit setting removes ambiguity about execution environment
+- **Production stability**: Gen2 eliminates potential edge cases from gVisor emulation
+
+## Related
+
+- [Cloud SQL Admin Operations](./cloud-sql-admin.mdc) - Database connection patterns
+- [A2A Cloud Run Tempfile Fix](../docs/a2a-cloud-run-tempfile-fix.md) - Execution environment context
