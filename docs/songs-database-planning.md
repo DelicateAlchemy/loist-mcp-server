@@ -76,8 +76,10 @@ A song publishing data model that separates:
 | Item | Rationale |
 |------|-----------|
 | Full-text/fuzzy search | Simple ILIKE sufficient for MVP |
+| Full-text search optimization (TSVECTOR) | Current `search_works` uses ILIKE with trigram indexes. Migration 010 creates `search_vector` TSVECTOR column with trigger, but not yet used. Defer optimization until performance issues arise. |
 | Party deduplication suggestions | Adds UI complexity, users can search first |
-| Work merging | Complex feature |
+| Work merging | Complex feature. Users can manually consolidate works when they realize recordings belong to the same composition. Add `merge_works()` service method when user demand is clear. |
+| Work deletion | Not needed for MVP. Schema enforces `ON DELETE RESTRICT` on `audio_tracks.work_id`, preventing deletion of works with recordings. Add `delete_work()` service method with proper checks if deletion becomes necessary. |
 | Bulk CSV import for parties | Scope creep |
 | Dedicated split validation endpoint | Client can calculate from `get_work` |
 | Status state machine enforcement | Status is informational, not a gate |

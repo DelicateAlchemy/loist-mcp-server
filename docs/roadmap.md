@@ -110,6 +110,29 @@ The Music Library MCP Server has a solid MVP foundation with core audio processi
 
 **Related**: [`docs/mcp-resources-api.md`](../docs/mcp-resources-api.md) - current caching implementation
 
+### Song Publishing Enhancements
+**Priority**: Low | **Phase**: Future (Post-MVP)
+
+**Current State**: ✅ MVP Complete
+- Repository and service layer for parties, works, and relationships
+- Auto-work creation when saving audio tracks (audio-first workflow)
+- Split validation warnings (non-blocking)
+- Basic search using ILIKE pattern matching
+
+**Future Enhancements**:
+- **Full-text search optimization**: Switch `search_works` to use `search_vector` TSVECTOR column (created in migration 010) for improved performance on large datasets
+- **Work merging**: Add `merge_works()` service method to consolidate multiple works when users realize recordings belong to the same composition
+- **Work deletion**: Add `delete_work()` service method with proper checks for recordings (schema enforces `ON DELETE RESTRICT`)
+
+**Use Cases**:
+- Improved search performance as work catalog grows
+- Consolidating duplicate works created during initial ingestion
+- Managing work lifecycle (deletion when no longer needed)
+
+**Related**: 
+- [`docs/songs-database-planning.md`](../docs/songs-database-planning.md) - Song publishing implementation plan
+- [`docs/songs-schema-design-philosophy.md`](../docs/songs-schema-design-philosophy.md) - Schema design rationale
+
 ---
 
 ## Advanced Features
