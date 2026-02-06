@@ -262,7 +262,7 @@ steps:
         pip install -r requirements.txt
 
         # Install static analysis tools
-        pip install mypy flake8 black isort pylint bandit
+        pip install mypy ruff black isort pylint bandit
 
         # Create analysis results directory
         mkdir -p analysis-results
@@ -280,8 +280,8 @@ steps:
         python -m mypy src/ --config-file mypy.ini
 
         echo "🎯 Running code quality checks..."
-        # Run flake8
-        python -m flake8 src/ tests/ --config .flake8
+        # Run ruff
+        python -m ruff check src/ tests/
 
         echo "🛡️ Running security scanning..."
         # Run bandit security scanning
@@ -293,7 +293,7 @@ steps:
           "timestamp": "$(date -Iseconds)",
           "commit": "$COMMIT_SHA",
           "branch": "main",
-          "tools_run": ["black", "isort", "mypy", "flake8", "bandit"]
+          "tools_run": ["black", "isort", "mypy", "ruff", "bandit"]
         }
         EOF
 
