@@ -1,7 +1,7 @@
 """
 Tests to validate static analysis and code quality tools configuration.
 
-This module tests that all configured static analysis tools (mypy, flake8, pylint,
+This module tests that all configured static analysis tools (mypy, ruff, pylint,
 black, isort, bandit) are properly configured and functioning correctly.
 
 Tests validate:
@@ -121,19 +121,10 @@ from typing import Dict, List
             # Clean up
             test_file.unlink(missing_ok=True)
 
-    def test_flake8_installation_and_basic_functionality(self):
-        """Test that flake8 is installed and can analyze code."""
-        result = subprocess.run(
-            [sys.executable, "-m", "flake8", "--version"],
-            capture_output=True,
-            text=True
-        )
-        assert result.returncode == 0, f"flake8 not installed: {result.stderr}"
-
-    def test_flake8_configuration(self):
-        """Test flake8 configuration is working."""
+    def test_ruff_linting_configuration(self):
+        """Test ruff linting configuration is working."""
         # Create a test file with some linting issues
-        test_file = Path("/tmp/test_flake8_lint.py")
+        test_file = Path("/tmp/test_ruff_lint.py")
         test_file.write_text("""
 def function_with_issues( unused_arg):
     unused_variable = 42
@@ -143,20 +134,20 @@ def function_with_issues( unused_arg):
 """)
 
         try:
-            # Run flake8 on the test file
+            # Run ruff on the test file
             result = subprocess.run(
-                [sys.executable, "-m", "flake8", str(test_file)],
+                [sys.executable, "-m", "ruff", "check", str(test_file)],
                 capture_output=True,
                 text=True
             )
 
-            # flake8 should detect issues
-            assert result.returncode == 1, "flake8 should detect linting issues"
+            # ruff should detect issues
+            assert result.returncode == 1, "ruff should detect linting issues"
 
             # Check that it found expected issues
             output = result.stdout + result.stderr
-            # Should detect unused variable, unused argument, etc.
-            assert "unused" in output.lower() or "F401" in output or "F841" in output
+            # Should detect unused variable (F841) or whitespace issues
+            assert "F841" in output or "E" in output
 
         finally:
             # Clean up
@@ -268,7 +259,6 @@ def badFunction():
         """Test that all configuration files exist."""
         config_files = [
             ".mypy.ini",
-            ".flake8",
             ".pre-commit-config.yaml",
             "pyproject.toml"
         ]
@@ -332,7 +322,7 @@ def badFunction():
             if "hooks" in repo:
                 hook_ids.extend([hook["id"] for hook in repo["hooks"]])
 
-        expected_hooks = ["black", "isort", "flake8", "mypy", "bandit"]
+        expected_hooks = ["black", "isort", "ruff", "mypy", "bandit"]
         for expected_hook in expected_hooks:
             assert expected_hook in hook_ids, f"Hook {expected_hook} not found in pre-commit config"
 
@@ -352,25 +342,17 @@ class TestToolIntegration:
 
         assert black_length == isort_length == 100
 
-    def test_flake8_black_compatibility(self):
-        """Test that flake8 and black configurations don't conflict."""
-        # flake8 max-line-length should match black line-length
-        import configparser
-        flake8_config = configparser.ConfigParser()
-        flake8_config.read(".flake8")
-
-        if flake8_config.has_section("flake8") and flake8_config.has_option("flake8", "max-line-length"):
-            flake8_length = int(flake8_config.get("flake8", "max-line-length"))
-        else:
-            flake8_length = 100  # default
-
+    def test_ruff_black_compatibility(self):
+        """Test that ruff and black configurations don't conflict."""
+        # ruff line-length should match black line-length
         import tomllib
         with open("pyproject.toml", "rb") as f:
             config = tomllib.load(f)
 
+        ruff_length = config["tool"]["ruff"]["line-length"]
         black_length = config["tool"]["black"]["line-length"]
 
-        assert flake8_length == black_length
+        assert ruff_length == black_length
 
 
 class TestCodeQualityValidation:
@@ -400,16 +382,16 @@ class TestCodeQualityValidation:
         # isort check may pass or fail depending on current imports
         assert result.returncode in [0, 1], f"isort check failed: {result.stderr}"
 
-    def test_run_flake8_on_project(self):
-        """Test running flake8 on the project."""
+    def test_run_ruff_on_project(self):
+        """Test running ruff on the project."""
         result = subprocess.run(
-            [sys.executable, "-m", "flake8", "src/"],
+            [sys.executable, "-m", "ruff", "check", "src/"],
             capture_output=True,
             text=True
         )
 
-        # flake8 may find issues or not - the important thing is it runs
-        assert result.returncode in [0, 1], f"flake8 failed: {result.stderr}"
+        # ruff may find issues or not - the important thing is it runs
+        assert result.returncode in [0, 1], f"ruff failed: {result.stderr}"
 
     def test_run_mypy_on_project(self):
         """Test running mypy on the project."""
