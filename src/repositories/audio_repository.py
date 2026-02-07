@@ -25,6 +25,8 @@ from database.operations import (
     mark_as_processing,
     mark_as_completed,
     mark_as_failed,
+    link_artist_to_recording,
+    unlink_artist_from_recording,
 )
 
 logger = logging.getLogger(__name__)
@@ -94,6 +96,17 @@ class AudioRepositoryInterface(ABC):
     @abstractmethod
     def mark_failed(self, track_id: str, error_message: str, increment_retry: bool = True) -> Dict[str, Any]:
         """Mark track as failed."""
+        pass
+
+    @abstractmethod
+    def link_artist_to_recording(self, audio_track_id: str, party_id: str,
+                                 is_primary: bool = True, notes: Optional[str] = None) -> Dict[str, Any]:
+        """Link an artist (party) to a recording."""
+        pass
+
+    @abstractmethod
+    def unlink_artist_from_recording(self, audio_track_id: str, party_id: str) -> bool:
+        """Unlink an artist (party) from a recording."""
         pass
 
 
@@ -250,6 +263,32 @@ class PostgresAudioRepository(AudioRepositoryInterface):
             return result
         except Exception as e:
             logger.error(f"Failed to mark track {track_id} as failed: {e}")
+            raise
+
+    def link_artist_to_recording(self, audio_track_id: str, party_id: str,
+                                 is_primary: bool = True, notes: Optional[str] = None) -> Dict[str, Any]:
+        """Link an artist (party) to a recording."""
+        try:
+            result = link_artist_to_recording(
+                audio_track_id=audio_track_id,
+                party_id=party_id,
+                is_primary=is_primary,
+                notes=notes
+            )
+            logger.debug(f"Linked artist {party_id} to recording {audio_track_id}")
+            return result
+        except Exception as e:
+            logger.error(f"Failed to link artist {party_id} to recording {audio_track_id}: {e}")
+            raise
+
+    def unlink_artist_from_recording(self, audio_track_id: str, party_id: str) -> bool:
+        """Unlink an artist (party) from a recording."""
+        try:
+            result = unlink_artist_from_recording(audio_track_id, party_id)
+            logger.debug(f"Unlinked artist {party_id} from recording {audio_track_id}")
+            return result
+        except Exception as e:
+            logger.error(f"Failed to unlink artist {party_id} from recording {audio_track_id}: {e}")
             raise
 
 

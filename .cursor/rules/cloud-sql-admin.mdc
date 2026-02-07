@@ -1,0 +1,73 @@
+# Cloud SQL Admin Operations
+
+**Use Cloud SQL Auth Proxy v2 for all non-interactive SQL execution. There is NO `gcloud sql execute-sql` command.**
+
+## Critical Facts
+
+- **No SQL execution API**: Cloud SQL Admin API is admin-only (instances, users, databases) - NOT SQL execution
+- **IPv6 not supported**: Cloud SQL Gen2 only supports IPv4; use proxy to avoid connection issues
+- **`gcloud sql connect` is interactive only**: Cannot pipe SQL files directly
+
+## Non-Interactive SQL Pattern
+
+```bash
+# 1. Download proxy (if needed)
+curl -o /tmp/cloud-sql-proxy \
+  https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.11.0/cloud-sql-proxy.darwin.amd64
+chmod +x /tmp/cloud-sql-proxy
+
+# 2. Start proxy
+/tmp/cloud-sql-proxy --address 127.0.0.1 --port 5433 PROJECT:REGION:INSTANCE &
+sleep 5
+
+# 3. Execute SQL non-interactively
+PGPASSWORD="$PASSWORD" psql "host=127.0.0.1 port=5433 dbname=DBNAME user=USER sslmode=disable" -f script.sql
+# OR inline:
+PGPASSWORD="$PASSWORD" psql "host=127.0.0.1 port=5433 dbname=DBNAME user=USER" -c "GRANT ALL ON..."
+
+# 4. Cleanup
+pkill -f cloud-sql-proxy
+```
+
+## Instance Naming Convention
+
+| Environment | Instance Name | Database |
+|-------------|---------------|----------|
+| Production | `loist-music-library-db` | `music_library` |
+| Staging | `loist-music-library-db-staging` | `loist_mvp_staging` |
+
+## Permission Grants Template
+
+```sql
+GRANT ALL PRIVILEGES ON DATABASE dbname TO username;
+\c dbname
+GRANT ALL ON SCHEMA public TO username;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO username;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO username;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO username;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO username;
+```
+
+## Common Errors
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `[Errno 2] No such file or directory` | Missing `--add-cloudsql-instances` flag | Add flag to Cloud Run deploy |
+| `[Errno 5] Input/output error` | Instance doesn't exist or wrong name | Verify instance exists with `gcloud sql instances list` |
+| `IPv6 not supported` | Connecting from IPv6 address | Use Cloud SQL Proxy instead |
+
+## Quick Commands
+
+```bash
+# List instances
+gcloud sql instances list
+
+# List databases on instance
+gcloud sql databases list --instance=INSTANCE_NAME
+
+# Create user (password set separately)
+gcloud sql users create USERNAME --instance=INSTANCE_NAME --password=PASSWORD
+
+# Set user password
+gcloud sql users set-password USERNAME --instance=INSTANCE_NAME --password=PASSWORD
+```

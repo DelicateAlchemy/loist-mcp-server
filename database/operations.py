@@ -34,6 +34,7 @@ def save_audio_metadata(
     thumbnail_gcs_path: Optional[str] = None,
     track_id: Optional[str] = None,
     a2a_task_id: Optional[str] = None,
+    work_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Save audio metadata to PostgreSQL database.
@@ -62,10 +63,14 @@ def save_audio_metadata(
             Must be a valid UUID format. Links to SDK-managed a2a_tasks table.
             No foreign key constraint exists - referential integrity enforced at
             application level. Only populated for audio tracks processed via A2A endpoints.
+        work_id: Optional work ID (UUID) for linking audio track to a work/composition.
+            If not provided, automatically creates a stub work with the same title and
+            status 'draft' (audio-first workflow). Must be a valid UUID format if provided.
     
     Returns:
         Dictionary containing the saved track information:
             - id: Track UUID
+            - work_id: Work UUID (created or provided)
             - status: Processing status
             - created_at: Timestamp
             - All metadata fields
@@ -146,6 +151,26 @@ def save_audio_metadata(
         except ValueError:
             raise ValidationError(f"Invalid a2a_task_id format: {a2a_task_id}")
     
+    # Validate work_id UUID format if provided
+    if work_id is not None:
+        try:
+            uuid.UUID(work_id)
+        except ValueError:
+            raise ValidationError(f"Invalid work_id format: {work_id}")
+    
+    # Auto-create work if not provided (audio-first workflow)
+    if work_id is None:
+        try:
+            work_result = create_work({
+                'title': metadata.get('title', 'Untitled'),
+                'status': 'draft'
+            })
+            work_id = work_result['id']
+            logger.debug(f"Auto-created work {work_id} for track {track_id or 'new'}")
+        except Exception as e:
+            logger.error(f"Failed to auto-create work for track: {e}")
+            raise DatabaseOperationError(f"Failed to auto-create work: {str(e)}")
+    
     # Prepare data for insertion
     insert_data = {
         'id': track_id,
@@ -172,6 +197,8 @@ def save_audio_metadata(
         'original_filename': metadata.get('original_filename'),
         # A2A task linking
         'a2a_task_id': a2a_task_id,
+        # Work linking (required after migration 010)
+        'work_id': work_id,
     }
     
     # Execute insert with transaction management
@@ -184,20 +211,20 @@ def save_audio_metadata(
                         id, status, artist, title, album, genre, year,
                         duration_seconds, channels, sample_rate, bitrate,
                         format, file_size_bytes, audio_gcs_path, thumbnail_gcs_path,
-                        composer, publisher, record_label, isrc, original_filename, a2a_task_id
+                        composer, publisher, record_label, isrc, original_filename, a2a_task_id, work_id
                     ) VALUES (
                         %(id)s, %(status)s, %(artist)s, %(title)s, %(album)s,
                         %(genre)s, %(year)s, %(duration_seconds)s, %(channels)s,
                         %(sample_rate)s, %(bitrate)s, %(format)s, %(file_size_bytes)s,
                         %(audio_gcs_path)s, %(thumbnail_gcs_path)s,
                         %(composer)s, %(publisher)s, %(record_label)s, %(isrc)s,
-                        %(original_filename)s, %(a2a_task_id)s
+                        %(original_filename)s, %(a2a_task_id)s, %(work_id)s
                     )
                     RETURNING
                         id, status, artist, title, album, genre, year,
                         duration_seconds, channels, sample_rate, bitrate,
                         format, file_size_bytes, audio_gcs_path, thumbnail_gcs_path,
-                        composer, publisher, record_label, isrc, original_filename, a2a_task_id,
+                        composer, publisher, record_label, isrc, original_filename, a2a_task_id, work_id,
                         created_at, updated_at
                 """
                 
@@ -337,6 +364,7 @@ def save_audio_metadata_batch(
             - audio_gcs_path: GCS path to audio file
             - thumbnail_gcs_path: Optional GCS path to thumbnail
             - track_id: Optional UUID for the track
+            - work_id: Optional UUID for the work (auto-created if not provided)
     
     Returns:
         Dictionary with:
@@ -377,6 +405,7 @@ def save_audio_metadata_batch(
             audio_gcs_path = record.get('audio_gcs_path')
             thumbnail_gcs_path = record.get('thumbnail_gcs_path')
             track_id = record.get('track_id')
+            work_id = record.get('work_id')
 
             # Use the same validation logic as single insert
             _validate_audio_metadata(
@@ -389,6 +418,26 @@ def save_audio_metadata_batch(
             # Generate track ID if not provided
             if track_id is None:
                 track_id = str(uuid.uuid4())
+
+            # Validate work_id UUID format if provided
+            if work_id is not None:
+                try:
+                    uuid.UUID(work_id)
+                except ValueError:
+                    raise ValidationError(f"Invalid work_id format: {work_id}")
+
+            # Auto-create work if not provided (audio-first workflow)
+            if work_id is None:
+                try:
+                    work_result = create_work({
+                        'title': metadata.get('title', 'Untitled'),
+                        'status': 'draft'
+                    })
+                    work_id = work_result['id']
+                    logger.debug(f"Auto-created work {work_id} for track {track_id}")
+                except Exception as e:
+                    logger.error(f"Failed to auto-create work for track {track_id}: {e}")
+                    raise DatabaseOperationError(f"Failed to auto-create work: {str(e)}")
 
             # Extract validated metadata fields
             year = _extract_year(metadata.get('year'))
@@ -417,6 +466,8 @@ def save_audio_metadata_batch(
                 'isrc': metadata.get('isrc'),
                 # Filename preservation
                 'original_filename': metadata.get('original_filename'),
+                # Work linking (required after migration 010)
+                'work_id': work_id,
             })
 
             track_ids.append(track_id)
@@ -437,7 +488,7 @@ def save_audio_metadata_batch(
                         id, status, artist, title, album, genre, year,
                         duration_seconds, channels, sample_rate, bitrate,
                         format, file_size_bytes, audio_gcs_path, thumbnail_gcs_path,
-                        composer, publisher, record_label, isrc, original_filename
+                        composer, publisher, record_label, isrc, original_filename, work_id
                     ) VALUES
                 """
 
@@ -447,7 +498,7 @@ def save_audio_metadata_batch(
 
                 for record in validated_records:
                     values_clauses.append("""
-                        (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """)
                     params.extend([
                         record['id'], record['status'], record['artist'], record['title'],
@@ -455,7 +506,8 @@ def save_audio_metadata_batch(
                         record['channels'], record['sample_rate'], record['bitrate'],
                         record['format'], record['file_size_bytes'], record['audio_gcs_path'],
                         record['thumbnail_gcs_path'], record['composer'], record['publisher'],
-                        record['record_label'], record['isrc'], record['original_filename']
+                        record['record_label'], record['isrc'], record['original_filename'],
+                        record['work_id']
                     ])
 
                 insert_query += ", ".join(values_clauses)
@@ -2819,6 +2871,1133 @@ def update_audio_metadata(
         raise DatabaseOperationError(
             f"Failed to update audio metadata: {str(e)}"
         )
+
+
+# ============================================================================
+# Song Publishing Operations
+# ============================================================================
+
+# ============================================================================
+# Party Operations
+# ============================================================================
+
+def create_party(party_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Create a new party (person or organization).
+    
+    Inserts a party into the parties table with validation and error handling.
+    Supports both persons and organizations with optional industry identifiers.
+    
+    Args:
+        party_data: Dictionary containing party fields:
+            - name: str (required) - Display name
+            - party_type: str (required) - 'person' or 'organization'
+            - legal_name: str (optional) - Legal/contract name
+            - ipi_cae_number: str (optional) - CAE/IPI number for PRO registration
+            - isni: str (optional) - International Standard Name Identifier
+            - society_affiliation: str (optional) - PRO affiliation (PRS, BMI, etc.)
+            - email: str (optional) - Contact email
+            - notes: str (optional) - Freeform notes
+            - id: str (optional) - UUID (generated if not provided)
+    
+    Returns:
+        Dictionary containing the created party information with all fields
+    
+    Raises:
+        ValidationError: If required fields are missing or invalid
+        DatabaseOperationError: If database operation fails
+    
+    Example:
+        >>> party = create_party({
+        ...     'name': 'John Smith',
+        ...     'party_type': 'person',
+        ...     'ipi_cae_number': '12345678901',
+        ...     'society_affiliation': 'PRS'
+        ... })
+        >>> print(party['id'])
+    """
+    # Validate required fields
+    if not party_data.get('name'):
+        raise ValidationError("Name is required for party")
+    
+    party_type = party_data.get('party_type', 'person')
+    if party_type not in ('person', 'organization'):
+        raise ValidationError(f"Invalid party_type '{party_type}'. Must be 'person' or 'organization'")
+    
+    # Generate UUID if not provided
+    party_id = party_data.get('id')
+    if party_id:
+        try:
+            uuid.UUID(party_id)
+        except ValueError:
+            raise ValidationError(f"Invalid party_id format: {party_id}")
+    else:
+        party_id = str(uuid.uuid4())
+    
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                insert_query = """
+                    INSERT INTO parties (
+                        id, party_type, name, legal_name, ipi_cae_number, isni,
+                        society_affiliation, email, notes, created_at, updated_at
+                    ) VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW()
+                    )
+                    RETURNING 
+                        id, party_type, name, legal_name, ipi_cae_number, isni,
+                        society_affiliation, email, notes, created_at, updated_at
+                """
+                
+                cur.execute(insert_query, (
+                    party_id,
+                    party_type,
+                    party_data.get('name'),
+                    party_data.get('legal_name'),
+                    party_data.get('ipi_cae_number'),
+                    party_data.get('isni'),
+                    party_data.get('society_affiliation'),
+                    party_data.get('email'),
+                    party_data.get('notes')
+                ))
+                
+                result = cur.fetchone()
+                conn.commit()
+                
+                logger.info(f"Successfully created party: {party_id}")
+                return dict(result)
+    
+    except IntegrityError as e:
+        error_str = str(e)
+        if 'idx_parties_ipi_unique' in error_str:
+            raise ValidationError(f"IPI/CAE number already exists: {party_data.get('ipi_cae_number')}")
+        elif 'idx_parties_isni_unique' in error_str:
+            raise ValidationError(f"ISNI already exists: {party_data.get('isni')}")
+        logger.error(f"Integrity error creating party: {e}")
+        raise DatabaseOperationError(f"Failed to create party: constraint violation - {str(e)}")
+    
+    except DatabaseError as e:
+        logger.error(f"Database error creating party: {e}")
+        raise DatabaseOperationError(f"Failed to create party: database error - {str(e)}")
+    
+    except Exception as e:
+        logger.error(f"Unexpected error creating party: {e}")
+        raise DatabaseOperationError(f"Failed to create party: {str(e)}")
+
+
+def _get_party_works_as_writer(cur, party_id: str) -> List[Dict[str, Any]]:
+    """Helper function to get works where party is a writer."""
+    query = """
+        SELECT 
+            ww.work_id,
+            w.title AS work_title,
+            ww.split_percentage,
+            ww.split_status
+        FROM work_writers ww
+        INNER JOIN works w ON ww.work_id = w.id
+        WHERE ww.party_id = %s
+        ORDER BY w.title
+    """
+    cur.execute(query, (party_id,))
+    return [dict(row) for row in cur.fetchall()]
+
+
+def _get_party_works_as_publisher(cur, party_id: str) -> List[Dict[str, Any]]:
+    """Helper function to get works where party is a publisher."""
+    query = """
+        SELECT 
+            wp.work_id,
+            w.title AS work_title,
+            wp.split_percentage,
+            wp.split_status
+        FROM work_publishers wp
+        INNER JOIN works w ON wp.work_id = w.id
+        WHERE wp.party_id = %s
+        ORDER BY w.title
+    """
+    cur.execute(query, (party_id,))
+    return [dict(row) for row in cur.fetchall()]
+
+
+def _get_party_recordings_as_artist(cur, party_id: str) -> List[Dict[str, Any]]:
+    """Helper function to get recordings where party is an artist."""
+    query = """
+        SELECT 
+            ra.audio_track_id,
+            at.title AS track_title,
+            ra.is_primary
+        FROM recording_artists ra
+        INNER JOIN audio_tracks at ON ra.audio_track_id = at.id
+        WHERE ra.party_id = %s
+        ORDER BY at.title
+    """
+    cur.execute(query, (party_id,))
+    return [dict(row) for row in cur.fetchall()]
+
+
+def get_party_by_id(party_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Retrieve party by ID with works involvement.
+    
+    Returns party details including all works where the party is involved
+    as a writer, publisher, or recording artist.
+    
+    Args:
+        party_id: UUID string of the party to retrieve
+    
+    Returns:
+        Dictionary with party information and involvement:
+            - All party fields (id, name, party_type, etc.)
+            - works_as_writer: List of works with split info
+            - works_as_publisher: List of works with split info
+            - recordings_as_artist: List of recordings with is_primary flag
+        Returns None if party not found
+    
+    Raises:
+        ValidationError: If party_id format is invalid
+        DatabaseOperationError: If database query fails
+    
+    Example:
+        >>> party = get_party_by_id('123e4567-e89b-12d3-a456-426614174000')
+        >>> if party:
+        ...     print(f"Found: {party['name']}")
+        ...     print(f"Works as writer: {len(party['works_as_writer'])}")
+    """
+    # Validate UUID format
+    try:
+        uuid.UUID(party_id)
+    except ValueError:
+        raise ValidationError(f"Invalid party_id format: {party_id}")
+    
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                # Get party base data
+                query = """
+                    SELECT 
+                        id, party_type, name, legal_name, ipi_cae_number, isni,
+                        society_affiliation, email, notes, created_at, updated_at
+                    FROM parties
+                    WHERE id = %s
+                """
+                
+                cur.execute(query, (party_id,))
+                result = cur.fetchone()
+                
+                if not result:
+                    logger.debug(f"Party not found: {party_id}")
+                    return None
+                
+                party = dict(result)
+                
+                # Get works involvement
+                party['works_as_writer'] = _get_party_works_as_writer(cur, party_id)
+                party['works_as_publisher'] = _get_party_works_as_publisher(cur, party_id)
+                party['recordings_as_artist'] = _get_party_recordings_as_artist(cur, party_id)
+                
+                logger.debug(f"Retrieved party with involvement: {party_id}")
+                return party
+    
+    except DatabaseError as e:
+        logger.error(f"Database error retrieving party {party_id}: {e}")
+        raise DatabaseOperationError(f"Failed to retrieve party: database error - {str(e)}")
+    
+    except Exception as e:
+        logger.error(f"Unexpected error retrieving party {party_id}: {e}")
+        raise DatabaseOperationError(f"Failed to retrieve party: {str(e)}")
+
+
+def search_parties(query: str, limit: int = 20, offset: int = 0) -> List[Dict[str, Any]]:
+    """
+    Search parties by name using ILIKE pattern matching.
+    
+    Uses trigram index for efficient partial name matching.
+    Returns basic party information (not full involvement details).
+    
+    Args:
+        query: Search query string (matched against name field)
+        limit: Maximum number of results (1-100, default: 20)
+        offset: Number of results to skip for pagination (>=0)
+    
+    Returns:
+        List of party dictionaries ordered by name ASC
+    
+    Raises:
+        ValidationError: If parameters are invalid
+        DatabaseOperationError: If search fails
+    
+    Example:
+        >>> results = search_parties("Smith", limit=10)
+        >>> for party in results:
+        ...     print(f"{party['name']} ({party['party_type']})")
+    """
+    # Validation
+    if not query or not query.strip():
+        raise ValidationError("Search query cannot be empty")
+    
+    if limit < 1 or limit > 100:
+        raise ValidationError("Limit must be between 1 and 100")
+    
+    if offset < 0:
+        raise ValidationError("Offset must be non-negative")
+    
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                search_query = """
+                    SELECT 
+                        id, party_type, name, legal_name, ipi_cae_number, isni,
+                        society_affiliation, email, notes, created_at, updated_at
+                    FROM parties
+                    WHERE name ILIKE %s
+                    ORDER BY name ASC
+                    LIMIT %s OFFSET %s
+                """
+                
+                pattern = f"%{query.strip()}%"
+                cur.execute(search_query, (pattern, limit, offset))
+                results = cur.fetchall()
+                
+                logger.debug(f"Found {len(results)} parties matching '{query}'")
+                return [dict(row) for row in results]
+    
+    except DatabaseError as e:
+        logger.error(f"Database error searching parties: {e}")
+        raise DatabaseOperationError(f"Failed to search parties: database error - {str(e)}")
+    
+    except Exception as e:
+        logger.error(f"Unexpected error searching parties: {e}")
+        raise DatabaseOperationError(f"Failed to search parties: {str(e)}")
+
+
+# ============================================================================
+# Work Operations
+# ============================================================================
+
+def create_work(work_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Create a new work (composition).
+    
+    Inserts a work into the works table with validation and error handling.
+    Works represent compositions, separate from recordings.
+    
+    Args:
+        work_data: Dictionary containing work fields:
+            - title: str (required) - Canonical title
+            - iswc: str (optional) - International Standard Musical Work Code
+            - language: str (optional) - ISO 639-1 language code (e.g., 'en', 'es')
+            - status: str (optional) - Workflow status (default: 'draft')
+                Valid: 'draft', 'splits_pending', 'splits_disputed', 'ready', 'registered'
+            - notes: str (optional) - Freeform notes
+            - id: str (optional) - UUID (generated if not provided)
+    
+    Returns:
+        Dictionary containing the created work information with all fields
+    
+    Raises:
+        ValidationError: If required fields are missing or invalid
+        DatabaseOperationError: If database operation fails
+    
+    Example:
+        >>> work = create_work({
+        ...     'title': 'Bohemian Rhapsody',
+        ...     'language': 'en',
+        ...     'status': 'draft'
+        ... })
+        >>> print(work['id'])
+    """
+    # Validate required fields
+    if not work_data.get('title'):
+        raise ValidationError("Title is required for work")
+    
+    # Validate status if provided
+    status = work_data.get('status', 'draft')
+    valid_statuses = ('draft', 'splits_pending', 'splits_disputed', 'ready', 'registered')
+    if status not in valid_statuses:
+        raise ValidationError(f"Invalid status '{status}'. Must be one of: {valid_statuses}")
+    
+    # Generate UUID if not provided
+    work_id = work_data.get('id')
+    if work_id:
+        try:
+            uuid.UUID(work_id)
+        except ValueError:
+            raise ValidationError(f"Invalid work_id format: {work_id}")
+    else:
+        work_id = str(uuid.uuid4())
+    
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                insert_query = """
+                    INSERT INTO works (
+                        id, title, iswc, language, status, notes, created_at, updated_at
+                    ) VALUES (
+                        %s, %s, %s, %s, %s, %s, NOW(), NOW()
+                    )
+                    RETURNING 
+                        id, title, iswc, language, status, notes, created_at, updated_at
+                """
+                
+                cur.execute(insert_query, (
+                    work_id,
+                    work_data.get('title'),
+                    work_data.get('iswc'),
+                    work_data.get('language'),
+                    status,
+                    work_data.get('notes')
+                ))
+                
+                result = cur.fetchone()
+                conn.commit()
+                
+                logger.info(f"Successfully created work: {work_id}")
+                return dict(result)
+    
+    except IntegrityError as e:
+        error_str = str(e)
+        if 'idx_works_iswc_unique' in error_str:
+            raise ValidationError(f"ISWC already exists: {work_data.get('iswc')}")
+        logger.error(f"Integrity error creating work: {e}")
+        raise DatabaseOperationError(f"Failed to create work: constraint violation - {str(e)}")
+    
+    except DatabaseError as e:
+        logger.error(f"Database error creating work: {e}")
+        raise DatabaseOperationError(f"Failed to create work: database error - {str(e)}")
+    
+    except Exception as e:
+        logger.error(f"Unexpected error creating work: {e}")
+        raise DatabaseOperationError(f"Failed to create work: {str(e)}")
+
+
+def _get_work_base(cur, work_id: str) -> Optional[Dict[str, Any]]:
+    """Helper function to get work base data."""
+    query = """
+        SELECT 
+            id, title, iswc, language, status, notes, created_at, updated_at
+        FROM works
+        WHERE id = %s
+    """
+    cur.execute(query, (work_id,))
+    result = cur.fetchone()
+    return dict(result) if result else None
+
+
+def _get_work_writers(cur, work_id: str) -> List[Dict[str, Any]]:
+    """Helper function to get writers for a work."""
+    query = """
+        SELECT 
+            ww.party_id,
+            p.name AS party_name,
+            ww.split_percentage,
+            ww.split_status,
+            ww.notes
+        FROM work_writers ww
+        INNER JOIN parties p ON ww.party_id = p.id
+        WHERE ww.work_id = %s
+        ORDER BY p.name
+    """
+    cur.execute(query, (work_id,))
+    return [dict(row) for row in cur.fetchall()]
+
+
+def _get_work_publishers(cur, work_id: str) -> List[Dict[str, Any]]:
+    """Helper function to get publishers for a work."""
+    query = """
+        SELECT 
+            wp.party_id,
+            p.name AS party_name,
+            wp.split_percentage,
+            wp.split_status,
+            wp.notes
+        FROM work_publishers wp
+        INNER JOIN parties p ON wp.party_id = p.id
+        WHERE wp.work_id = %s
+        ORDER BY p.name
+    """
+    cur.execute(query, (work_id,))
+    return [dict(row) for row in cur.fetchall()]
+
+
+def _get_work_alt_titles(cur, work_id: str) -> List[Dict[str, Any]]:
+    """Helper function to get alternative titles for a work."""
+    query = """
+        SELECT 
+            id, title, title_type, language
+        FROM work_alternative_titles
+        WHERE work_id = %s
+        ORDER BY title
+    """
+    cur.execute(query, (work_id,))
+    return [dict(row) for row in cur.fetchall()]
+
+
+def _get_work_recordings(cur, work_id: str) -> List[Dict[str, Any]]:
+    """Helper function to get recordings linked to a work."""
+    query = """
+        SELECT 
+            id, title, artist, isrc
+        FROM audio_tracks
+        WHERE work_id = %s
+        ORDER BY title
+    """
+    cur.execute(query, (work_id,))
+    return [dict(row) for row in cur.fetchall()]
+
+
+def get_work_by_id(work_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Retrieve work by ID with all related data and warnings.
+    
+    Returns work details including writers, publishers, alternative titles,
+    recordings, and split warnings.
+    
+    Args:
+        work_id: UUID string of the work to retrieve
+    
+    Returns:
+        Dictionary with work information and all relations:
+            - All work fields (id, title, iswc, etc.)
+            - writers: List of writers with split info
+            - publishers: List of publishers with split info
+            - alternative_titles: List of alternative titles
+            - recordings: List of linked audio tracks
+            - warnings: List of split warning strings
+        Returns None if work not found
+    
+    Raises:
+        ValidationError: If work_id format is invalid
+        DatabaseOperationError: If database query fails
+    
+    Example:
+        >>> work = get_work_by_id('123e4567-e89b-12d3-a456-426614174000')
+        >>> if work:
+        ...     print(f"Found: {work['title']}")
+        ...     print(f"Writers: {len(work['writers'])}")
+        ...     print(f"Warnings: {work['warnings']}")
+    """
+    # Validate UUID format
+    try:
+        uuid.UUID(work_id)
+    except ValueError:
+        raise ValidationError(f"Invalid work_id format: {work_id}")
+    
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                # 1. Get work base data
+                work = _get_work_base(cur, work_id)
+                if not work:
+                    logger.debug(f"Work not found: {work_id}")
+                    return None
+                
+                # 2. Get writers
+                work['writers'] = _get_work_writers(cur, work_id)
+                
+                # 3. Get publishers
+                work['publishers'] = _get_work_publishers(cur, work_id)
+                
+                # 4. Get alternative titles
+                work['alternative_titles'] = _get_work_alt_titles(cur, work_id)
+                
+                # 5. Get recordings
+                work['recordings'] = _get_work_recordings(cur, work_id)
+                
+                # 6. Calculate warnings (using internal helper to reuse cursor)
+                work['warnings'] = _calculate_split_warnings(cur, work_id)
+                
+                logger.debug(f"Retrieved work with all relations: {work_id}")
+                return work
+    
+    except DatabaseError as e:
+        logger.error(f"Database error retrieving work {work_id}: {e}")
+        raise DatabaseOperationError(f"Failed to retrieve work: database error - {str(e)}")
+    
+    except Exception as e:
+        logger.error(f"Unexpected error retrieving work {work_id}: {e}")
+        raise DatabaseOperationError(f"Failed to retrieve work: {str(e)}")
+
+
+def search_works(query: str, limit: int = 20, offset: int = 0) -> List[Dict[str, Any]]:
+    """
+    Search works by title using ILIKE pattern matching.
+    
+    Uses trigram index for efficient partial title matching.
+    Returns basic work information (not full details with relations).
+    
+    Args:
+        query: Search query string (matched against title field)
+        limit: Maximum number of results (1-100, default: 20)
+        offset: Number of results to skip for pagination (>=0)
+    
+    Returns:
+        List of work dictionaries ordered by title ASC
+    
+    Raises:
+        ValidationError: If parameters are invalid
+        DatabaseOperationError: If search fails
+    
+    Example:
+        >>> results = search_works("Bohemian", limit=10)
+        >>> for work in results:
+        ...     print(f"{work['title']} ({work['status']})")
+    """
+    # Validation
+    if not query or not query.strip():
+        raise ValidationError("Search query cannot be empty")
+    
+    if limit < 1 or limit > 100:
+        raise ValidationError("Limit must be between 1 and 100")
+    
+    if offset < 0:
+        raise ValidationError("Offset must be non-negative")
+    
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                search_query = """
+                    SELECT 
+                        id, title, iswc, language, status, notes, created_at, updated_at
+                    FROM works
+                    WHERE title ILIKE %s
+                    ORDER BY title ASC
+                    LIMIT %s OFFSET %s
+                """
+                
+                pattern = f"%{query.strip()}%"
+                cur.execute(search_query, (pattern, limit, offset))
+                results = cur.fetchall()
+                
+                logger.debug(f"Found {len(results)} works matching '{query}'")
+                return [dict(row) for row in results]
+    
+    except DatabaseError as e:
+        logger.error(f"Database error searching works: {e}")
+        raise DatabaseOperationError(f"Failed to search works: database error - {str(e)}")
+    
+    except Exception as e:
+        logger.error(f"Unexpected error searching works: {e}")
+        raise DatabaseOperationError(f"Failed to search works: {str(e)}")
+
+
+# ============================================================================
+# Junction Table Batch Operations
+# ============================================================================
+
+def replace_work_writers(work_id: str, writers: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Replace all writers for a work using batch replace pattern.
+    
+    Atomically deletes all existing writers and inserts new ones in a transaction.
+    To add a writer: include existing + new in the list.
+    To remove: exclude from list.
+    To update: change the values in the list.
+    
+    Args:
+        work_id: UUID of the work
+        writers: List of writer dictionaries, each containing:
+            - party_id: str (required) - UUID of the party
+            - split_percentage: float (optional) - Percentage (0-200 or None)
+            - split_status: str (required) - 'proposed', 'confirmed', 'disputed', 'unknown'
+            - notes: str (optional) - Freeform notes
+    
+    Returns:
+        Dictionary with:
+            - replaced_count: Number of writers replaced
+            - work_id: The work ID
+    
+    Raises:
+        ValidationError: If parameters are invalid
+        DatabaseOperationError: If operation fails
+    
+    Example:
+        >>> replace_work_writers('work-id', [
+        ...     {'party_id': 'party-1', 'split_percentage': 50.0, 'split_status': 'confirmed'},
+        ...     {'party_id': 'party-2', 'split_percentage': 50.0, 'split_status': 'confirmed'}
+        ... ])
+    """
+    # Validate work_id
+    try:
+        uuid.UUID(work_id)
+    except ValueError:
+        raise ValidationError(f"Invalid work_id format: {work_id}")
+    
+    # Validate writers list
+    if not isinstance(writers, list):
+        raise ValidationError("Writers must be a list")
+    
+    # Validate each writer
+    valid_statuses = ('proposed', 'confirmed', 'disputed', 'unknown')
+    for idx, writer in enumerate(writers):
+        if not isinstance(writer, dict):
+            raise ValidationError(f"Writer at index {idx} must be a dictionary")
+        
+        # Validate party_id
+        party_id = writer.get('party_id')
+        if not party_id:
+            raise ValidationError(f"Writer at index {idx} missing required field: party_id")
+        try:
+            uuid.UUID(party_id)
+        except ValueError:
+            raise ValidationError(f"Writer at index {idx} has invalid party_id format: {party_id}")
+        
+        # Validate split_status
+        split_status = writer.get('split_status')
+        if not split_status:
+            raise ValidationError(f"Writer at index {idx} missing required field: split_status")
+        if split_status not in valid_statuses:
+            raise ValidationError(f"Writer at index {idx} has invalid split_status '{split_status}'. Must be one of: {valid_statuses}")
+        
+        # Validate split_percentage if provided
+        split_percentage = writer.get('split_percentage')
+        if split_percentage is not None:
+            try:
+                split_float = float(split_percentage)
+                if split_float < 0 or split_float > 200:
+                    raise ValidationError(f"Writer at index {idx} has invalid split_percentage {split_float}. Must be between 0 and 200")
+            except (ValueError, TypeError):
+                raise ValidationError(f"Writer at index {idx} has invalid split_percentage: {split_percentage}")
+    
+    try:
+        with get_connection() as conn:
+            try:
+                with conn.cursor() as cur:
+                    # Verify work exists (better error message than FK constraint)
+                    cur.execute("SELECT id FROM works WHERE id = %s", (work_id,))
+                    if not cur.fetchone():
+                        raise ResourceNotFoundError(f"Work not found: {work_id}")
+                    
+                    # DELETE existing writers
+                    cur.execute("DELETE FROM work_writers WHERE work_id = %s", (work_id,))
+                    deleted_count = cur.rowcount
+                    
+                    # INSERT new writers
+                    insert_query = """
+                        INSERT INTO work_writers (
+                            work_id, party_id, split_percentage, split_status, notes, created_at, updated_at
+                        ) VALUES (
+                            %s, %s, %s, %s, %s, NOW(), NOW()
+                        )
+                    """
+                    
+                    for writer in writers:
+                        cur.execute(insert_query, (
+                            work_id,
+                            writer['party_id'],
+                            writer.get('split_percentage'),
+                            writer['split_status'],
+                            writer.get('notes')
+                        ))
+                    
+                    conn.commit()  # Explicit commit
+                    
+                    logger.info(f"Replaced {len(writers)} writers for work {work_id} (deleted {deleted_count} existing)")
+                    return {
+                        "replaced_count": len(writers),
+                        "work_id": work_id
+                    }
+            except Exception:
+                conn.rollback()
+                raise
+    
+    except IntegrityError as e:
+        error_str = str(e)
+        if 'work_writers_work_id_party_id_key' in error_str:
+            raise ValidationError("Duplicate party_id in writers list")
+        logger.error(f"Integrity error replacing writers: {e}")
+        raise DatabaseOperationError(f"Failed to replace writers: constraint violation - {str(e)}")
+    
+    except DatabaseError as e:
+        logger.error(f"Database error replacing writers: {e}")
+        raise DatabaseOperationError(f"Failed to replace writers: database error - {str(e)}")
+    
+    except Exception as e:
+        logger.error(f"Unexpected error replacing writers: {e}")
+        raise DatabaseOperationError(f"Failed to replace writers: {str(e)}")
+
+
+def replace_work_publishers(work_id: str, publishers: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Replace all publishers for a work using batch replace pattern.
+    
+    Atomically deletes all existing publishers and inserts new ones in a transaction.
+    To add a publisher: include existing + new in the list.
+    To remove: exclude from list.
+    To update: change the values in the list.
+    
+    Args:
+        work_id: UUID of the work
+        publishers: List of publisher dictionaries, each containing:
+            - party_id: str (required) - UUID of the party
+            - split_percentage: float (optional) - Percentage (0-200 or None)
+            - split_status: str (required) - 'proposed', 'confirmed', 'disputed', 'unknown'
+            - notes: str (optional) - Freeform notes
+    
+    Returns:
+        Dictionary with:
+            - replaced_count: Number of publishers replaced
+            - work_id: The work ID
+    
+    Raises:
+        ValidationError: If parameters are invalid
+        DatabaseOperationError: If operation fails
+    
+    Example:
+        >>> replace_work_publishers('work-id', [
+        ...     {'party_id': 'publisher-1', 'split_percentage': 50.0, 'split_status': 'confirmed'}
+        ... ])
+    """
+    # Validate work_id
+    try:
+        uuid.UUID(work_id)
+    except ValueError:
+        raise ValidationError(f"Invalid work_id format: {work_id}")
+    
+    # Validate publishers list
+    if not isinstance(publishers, list):
+        raise ValidationError("Publishers must be a list")
+    
+    # Validate each publisher
+    valid_statuses = ('proposed', 'confirmed', 'disputed', 'unknown')
+    for idx, publisher in enumerate(publishers):
+        if not isinstance(publisher, dict):
+            raise ValidationError(f"Publisher at index {idx} must be a dictionary")
+        
+        # Validate party_id
+        party_id = publisher.get('party_id')
+        if not party_id:
+            raise ValidationError(f"Publisher at index {idx} missing required field: party_id")
+        try:
+            uuid.UUID(party_id)
+        except ValueError:
+            raise ValidationError(f"Publisher at index {idx} has invalid party_id format: {party_id}")
+        
+        # Validate split_status
+        split_status = publisher.get('split_status')
+        if not split_status:
+            raise ValidationError(f"Publisher at index {idx} missing required field: split_status")
+        if split_status not in valid_statuses:
+            raise ValidationError(f"Publisher at index {idx} has invalid split_status '{split_status}'. Must be one of: {valid_statuses}")
+        
+        # Validate split_percentage if provided
+        split_percentage = publisher.get('split_percentage')
+        if split_percentage is not None:
+            try:
+                split_float = float(split_percentage)
+                if split_float < 0 or split_float > 200:
+                    raise ValidationError(f"Publisher at index {idx} has invalid split_percentage {split_float}. Must be between 0 and 200")
+            except (ValueError, TypeError):
+                raise ValidationError(f"Publisher at index {idx} has invalid split_percentage: {split_percentage}")
+    
+    try:
+        with get_connection() as conn:
+            try:
+                with conn.cursor() as cur:
+                    # Verify work exists (better error message than FK constraint)
+                    cur.execute("SELECT id FROM works WHERE id = %s", (work_id,))
+                    if not cur.fetchone():
+                        raise ResourceNotFoundError(f"Work not found: {work_id}")
+                    
+                    # DELETE existing publishers
+                    cur.execute("DELETE FROM work_publishers WHERE work_id = %s", (work_id,))
+                    deleted_count = cur.rowcount
+                    
+                    # INSERT new publishers
+                    insert_query = """
+                        INSERT INTO work_publishers (
+                            work_id, party_id, split_percentage, split_status, notes, created_at, updated_at
+                        ) VALUES (
+                            %s, %s, %s, %s, %s, NOW(), NOW()
+                        )
+                    """
+                    
+                    for publisher in publishers:
+                        cur.execute(insert_query, (
+                            work_id,
+                            publisher['party_id'],
+                            publisher.get('split_percentage'),
+                            publisher['split_status'],
+                            publisher.get('notes')
+                        ))
+                    
+                    conn.commit()  # Explicit commit
+                    
+                    logger.info(f"Replaced {len(publishers)} publishers for work {work_id} (deleted {deleted_count} existing)")
+                    return {
+                        "replaced_count": len(publishers),
+                        "work_id": work_id
+                    }
+            except Exception:
+                conn.rollback()
+                raise
+    
+    except IntegrityError as e:
+        error_str = str(e)
+        if 'work_publishers_work_id_party_id_key' in error_str:
+            raise ValidationError("Duplicate party_id in publishers list")
+        logger.error(f"Integrity error replacing publishers: {e}")
+        raise DatabaseOperationError(f"Failed to replace publishers: constraint violation - {str(e)}")
+    
+    except DatabaseError as e:
+        logger.error(f"Database error replacing publishers: {e}")
+        raise DatabaseOperationError(f"Failed to replace publishers: database error - {str(e)}")
+    
+    except Exception as e:
+        logger.error(f"Unexpected error replacing publishers: {e}")
+        raise DatabaseOperationError(f"Failed to replace publishers: {str(e)}")
+
+
+# ============================================================================
+# Split Warning Calculation
+# ============================================================================
+
+def _calculate_split_warnings(cur, work_id: str) -> List[str]:
+    """
+    Internal helper to calculate split warnings using an existing cursor.
+    
+    Args:
+        cur: Database cursor
+        work_id: UUID of the work
+    
+    Returns:
+        List of warning strings (empty list if no warnings)
+    """
+    warnings = []
+    
+    # Get writer split totals and disputes
+    writer_query = """
+        SELECT 
+            COALESCE(SUM(split_percentage), 0) as total_split,
+            COUNT(*) as writer_count,
+            COUNT(CASE WHEN split_status = 'disputed' THEN 1 END) as disputed_count
+        FROM work_writers
+        WHERE work_id = %s
+    """
+    cur.execute(writer_query, (work_id,))
+    writer_result = cur.fetchone()
+    
+    if writer_result:
+        writer_count = int(writer_result['writer_count'] or 0)
+        total_writer_split = float(writer_result['total_split'] or 0)
+        disputed_writer_count = int(writer_result['disputed_count'] or 0)
+        
+        # Only warn if there are writers (avoid noisy warnings for empty works)
+        if writer_count > 0:
+            if total_writer_split < 100:
+                warnings.append(f"Writer splits only add up to {total_writer_split:.2f}%")
+            elif total_writer_split > 100:
+                warnings.append(f"Writer splits exceed 100% ({total_writer_split:.2f}%)")
+            
+            if disputed_writer_count > 0:
+                warnings.append("One or more writer splits are disputed")
+    
+    # Get publisher split totals and disputes
+    publisher_query = """
+        SELECT 
+            COALESCE(SUM(split_percentage), 0) as total_split,
+            COUNT(*) as publisher_count,
+            COUNT(CASE WHEN split_status = 'disputed' THEN 1 END) as disputed_count
+        FROM work_publishers
+        WHERE work_id = %s
+    """
+    cur.execute(publisher_query, (work_id,))
+    publisher_result = cur.fetchone()
+    
+    if publisher_result:
+        publisher_count = int(publisher_result['publisher_count'] or 0)
+        total_publisher_split = float(publisher_result['total_split'] or 0)
+        disputed_publisher_count = int(publisher_result['disputed_count'] or 0)
+        
+        # Only warn if there are publishers (avoid noisy warnings for empty works)
+        if publisher_count > 0:
+            if total_publisher_split < 100:
+                warnings.append(f"Publisher splits only add up to {total_publisher_split:.2f}%")
+            elif total_publisher_split > 100:
+                warnings.append(f"Publisher splits exceed 100% ({total_publisher_split:.2f}%)")
+            
+            if disputed_publisher_count > 0:
+                warnings.append("One or more publisher splits are disputed")
+    
+    return warnings
+
+
+def calculate_split_warnings(work_id: str) -> List[str]:
+    """
+    Calculate split warnings for a work.
+    
+    Checks writer and publisher splits for completeness, over-claiming, and disputes.
+    Warnings are informational only - the schema allows incomplete/disputed splits.
+    
+    Args:
+        work_id: UUID of the work
+    
+    Returns:
+        List of warning strings (empty list if no warnings)
+    
+    Raises:
+        ValidationError: If work_id format is invalid
+        DatabaseOperationError: If query fails
+    
+    Example:
+        >>> warnings = calculate_split_warnings('work-id')
+        >>> for warning in warnings:
+        ...     print(warning)
+    """
+    # Validate UUID format
+    try:
+        uuid.UUID(work_id)
+    except ValueError:
+        raise ValidationError(f"Invalid work_id format: {work_id}")
+    
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                return _calculate_split_warnings(cur, work_id)
+    
+    except DatabaseError as e:
+        logger.error(f"Database error calculating split warnings for {work_id}: {e}")
+        raise DatabaseOperationError(f"Failed to calculate split warnings: database error - {str(e)}")
+    
+    except Exception as e:
+        logger.error(f"Unexpected error calculating split warnings for {work_id}: {e}")
+        raise DatabaseOperationError(f"Failed to calculate split warnings: {str(e)}")
+
+
+# ============================================================================
+# Recording Artist Operations
+# ============================================================================
+
+def link_artist_to_recording(
+    audio_track_id: str,
+    party_id: str,
+    is_primary: bool = True,
+    notes: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Link an artist (party) to a recording (audio_track).
+    
+    Creates a relationship in the recording_artists junction table.
+    
+    Args:
+        audio_track_id: UUID of the audio track
+        party_id: UUID of the party (artist)
+        is_primary: Whether this is the primary artist (default: True)
+        notes: Optional notes about the artist's involvement
+    
+    Returns:
+        Dictionary containing the created recording_artist relationship
+    
+    Raises:
+        ValidationError: If parameters are invalid or duplicate link exists
+        DatabaseOperationError: If operation fails
+    
+    Example:
+        >>> link_artist_to_recording('track-id', 'party-id', is_primary=True)
+    """
+    # Validate UUIDs
+    try:
+        uuid.UUID(audio_track_id)
+    except ValueError:
+        raise ValidationError(f"Invalid audio_track_id format: {audio_track_id}")
+    
+    try:
+        uuid.UUID(party_id)
+    except ValueError:
+        raise ValidationError(f"Invalid party_id format: {party_id}")
+    
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                insert_query = """
+                    INSERT INTO recording_artists (
+                        audio_track_id, party_id, is_primary, notes, created_at, updated_at
+                    ) VALUES (
+                        %s, %s, %s, %s, NOW(), NOW()
+                    )
+                    RETURNING 
+                        id, audio_track_id, party_id, is_primary, notes, created_at, updated_at
+                """
+                
+                cur.execute(insert_query, (audio_track_id, party_id, is_primary, notes))
+                result = cur.fetchone()
+                conn.commit()
+                
+                logger.info(f"Linked artist {party_id} to recording {audio_track_id}")
+                return dict(result)
+    
+    except IntegrityError as e:
+        error_str = str(e)
+        if 'recording_artists_audio_track_id_party_id_key' in error_str:
+            raise ValidationError(f"Artist {party_id} is already linked to recording {audio_track_id}")
+        logger.error(f"Integrity error linking artist: {e}")
+        raise DatabaseOperationError(f"Failed to link artist: constraint violation - {str(e)}")
+    
+    except DatabaseError as e:
+        logger.error(f"Database error linking artist: {e}")
+        raise DatabaseOperationError(f"Failed to link artist: database error - {str(e)}")
+    
+    except Exception as e:
+        logger.error(f"Unexpected error linking artist: {e}")
+        raise DatabaseOperationError(f"Failed to link artist: {str(e)}")
+
+
+def unlink_artist_from_recording(audio_track_id: str, party_id: str) -> bool:
+    """
+    Unlink an artist (party) from a recording (audio_track).
+    
+    Removes the relationship from the recording_artists junction table.
+    
+    Args:
+        audio_track_id: UUID of the audio track
+        party_id: UUID of the party (artist)
+    
+    Returns:
+        True if deleted, False if not found (graceful handling)
+    
+    Raises:
+        ValidationError: If UUID formats are invalid
+        DatabaseOperationError: If operation fails
+    
+    Example:
+        >>> unlink_artist_from_recording('track-id', 'party-id')
+    """
+    # Validate UUIDs
+    try:
+        uuid.UUID(audio_track_id)
+    except ValueError:
+        raise ValidationError(f"Invalid audio_track_id format: {audio_track_id}")
+    
+    try:
+        uuid.UUID(party_id)
+    except ValueError:
+        raise ValidationError(f"Invalid party_id format: {party_id}")
+    
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                delete_query = """
+                    DELETE FROM recording_artists
+                    WHERE audio_track_id = %s AND party_id = %s
+                """
+                
+                cur.execute(delete_query, (audio_track_id, party_id))
+                deleted = cur.rowcount > 0
+                conn.commit()
+                
+                if deleted:
+                    logger.info(f"Unlinked artist {party_id} from recording {audio_track_id}")
+                else:
+                    logger.debug(f"Artist {party_id} not linked to recording {audio_track_id}")
+                
+                return deleted
+    
+    except DatabaseError as e:
+        logger.error(f"Database error unlinking artist: {e}")
+        raise DatabaseOperationError(f"Failed to unlink artist: database error - {str(e)}")
+    
+    except Exception as e:
+        logger.error(f"Unexpected error unlinking artist: {e}")
+        raise DatabaseOperationError(f"Failed to unlink artist: {str(e)}")
 
 
 # ============================================================================

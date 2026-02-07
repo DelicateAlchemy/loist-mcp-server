@@ -1,23 +1,22 @@
-# A2A Cloud Run Temp File Fix - Project Plan
+# A2A Cloud Run Temp File Fix - Resolution Summary
 
-**Status**: 🟡 In Progress  
-**Priority**: 🔴 High (Blocking A2A staging deployment)  
-**Created**: 2025-01-XX  
-**Last Updated**: 2025-01-XX (Execution environment verified)  
+**Status**: ✅ **COMPLETED**  
+**Completed**: 2025-12-17  
 **Related**: [a2a-mvp-tasks.md](./a2a-mvp-tasks.md) - Task TST2 smoke test failure
 
 **Execution Environment Status**:
-- ✅ `a2a-staging`: **Auto-selected** (no explicit annotation - Cloud Run chooses Gen1 or Gen2)
-- ✅ `music-library-mcp`: **Auto-selected** (no explicit annotation - Cloud Run chooses Gen1 or Gen2)
-- ⚠️ **Recommendation**: Switch to Gen2 explicitly to ensure full Linux compatibility
+- ✅ `a2a-staging`: **Auto-selected** (no explicit annotation - Cloud Run auto-selects based on features)
+- ✅ `music-library-mcp`: **Auto-selected** (no explicit annotation - Cloud Run auto-selects based on features)
+- ℹ️ **Note**: With 1Gi memory and Cloud SQL Unix sockets, Cloud Run likely selected Gen2 automatically. Explicit `--execution-environment=gen2` recommended for production to guarantee full Linux compatibility.
 
 ---
 
 ## Problem Summary
 
 **Error**: `[Errno 2] No such file or directory` when calling `message/send` JSON-RPC endpoint  
-**Root Cause**: Cloud Run first generation execution environment (gVisor) restricts non-root user access to system `/tmp` directory  
-**Impact**: A2A staging deployment blocked - audio processing pipeline cannot create temporary files
+**Root Cause**: Cloud Run execution environment restrictions on system `/tmp` directory access for non-root users  
+**Solution**: Use application-owned directory `/app/tmp` with `TMPDIR` environment variable  
+**Impact**: ✅ **RESOLVED** - A2A staging deployment working correctly
 
 ---
 
@@ -35,23 +34,19 @@
 
 ---
 
-## Scope Assessment
+## Resolution Summary
 
-### Immediate Fix Required (Phase 1)
-- ✅ Update Dockerfile to create `/app/tmp` directory
+### ✅ Completed Fixes
+- ✅ Updated Dockerfile to create `/app/tmp` directory
 - ✅ Set `TMPDIR=/app/tmp` environment variable
-- ⏳ Update all `tempfile` usage to respect `TMPDIR` or explicitly use `/app/tmp`
-- ⏳ Verify temp file cleanup (prevent memory leaks)
+- ✅ Updated all `tempfile` usage to respect `TMPDIR` or explicitly use `/app/tmp`
+- ✅ Verified temp file cleanup (prevent memory leaks)
+- ✅ Deployed to staging and verified working
 
-### Medium-Term Improvements (Phase 2)
-- ⏳ Consider switching to second generation execution environment
-- ⏳ Add explicit temp file cleanup in all code paths
-- ⏳ Add monitoring/alerting for memory usage
-
-### Long-Term Architecture (Phase 3)
-- ⏳ Evaluate streaming architecture for large files (avoid temp files entirely)
-- ⏳ Consider Cloud Storage volume mounts for large file processing
-- ⏳ Implement chunked processing for audio files >50MB
+### Future Considerations (Post-MVP)
+- Consider explicitly setting `--execution-environment=gen2` for production deployments
+- Add monitoring/alerting for memory usage
+- Evaluate streaming architecture for large files (avoid temp files entirely)
 
 ---
 
@@ -85,9 +80,9 @@
 
 ---
 
-## Task Breakdown
+## Implementation Details
 
-### Phase 1: Immediate Fix (Critical Path)
+### Phase 1: Immediate Fix (Completed)
 
 #### T1.1: Update Dockerfile ✅ DONE
 - [x] Create `/app/tmp` directory with proper ownership
@@ -165,71 +160,23 @@
 
 **Estimated Time**: 45 minutes (including deployment time)
 
-**Total Phase 1 Estimate**: ~3 hours
+**Total Phase 1 Time**: ~3 hours
 
 ---
 
-### Phase 2: Execution Environment Decision
+### Execution Environment Note
 
-#### T2.1: Verify Current Execution Environment ✅ COMPLETED
-- [x] Run verification commands to check actual execution environment
-- [x] Document findings: **Both services are auto-selected** (no explicit annotation)
-- [x] **Decision**: Switch to Gen2 explicitly (recommended for full Linux compatibility)
+**Current Status**: Cloud Run auto-selects execution environment (Gen1 or Gen2) based on service features. With 1Gi memory and Cloud SQL Unix sockets, Gen2 is likely selected automatically.
 
-**Verification Commands** (see "Verification Commands" section above)
+**Recommendation**: For production, explicitly set `--execution-environment=gen2` in Cloud Build configs to guarantee full Linux compatibility and predictable behavior with Cloud SQL Unix sockets.
 
-**Decision Criteria**:
-- If currently Gen1: Switch to Gen2 recommended (full Linux compatibility, fixes temp file issues)
-- If currently Gen2: Focus on `/app/tmp` solution (Gen2 should work with proper permissions)
-- Cold start impact: Gen2 is slower but acceptable for this use case
-- Memory: All services have ≥1Gi (eligible for Gen2)
-
-#### T2.2: Update Cloud Build Config (Gen2 Migration)
-- [x] **DEPRECATED** - No longer needed after Cloud SQL fix (LOI-30)
-- [x] Cloud SQL connectivity resolved with `--add-cloudsql-instances` flags
-- [x] Gen1 execution environment works correctly with proper Cloud SQL setup
-
-**Example change** (for `cloudbuild-a2a-staging.yaml` line 326-357):
-```yaml
-args:
-  - 'run'
-  - 'deploy'
-  - 'a2a-staging'
-  - '--execution-environment=gen2'  # ADD THIS LINE
-  - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/music-library-repo/a2a-staging:${_COMMIT_SHA}'
-  # ... rest of args ...
+**To verify current execution environment**:
+```bash
+gcloud run services describe a2a-staging --region=us-central1 \
+  --format="value(spec.template.metadata.annotations.run.googleapis.com/execution-environment)"
 ```
 
-**Estimated Time**: 1 hour
-
----
-
-### Phase 3: Long-Term Architecture (Future)
-
-**MOVED TO POST-MVP ROADMAP**: See [`docs/roadmap.md`](../roadmap.md) for streaming architecture and memory monitoring features.
-
----
-
-## Implementation Plan
-
-### Step 1: Complete Phase 1 Fixes (Today)
-
-**Priority Order**:
-1. Update code to explicitly use `TMPDIR` (T1.2) - **CRITICAL**
-2. Verify temp file cleanup (T1.3) - **IMPORTANT**
-3. Test locally (T1.4) - **VERIFY**
-4. Deploy to staging (T1.5) - **VALIDATE**
-
-### Step 2: Monitor and Iterate (This Week)
-
-- Monitor Cloud Run logs for temp file errors
-- Check memory usage patterns
-- Verify temp files are cleaned up properly
-
-### Step 3: Phase 2 Decision (Next Week)
-
-- Make decision on execution environment
-- Implement if switching to gen2
+If output is empty, Cloud Run auto-selected (likely Gen2 given our configuration).
 
 ---
 
@@ -292,16 +239,12 @@ curl -X POST https://a2a-staging-{PROJECT_ID}.us-central1.run.app/message/send \
 
 ## Success Criteria
 
-### Phase 1 Success ✅
-- [ ] `message/send` endpoint succeeds in staging
-- [ ] No temp file permission errors
-- [ ] Audio processing completes end-to-end
-- [ ] Temp files cleaned up properly
-
-### Phase 2 Success ✅
-- [ ] Execution environment decision made
-- [ ] If gen2: Cold start time acceptable
-- [ ] If gen1: `/app/tmp` solution stable
+### ✅ All Criteria Met
+- ✅ `message/send` endpoint succeeds in staging
+- ✅ No temp file permission errors
+- ✅ Audio processing completes end-to-end
+- ✅ Temp files cleaned up properly
+- ✅ Database connectivity working (LOI-30 resolved)
 
 ---
 
@@ -335,10 +278,10 @@ gcloud run revisions list \
 
 **Note**: `a2a-prod` service doesn't exist yet (not deployed) - this is expected.
 
-**Actual Results** (verified 2025-01-XX):
-- ✅ `a2a-staging`: **No annotation found** = Cloud Run auto-selected (likely Gen1 based on temp file errors)
+**Actual Results** (verified 2025-12-22):
+- ✅ `a2a-staging`: **No annotation found** = Cloud Run auto-selected (likely Gen2 given 1Gi memory + Cloud SQL)
 - ✅ `music-library-mcp`: **No annotation found** = Cloud Run auto-selected
-- ⚠️ **Conclusion**: Services are using auto-selection, which may be Gen1 (explains temp file issues)
+- ℹ️ **Conclusion**: Services use auto-selection. With 1Gi+ memory and Cloud SQL Unix sockets, Cloud Run likely selected Gen2 automatically.
 
 **Expected Results**:
 - Empty/blank = Cloud Run auto-selected (could be Gen1 or Gen2)
@@ -362,19 +305,12 @@ gcloud run revisions list \
 
 ---
 
-## Open Questions
+## Notes
 
-1. **Q**: What execution environment are we actually using?  
-   **A**: **AUTO-SELECTED** - Both `a2a-staging` and `music-library-mcp` have no explicit execution environment annotation. Cloud Run is auto-selecting (likely Gen1 based on temp file errors). **Recommendation**: Switch to Gen2 explicitly.
-
-2. **Q**: Should we switch to second generation execution environment?  
-   **A**: TBD - If currently Gen1 and temp file issues persist after `/app/tmp` fix, Gen2 is recommended. If already Gen2, focus on `/app/tmp` solution.
-
-3. **Q**: Are there memory limits we should enforce for temp files?  
-   **A**: TBD - Monitor after Phase 1 deployment. `/tmp` is memory-backed, so large files consume instance memory.
-
-4. **Q**: Should we implement streaming for large files now or later?  
-   **A**: Later (Phase 3) - Current fix should handle typical file sizes
+- ✅ **Temp file fix working**: `/app/tmp` solution resolves all temp file permission issues
+- ✅ **Database connectivity resolved**: LOI-30 fixed Cloud SQL connection issues
+- ℹ️ **Execution environment**: Auto-selected by Cloud Run (likely Gen2 given configuration)
+- 💡 **Future enhancement**: Explicitly set `--execution-environment=gen2` in production for guaranteed compatibility
 
 ---
 
@@ -396,5 +332,5 @@ gcloud run revisions list \
 
 ---
 
-**Next Steps**: Complete Phase 1 tasks T1.2-T1.5 to unblock staging deployment.
+**Status**: ✅ **RESOLVED** - All temp file issues fixed and deployed. A2A staging operational.
 
