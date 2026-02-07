@@ -4001,6 +4001,1464 @@ def unlink_artist_from_recording(audio_track_id: str, party_id: str) -> bool:
 
 
 # ============================================================================
+# Album Operations
+# ============================================================================
+
+def create_album(album_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Create a new album.
+
+    Inserts an album into the albums table with validation and error handling.
+
+    Args:
+        album_data: Dictionary containing album fields:
+            - name: str (required) - Album name
+            - artist: str (optional) - Album artist
+            - release_date: date (optional) - Release date
+            - genre: str (optional) - Primary genre
+            - label: str (optional) - Record label
+            - catalog_number: str (optional) - Catalog number
+            - total_discs: int (optional) - Number of discs (default: 1)
+            - status: str (optional) - Status (default: 'draft')
+                Valid: 'draft', 'pending_review', 'ready', 'published'
+            - notes: str (optional) - Freeform notes
+            - id: str (optional) - UUID (generated if not provided)
+
+    Returns:
+        Dictionary containing the created album information with all fields
+
+    Raises:
+        ValidationError: If required fields are missing or invalid
+        DatabaseOperationError: If database operation fails
+
+    Example:
+        >>> album = create_album({
+        ...     'name': 'Abbey Road',
+        ...     'artist': 'The Beatles',
+        ...     'status': 'published'
+        ... })
+        >>> print(album['id'])
+    """
+    # Validate required fields
+    if not album_data.get('name'):
+        raise ValidationError("Name is required for album")
+
+    # Validate status if provided
+    status = album_data.get('status', 'draft')
+    valid_statuses = ('draft', 'pending_review', 'ready', 'published')
+    if status not in valid_statuses:
+        raise ValidationError(f"Invalid status '{status}'. Must be one of: {valid_statuses}")
+
+    # Generate UUID if not provided
+    album_id = album_data.get('id')
+    if album_id:
+        try:
+            uuid.UUID(album_id)
+        except ValueError:
+            raise ValidationError(f"Invalid album_id format: {album_id}")
+    else:
+        album_id = str(uuid.uuid4())
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                insert_query = """
+                    INSERT INTO albums (
+                        id, name, artist, release_date, genre, label, catalog_number,
+                        total_discs, status, notes, created_at, updated_at
+                    ) VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW()
+                    )
+                    RETURNING
+                        id, name, artist, release_date, genre, label, catalog_number,
+                        total_discs, status, notes, created_at, updated_at
+                """
+
+                cur.execute(insert_query, (
+                    album_id,
+                    album_data.get('name'),
+                    album_data.get('artist'),
+                    album_data.get('release_date'),
+                    album_data.get('genre'),
+                    album_data.get('label'),
+                    album_data.get('catalog_number'),
+                    album_data.get('total_discs', 1),
+                    status,
+                    album_data.get('notes')
+                ))
+
+                result = cur.fetchone()
+                conn.commit()
+
+                logger.info(f"Successfully created album: {album_id}")
+                return dict(result)
+
+    except IntegrityError as e:
+        error_str = str(e)
+        logger.error(f"Integrity error creating album: {e}")
+        raise DatabaseOperationError(f"Failed to create album: constraint violation - {str(e)}")
+
+    except DatabaseError as e:
+        logger.error(f"Database error creating album: {e}")
+        raise DatabaseOperationError(f"Failed to create album: database error - {str(e)}")
+
+    except Exception as e:
+        logger.error(f"Unexpected error creating album: {e}")
+        raise DatabaseOperationError(f"Failed to create album: {str(e)}")
+
+
+def get_album_by_id(album_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Retrieve an album by ID with nested track details.
+
+    Returns album base information plus all associated tracks with their metadata.
+
+    Args:
+        album_id: UUID of the album to retrieve
+
+    Returns:
+        Dictionary containing album info, tracks list, and track_count.
+        Returns None if album not found.
+
+    Raises:
+        ValidationError: If album_id format is invalid
+        DatabaseOperationError: If retrieval fails
+
+    Example:
+        >>> album = get_album_by_id('123e4567-e89b-12d3-a456-426614174000')
+        >>> print(f"Album: {album['name']} - {album['track_count']} tracks")
+    """
+    # Validate UUID format
+    try:
+        uuid.UUID(album_id)
+    except ValueError:
+        raise ValidationError(f"Invalid album_id format: {album_id}")
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                # Get album base info
+                album_query = """
+                    SELECT
+                        id, name, artist, release_date, genre, label, catalog_number,
+                        total_discs, status, notes, created_at, updated_at
+                    FROM albums
+                    WHERE id = %s
+                """
+
+                cur.execute(album_query, (album_id,))
+                album_result = cur.fetchone()
+
+                if not album_result:
+                    logger.debug(f"Album not found: {album_id}")
+                    return None
+
+                album = dict(album_result)
+
+                # Get tracks with JOIN
+                tracks_query = """
+                    SELECT
+                        at.id, at.title, at.artist, at.album, at.duration_seconds,
+                        at.format, at.status, at.created_at, at.updated_at,
+                        alt.position, alt.disc_number
+                    FROM album_tracks alt
+                    LEFT JOIN audio_tracks at ON alt.audio_track_id = at.id
+                    WHERE alt.album_id = %s
+                    ORDER BY alt.disc_number ASC, alt.position ASC
+                """
+
+                cur.execute(tracks_query, (album_id,))
+                tracks_results = cur.fetchall()
+
+                album['tracks'] = [dict(row) for row in tracks_results]
+                album['track_count'] = len(album['tracks'])
+
+                logger.debug(f"Retrieved album {album_id} with {album['track_count']} tracks")
+                return album
+
+    except DatabaseError as e:
+        logger.error(f"Database error retrieving album {album_id}: {e}")
+        raise DatabaseOperationError(f"Failed to retrieve album: database error - {str(e)}")
+
+    except Exception as e:
+        logger.error(f"Unexpected error retrieving album {album_id}: {e}")
+        raise DatabaseOperationError(f"Failed to retrieve album: {str(e)}")
+
+
+def update_album(album_id: str, update_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Update an album's metadata.
+
+    Uses JSON Merge Patch semantics - only updates provided fields.
+
+    Args:
+        album_id: UUID of the album to update
+        update_data: Dict with fields to update
+                     Allowed fields: name, artist, release_date, genre, label,
+                                     catalog_number, total_discs, status, notes
+
+    Returns:
+        Full updated album record as dict
+
+    Raises:
+        ValidationError: If album_id format is invalid or no valid fields provided
+        ResourceNotFoundError: If album doesn't exist
+        DatabaseOperationError: If update fails
+
+    Example:
+        >>> result = update_album(
+        ...     '123e4567-e89b-12d3-a456-426614174000',
+        ...     {'status': 'published', 'notes': 'Final release'}
+        ... )
+    """
+    # Validate UUID format
+    try:
+        uuid.UUID(album_id)
+    except ValueError:
+        raise ValidationError(f"Invalid album_id format: {album_id}")
+
+    if not update_data:
+        raise ValidationError("No fields to update")
+
+    # Allowed editable fields (whitelist for safety)
+    allowed_fields = {
+        'name', 'artist', 'release_date', 'genre', 'label',
+        'catalog_number', 'total_discs', 'status', 'notes'
+    }
+
+    # Filter to only allowed fields
+    updates = {k: v for k, v in update_data.items() if k in allowed_fields}
+
+    if not updates:
+        raise ValidationError(
+            f"No valid fields to update. Allowed fields: {', '.join(sorted(allowed_fields))}"
+        )
+
+    # Validate status if provided
+    if 'status' in updates:
+        valid_statuses = ('draft', 'pending_review', 'ready', 'published')
+        if updates['status'] not in valid_statuses:
+            raise ValidationError(f"Invalid status '{updates['status']}'. Must be one of: {valid_statuses}")
+
+    # Validate name is not empty if provided
+    if 'name' in updates and not updates['name']:
+        raise ValidationError("Name cannot be empty")
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                # Build dynamic UPDATE query with parameterized values
+                set_clauses = [f"{field} = %s" for field in updates.keys()]
+                params = list(updates.values())
+                params.append(album_id)  # For WHERE clause
+
+                update_query = f"""
+                    UPDATE albums
+                    SET {', '.join(set_clauses)}
+                    WHERE id = %s::uuid
+                    RETURNING *
+                """
+
+                cur.execute(update_query, params)
+                result = cur.fetchone()
+
+                if not result:
+                    raise ResourceNotFoundError(
+                        f"Album not found: {album_id}",
+                        details={'album_id': album_id}
+                    )
+
+                # Commit transaction
+                conn.commit()
+
+                logger.info(
+                    f"Successfully updated album {album_id}: "
+                    f"fields={list(updates.keys())}"
+                )
+
+                return dict(result)
+
+    except ResourceNotFoundError:
+        raise
+
+    except ValidationError:
+        raise
+
+    except DatabaseError as e:
+        logger.error(f"Database error updating album {album_id}: {e}")
+        raise DatabaseOperationError(
+            f"Failed to update album: database error - {str(e)}"
+        )
+
+    except Exception as e:
+        logger.error(f"Unexpected error updating album {album_id}: {e}")
+        raise DatabaseOperationError(
+            f"Failed to update album: {str(e)}"
+        )
+
+
+def delete_album(album_id: str) -> bool:
+    """
+    Delete an album by ID.
+
+    CASCADE foreign key handles deletion of album_tracks junction records.
+
+    Args:
+        album_id: UUID of the album to delete
+
+    Returns:
+        True if deleted, False if not found
+
+    Raises:
+        ValidationError: If album_id format is invalid
+        DatabaseOperationError: If deletion fails
+
+    Example:
+        >>> deleted = delete_album('123e4567-e89b-12d3-a456-426614174000')
+    """
+    # Validate UUID format
+    try:
+        uuid.UUID(album_id)
+    except ValueError:
+        raise ValidationError(f"Invalid album_id format: {album_id}")
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                delete_query = """
+                    DELETE FROM albums
+                    WHERE id = %s
+                """
+
+                cur.execute(delete_query, (album_id,))
+                deleted = cur.rowcount > 0
+                conn.commit()
+
+                if deleted:
+                    logger.info(f"Deleted album {album_id}")
+                else:
+                    logger.debug(f"Album not found for deletion: {album_id}")
+
+                return deleted
+
+    except DatabaseError as e:
+        logger.error(f"Database error deleting album: {e}")
+        raise DatabaseOperationError(f"Failed to delete album: database error - {str(e)}")
+
+    except Exception as e:
+        logger.error(f"Unexpected error deleting album: {e}")
+        raise DatabaseOperationError(f"Failed to delete album: {str(e)}")
+
+
+def search_albums(
+    query: str,
+    limit: int = 20,
+    offset: int = 0,
+    status: Optional[str] = None
+) -> List[Dict[str, Any]]:
+    """
+    Search albums by name using ILIKE pattern matching.
+
+    Args:
+        query: Search query string (matched against name field)
+        limit: Maximum number of results (1-100, default: 20)
+        offset: Number of results to skip for pagination (>=0)
+        status: Optional status filter
+
+    Returns:
+        List of album dictionaries with track_count, ordered by name ASC
+
+    Raises:
+        ValidationError: If parameters are invalid
+        DatabaseOperationError: If search fails
+
+    Example:
+        >>> results = search_albums("Abbey", limit=10, status='published')
+        >>> for album in results:
+        ...     print(f"{album['name']} - {album['track_count']} tracks")
+    """
+    # Validation
+    if not query or not query.strip():
+        raise ValidationError("Search query cannot be empty")
+
+    if limit < 1 or limit > 100:
+        raise ValidationError("Limit must be between 1 and 100")
+
+    if offset < 0:
+        raise ValidationError("Offset must be non-negative")
+
+    if status:
+        valid_statuses = ('draft', 'pending_review', 'ready', 'published')
+        if status not in valid_statuses:
+            raise ValidationError(f"Invalid status '{status}'. Must be one of: {valid_statuses}")
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                # Build query with optional status filter
+                base_query = """
+                    SELECT
+                        a.id, a.name, a.artist, a.release_date, a.genre, a.label,
+                        a.catalog_number, a.total_discs, a.status, a.notes,
+                        a.created_at, a.updated_at,
+                        (SELECT COUNT(*) FROM album_tracks WHERE album_id = a.id) AS track_count
+                    FROM albums a
+                    WHERE a.name ILIKE %s
+                """
+
+                params = [f"%{query.strip()}%"]
+
+                if status:
+                    base_query += " AND a.status = %s"
+                    params.append(status)
+
+                base_query += " ORDER BY a.name ASC LIMIT %s OFFSET %s"
+                params.extend([limit, offset])
+
+                cur.execute(base_query, params)
+                results = cur.fetchall()
+
+                logger.debug(f"Found {len(results)} albums matching '{query}'")
+                return [dict(row) for row in results]
+
+    except DatabaseError as e:
+        logger.error(f"Database error searching albums: {e}")
+        raise DatabaseOperationError(f"Failed to search albums: database error - {str(e)}")
+
+    except Exception as e:
+        logger.error(f"Unexpected error searching albums: {e}")
+        raise DatabaseOperationError(f"Failed to search albums: {str(e)}")
+
+
+def add_track_to_album(
+    album_id: str,
+    audio_track_id: str,
+    position: Optional[int] = None,
+    disc_number: int = 1
+) -> Dict[str, Any]:
+    """
+    Add a track to an album at a specific position.
+
+    If position is None, auto-assigns next available position for the disc.
+
+    Args:
+        album_id: UUID of the album
+        audio_track_id: UUID of the audio track
+        position: Track position on disc (auto-assigned if None)
+        disc_number: Disc number (default: 1)
+
+    Returns:
+        Dictionary containing the created album_tracks relationship
+
+    Raises:
+        ValidationError: If parameters are invalid or duplicate link exists
+        DatabaseOperationError: If operation fails
+
+    Example:
+        >>> add_track_to_album('album-id', 'track-id', position=1)
+    """
+    # Validate UUIDs
+    try:
+        uuid.UUID(album_id)
+    except ValueError:
+        raise ValidationError(f"Invalid album_id format: {album_id}")
+
+    try:
+        uuid.UUID(audio_track_id)
+    except ValueError:
+        raise ValidationError(f"Invalid audio_track_id format: {audio_track_id}")
+
+    if disc_number < 1:
+        raise ValidationError("Disc number must be >= 1")
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                # Auto-assign position if not provided
+                if position is None:
+                    position_query = """
+                        SELECT COALESCE(MAX(position), 0) + 1 AS next_position
+                        FROM album_tracks
+                        WHERE album_id = %s AND disc_number = %s
+                    """
+                    cur.execute(position_query, (album_id, disc_number))
+                    position = cur.fetchone()['next_position']
+
+                insert_query = """
+                    INSERT INTO album_tracks (
+                        album_id, audio_track_id, position, disc_number, created_at, updated_at
+                    ) VALUES (
+                        %s, %s, %s, %s, NOW(), NOW()
+                    )
+                    RETURNING
+                        id, album_id, audio_track_id, position, disc_number, created_at, updated_at
+                """
+
+                cur.execute(insert_query, (album_id, audio_track_id, position, disc_number))
+                result = cur.fetchone()
+                conn.commit()
+
+                logger.info(f"Added track {audio_track_id} to album {album_id} at position {position}")
+                return dict(result)
+
+    except IntegrityError as e:
+        error_str = str(e)
+        if 'album_tracks_album_id_audio_track_id_key' in error_str:
+            raise ValidationError(f"Track {audio_track_id} is already in album {album_id}")
+        logger.error(f"Integrity error adding track to album: {e}")
+        raise DatabaseOperationError(f"Failed to add track to album: constraint violation - {str(e)}")
+
+    except DatabaseError as e:
+        logger.error(f"Database error adding track to album: {e}")
+        raise DatabaseOperationError(f"Failed to add track to album: database error - {str(e)}")
+
+    except Exception as e:
+        logger.error(f"Unexpected error adding track to album: {e}")
+        raise DatabaseOperationError(f"Failed to add track to album: {str(e)}")
+
+
+def remove_track_from_album(album_id: str, audio_track_id: str) -> bool:
+    """
+    Remove a track from an album and renumber remaining positions.
+
+    Deletes the album_tracks entry and renumbers remaining tracks on same disc
+    to maintain contiguous positions.
+
+    Args:
+        album_id: UUID of the album
+        audio_track_id: UUID of the audio track
+
+    Returns:
+        True if deleted, False if not found
+
+    Raises:
+        ValidationError: If UUID formats are invalid
+        DatabaseOperationError: If operation fails
+
+    Example:
+        >>> remove_track_from_album('album-id', 'track-id')
+    """
+    # Validate UUIDs
+    try:
+        uuid.UUID(album_id)
+    except ValueError:
+        raise ValidationError(f"Invalid album_id format: {album_id}")
+
+    try:
+        uuid.UUID(audio_track_id)
+    except ValueError:
+        raise ValidationError(f"Invalid audio_track_id format: {audio_track_id}")
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # Get disc_number before deletion for renumbering
+                disc_query = """
+                    SELECT disc_number FROM album_tracks
+                    WHERE album_id = %s AND audio_track_id = %s
+                """
+                cur.execute(disc_query, (album_id, audio_track_id))
+                disc_result = cur.fetchone()
+
+                if not disc_result:
+                    logger.debug(f"Track {audio_track_id} not in album {album_id}")
+                    return False
+
+                disc_number = disc_result[0]
+
+                # Delete the track
+                delete_query = """
+                    DELETE FROM album_tracks
+                    WHERE album_id = %s AND audio_track_id = %s
+                """
+                cur.execute(delete_query, (album_id, audio_track_id))
+                deleted = cur.rowcount > 0
+
+                # Renumber remaining positions on the same disc
+                if deleted:
+                    renumber_query = """
+                        UPDATE album_tracks
+                        SET position = subquery.new_position
+                        FROM (
+                            SELECT
+                                id,
+                                ROW_NUMBER() OVER (ORDER BY position ASC) AS new_position
+                            FROM album_tracks
+                            WHERE album_id = %s AND disc_number = %s
+                        ) AS subquery
+                        WHERE album_tracks.id = subquery.id
+                    """
+                    cur.execute(renumber_query, (album_id, disc_number))
+
+                conn.commit()
+
+                if deleted:
+                    logger.info(f"Removed track {audio_track_id} from album {album_id}")
+
+                return deleted
+
+    except DatabaseError as e:
+        logger.error(f"Database error removing track from album: {e}")
+        raise DatabaseOperationError(f"Failed to remove track from album: database error - {str(e)}")
+
+    except Exception as e:
+        logger.error(f"Unexpected error removing track from album: {e}")
+        raise DatabaseOperationError(f"Failed to remove track from album: {str(e)}")
+
+
+def reorder_album_tracks(album_id: str, track_order: List[str]) -> Dict[str, Any]:
+    """
+    Reorder tracks in an album.
+
+    Uses two-pass update to avoid constraint violations during reordering:
+    1. Set all positions to negative values
+    2. Set final positive positions
+
+    Args:
+        album_id: UUID of the album
+        track_order: List of audio_track_ids in desired order
+
+    Returns:
+        Dictionary with count of updated tracks
+
+    Raises:
+        ValidationError: If parameters are invalid
+        DatabaseOperationError: If reordering fails
+
+    Example:
+        >>> result = reorder_album_tracks('album-id', ['track1', 'track2', 'track3'])
+        >>> print(f"Reordered {result['updated_count']} tracks")
+    """
+    # Validate album_id
+    try:
+        uuid.UUID(album_id)
+    except ValueError:
+        raise ValidationError(f"Invalid album_id format: {album_id}")
+
+    if not track_order:
+        raise ValidationError("Track order list cannot be empty")
+
+    # Validate all track IDs
+    for track_id in track_order:
+        try:
+            uuid.UUID(track_id)
+        except ValueError:
+            raise ValidationError(f"Invalid audio_track_id format: {track_id}")
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # First pass: set all to negative positions
+                for idx, track_id in enumerate(track_order):
+                    negative_position = -1 * (idx + 1)
+                    update_query = """
+                        UPDATE album_tracks
+                        SET position = %s
+                        WHERE album_id = %s AND audio_track_id = %s
+                    """
+                    cur.execute(update_query, (negative_position, album_id, track_id))
+
+                # Second pass: set final positive positions
+                updated_count = 0
+                for idx, track_id in enumerate(track_order):
+                    final_position = idx + 1
+                    update_query = """
+                        UPDATE album_tracks
+                        SET position = %s
+                        WHERE album_id = %s AND audio_track_id = %s
+                    """
+                    cur.execute(update_query, (final_position, album_id, track_id))
+                    updated_count += cur.rowcount
+
+                conn.commit()
+
+                logger.info(f"Reordered {updated_count} tracks in album {album_id}")
+                return {'updated_count': updated_count}
+
+    except DatabaseError as e:
+        logger.error(f"Database error reordering album tracks: {e}")
+        raise DatabaseOperationError(f"Failed to reorder album tracks: database error - {str(e)}")
+
+    except Exception as e:
+        logger.error(f"Unexpected error reordering album tracks: {e}")
+        raise DatabaseOperationError(f"Failed to reorder album tracks: {str(e)}")
+
+
+# ============================================================================
+# Playlist Operations
+# ============================================================================
+
+def create_playlist(playlist_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Create a new playlist.
+
+    Inserts a playlist into the playlists table with validation and error handling.
+
+    Args:
+        playlist_data: Dictionary containing playlist fields:
+            - name: str (required) - Playlist name
+            - description: str (optional) - Playlist description
+            - is_public: bool (optional) - Public visibility (default: False)
+            - owner_id: str (optional) - UUID of the owner user
+            - notes: str (optional) - Freeform notes
+            - id: str (optional) - UUID (generated if not provided)
+
+    Returns:
+        Dictionary containing the created playlist information with all fields
+
+    Raises:
+        ValidationError: If required fields are missing or invalid
+        DatabaseOperationError: If database operation fails
+
+    Example:
+        >>> playlist = create_playlist({
+        ...     'name': 'My Favorites',
+        ...     'is_public': True
+        ... })
+        >>> print(playlist['id'])
+    """
+    # Validate required fields
+    if not playlist_data.get('name'):
+        raise ValidationError("Name is required for playlist")
+
+    # Generate UUID if not provided
+    playlist_id = playlist_data.get('id')
+    if playlist_id:
+        try:
+            uuid.UUID(playlist_id)
+        except ValueError:
+            raise ValidationError(f"Invalid playlist_id format: {playlist_id}")
+    else:
+        playlist_id = str(uuid.uuid4())
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                insert_query = """
+                    INSERT INTO playlists (
+                        id, name, description, is_public, owner_id, notes, created_at, updated_at
+                    ) VALUES (
+                        %s, %s, %s, %s, %s, %s, NOW(), NOW()
+                    )
+                    RETURNING
+                        id, name, description, is_public, owner_id, notes, created_at, updated_at
+                """
+
+                cur.execute(insert_query, (
+                    playlist_id,
+                    playlist_data.get('name'),
+                    playlist_data.get('description'),
+                    playlist_data.get('is_public', False),
+                    playlist_data.get('owner_id'),
+                    playlist_data.get('notes')
+                ))
+
+                result = cur.fetchone()
+                conn.commit()
+
+                logger.info(f"Successfully created playlist: {playlist_id}")
+                return dict(result)
+
+    except IntegrityError as e:
+        error_str = str(e)
+        logger.error(f"Integrity error creating playlist: {e}")
+        raise DatabaseOperationError(f"Failed to create playlist: constraint violation - {str(e)}")
+
+    except DatabaseError as e:
+        logger.error(f"Database error creating playlist: {e}")
+        raise DatabaseOperationError(f"Failed to create playlist: database error - {str(e)}")
+
+    except Exception as e:
+        logger.error(f"Unexpected error creating playlist: {e}")
+        raise DatabaseOperationError(f"Failed to create playlist: {str(e)}")
+
+
+def get_playlist_by_id(playlist_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Retrieve a playlist by ID with nested tracks and collaborators.
+
+    Returns playlist base information plus all associated tracks and collaborators.
+
+    Args:
+        playlist_id: UUID of the playlist to retrieve
+
+    Returns:
+        Dictionary containing playlist info, tracks list, and collaborators list.
+        Returns None if playlist not found.
+
+    Raises:
+        ValidationError: If playlist_id format is invalid
+        DatabaseOperationError: If retrieval fails
+
+    Example:
+        >>> playlist = get_playlist_by_id('123e4567-e89b-12d3-a456-426614174000')
+        >>> print(f"Playlist: {playlist['name']} - {len(playlist['tracks'])} tracks")
+    """
+    # Validate UUID format
+    try:
+        uuid.UUID(playlist_id)
+    except ValueError:
+        raise ValidationError(f"Invalid playlist_id format: {playlist_id}")
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                # Get playlist base info
+                playlist_query = """
+                    SELECT
+                        id, name, description, is_public, owner_id, notes, created_at, updated_at
+                    FROM playlists
+                    WHERE id = %s
+                """
+
+                cur.execute(playlist_query, (playlist_id,))
+                playlist_result = cur.fetchone()
+
+                if not playlist_result:
+                    logger.debug(f"Playlist not found: {playlist_id}")
+                    return None
+
+                playlist = dict(playlist_result)
+
+                # Get tracks with JOIN
+                tracks_query = """
+                    SELECT
+                        at.id, at.title, at.artist, at.album, at.duration_seconds,
+                        at.format, at.status, at.created_at, at.updated_at,
+                        pt.position, pt.added_by, pt.added_at
+                    FROM playlist_tracks pt
+                    LEFT JOIN audio_tracks at ON pt.audio_track_id = at.id
+                    WHERE pt.playlist_id = %s
+                    ORDER BY pt.position ASC
+                """
+
+                cur.execute(tracks_query, (playlist_id,))
+                tracks_results = cur.fetchall()
+                playlist['tracks'] = [dict(row) for row in tracks_results]
+
+                # Get collaborators
+                collaborators_query = """
+                    SELECT
+                        id, playlist_id, user_id, role, created_at, updated_at
+                    FROM playlist_collaborators
+                    WHERE playlist_id = %s
+                    ORDER BY created_at ASC
+                """
+
+                cur.execute(collaborators_query, (playlist_id,))
+                collaborators_results = cur.fetchall()
+                playlist['collaborators'] = [dict(row) for row in collaborators_results]
+
+                logger.debug(
+                    f"Retrieved playlist {playlist_id} with {len(playlist['tracks'])} tracks "
+                    f"and {len(playlist['collaborators'])} collaborators"
+                )
+                return playlist
+
+    except DatabaseError as e:
+        logger.error(f"Database error retrieving playlist {playlist_id}: {e}")
+        raise DatabaseOperationError(f"Failed to retrieve playlist: database error - {str(e)}")
+
+    except Exception as e:
+        logger.error(f"Unexpected error retrieving playlist {playlist_id}: {e}")
+        raise DatabaseOperationError(f"Failed to retrieve playlist: {str(e)}")
+
+
+def update_playlist(playlist_id: str, update_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Update a playlist's metadata.
+
+    Uses JSON Merge Patch semantics - only updates provided fields.
+
+    Args:
+        playlist_id: UUID of the playlist to update
+        update_data: Dict with fields to update
+                     Allowed fields: name, description, is_public, owner_id, notes
+
+    Returns:
+        Full updated playlist record as dict
+
+    Raises:
+        ValidationError: If playlist_id format is invalid or no valid fields provided
+        ResourceNotFoundError: If playlist doesn't exist
+        DatabaseOperationError: If update fails
+
+    Example:
+        >>> result = update_playlist(
+        ...     '123e4567-e89b-12d3-a456-426614174000',
+        ...     {'is_public': True, 'description': 'Best tracks'}
+        ... )
+    """
+    # Validate UUID format
+    try:
+        uuid.UUID(playlist_id)
+    except ValueError:
+        raise ValidationError(f"Invalid playlist_id format: {playlist_id}")
+
+    if not update_data:
+        raise ValidationError("No fields to update")
+
+    # Allowed editable fields (whitelist for safety)
+    allowed_fields = {'name', 'description', 'is_public', 'owner_id', 'notes'}
+
+    # Filter to only allowed fields
+    updates = {k: v for k, v in update_data.items() if k in allowed_fields}
+
+    if not updates:
+        raise ValidationError(
+            f"No valid fields to update. Allowed fields: {', '.join(sorted(allowed_fields))}"
+        )
+
+    # Validate name is not empty if provided
+    if 'name' in updates and not updates['name']:
+        raise ValidationError("Name cannot be empty")
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                # Build dynamic UPDATE query with parameterized values
+                set_clauses = [f"{field} = %s" for field in updates.keys()]
+                params = list(updates.values())
+                params.append(playlist_id)  # For WHERE clause
+
+                update_query = f"""
+                    UPDATE playlists
+                    SET {', '.join(set_clauses)}
+                    WHERE id = %s::uuid
+                    RETURNING *
+                """
+
+                cur.execute(update_query, params)
+                result = cur.fetchone()
+
+                if not result:
+                    raise ResourceNotFoundError(
+                        f"Playlist not found: {playlist_id}",
+                        details={'playlist_id': playlist_id}
+                    )
+
+                # Commit transaction
+                conn.commit()
+
+                logger.info(
+                    f"Successfully updated playlist {playlist_id}: "
+                    f"fields={list(updates.keys())}"
+                )
+
+                return dict(result)
+
+    except ResourceNotFoundError:
+        raise
+
+    except ValidationError:
+        raise
+
+    except DatabaseError as e:
+        logger.error(f"Database error updating playlist {playlist_id}: {e}")
+        raise DatabaseOperationError(
+            f"Failed to update playlist: database error - {str(e)}"
+        )
+
+    except Exception as e:
+        logger.error(f"Unexpected error updating playlist {playlist_id}: {e}")
+        raise DatabaseOperationError(
+            f"Failed to update playlist: {str(e)}"
+        )
+
+
+def delete_playlist(playlist_id: str) -> bool:
+    """
+    Delete a playlist by ID.
+
+    CASCADE foreign key handles deletion of playlist_tracks and playlist_collaborators.
+
+    Args:
+        playlist_id: UUID of the playlist to delete
+
+    Returns:
+        True if deleted, False if not found
+
+    Raises:
+        ValidationError: If playlist_id format is invalid
+        DatabaseOperationError: If deletion fails
+
+    Example:
+        >>> deleted = delete_playlist('123e4567-e89b-12d3-a456-426614174000')
+    """
+    # Validate UUID format
+    try:
+        uuid.UUID(playlist_id)
+    except ValueError:
+        raise ValidationError(f"Invalid playlist_id format: {playlist_id}")
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                delete_query = """
+                    DELETE FROM playlists
+                    WHERE id = %s
+                """
+
+                cur.execute(delete_query, (playlist_id,))
+                deleted = cur.rowcount > 0
+                conn.commit()
+
+                if deleted:
+                    logger.info(f"Deleted playlist {playlist_id}")
+                else:
+                    logger.debug(f"Playlist not found for deletion: {playlist_id}")
+
+                return deleted
+
+    except DatabaseError as e:
+        logger.error(f"Database error deleting playlist: {e}")
+        raise DatabaseOperationError(f"Failed to delete playlist: database error - {str(e)}")
+
+    except Exception as e:
+        logger.error(f"Unexpected error deleting playlist: {e}")
+        raise DatabaseOperationError(f"Failed to delete playlist: {str(e)}")
+
+
+def search_playlists(
+    query: str,
+    limit: int = 20,
+    offset: int = 0
+) -> List[Dict[str, Any]]:
+    """
+    Search playlists by name using ILIKE pattern matching.
+
+    Args:
+        query: Search query string (matched against name field)
+        limit: Maximum number of results (1-100, default: 20)
+        offset: Number of results to skip for pagination (>=0)
+
+    Returns:
+        List of playlist dictionaries with track_count, ordered by name ASC
+
+    Raises:
+        ValidationError: If parameters are invalid
+        DatabaseOperationError: If search fails
+
+    Example:
+        >>> results = search_playlists("Favorites", limit=10)
+        >>> for playlist in results:
+        ...     print(f"{playlist['name']} - {playlist['track_count']} tracks")
+    """
+    # Validation
+    if not query or not query.strip():
+        raise ValidationError("Search query cannot be empty")
+
+    if limit < 1 or limit > 100:
+        raise ValidationError("Limit must be between 1 and 100")
+
+    if offset < 0:
+        raise ValidationError("Offset must be non-negative")
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                search_query = """
+                    SELECT
+                        p.id, p.name, p.description, p.is_public, p.owner_id, p.notes,
+                        p.created_at, p.updated_at,
+                        (SELECT COUNT(*) FROM playlist_tracks WHERE playlist_id = p.id) AS track_count
+                    FROM playlists p
+                    WHERE p.name ILIKE %s
+                    ORDER BY p.name ASC
+                    LIMIT %s OFFSET %s
+                """
+
+                pattern = f"%{query.strip()}%"
+                cur.execute(search_query, (pattern, limit, offset))
+                results = cur.fetchall()
+
+                logger.debug(f"Found {len(results)} playlists matching '{query}'")
+                return [dict(row) for row in results]
+
+    except DatabaseError as e:
+        logger.error(f"Database error searching playlists: {e}")
+        raise DatabaseOperationError(f"Failed to search playlists: database error - {str(e)}")
+
+    except Exception as e:
+        logger.error(f"Unexpected error searching playlists: {e}")
+        raise DatabaseOperationError(f"Failed to search playlists: {str(e)}")
+
+
+def add_track_to_playlist(
+    playlist_id: str,
+    audio_track_id: str,
+    position: Optional[int] = None,
+    added_by: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Add a track to a playlist at a specific position.
+
+    If position is None, auto-assigns next available position.
+
+    Args:
+        playlist_id: UUID of the playlist
+        audio_track_id: UUID of the audio track
+        position: Track position (auto-assigned if None)
+        added_by: UUID of user who added the track (optional)
+
+    Returns:
+        Dictionary containing the created playlist_tracks relationship
+
+    Raises:
+        ValidationError: If parameters are invalid or duplicate link exists
+        DatabaseOperationError: If operation fails
+
+    Example:
+        >>> add_track_to_playlist('playlist-id', 'track-id', added_by='user-id')
+    """
+    # Validate UUIDs
+    try:
+        uuid.UUID(playlist_id)
+    except ValueError:
+        raise ValidationError(f"Invalid playlist_id format: {playlist_id}")
+
+    try:
+        uuid.UUID(audio_track_id)
+    except ValueError:
+        raise ValidationError(f"Invalid audio_track_id format: {audio_track_id}")
+
+    if added_by:
+        try:
+            uuid.UUID(added_by)
+        except ValueError:
+            raise ValidationError(f"Invalid added_by format: {added_by}")
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                # Auto-assign position if not provided
+                if position is None:
+                    position_query = """
+                        SELECT COALESCE(MAX(position), 0) + 1 AS next_position
+                        FROM playlist_tracks
+                        WHERE playlist_id = %s
+                    """
+                    cur.execute(position_query, (playlist_id,))
+                    position = cur.fetchone()['next_position']
+
+                insert_query = """
+                    INSERT INTO playlist_tracks (
+                        playlist_id, audio_track_id, position, added_by, added_at, created_at, updated_at
+                    ) VALUES (
+                        %s, %s, %s, %s, NOW(), NOW(), NOW()
+                    )
+                    RETURNING
+                        id, playlist_id, audio_track_id, position, added_by, added_at, created_at, updated_at
+                """
+
+                cur.execute(insert_query, (playlist_id, audio_track_id, position, added_by))
+                result = cur.fetchone()
+                conn.commit()
+
+                logger.info(f"Added track {audio_track_id} to playlist {playlist_id} at position {position}")
+                return dict(result)
+
+    except IntegrityError as e:
+        error_str = str(e)
+        if 'playlist_tracks_playlist_id_audio_track_id_key' in error_str:
+            raise ValidationError(f"Track {audio_track_id} is already in playlist {playlist_id}")
+        logger.error(f"Integrity error adding track to playlist: {e}")
+        raise DatabaseOperationError(f"Failed to add track to playlist: constraint violation - {str(e)}")
+
+    except DatabaseError as e:
+        logger.error(f"Database error adding track to playlist: {e}")
+        raise DatabaseOperationError(f"Failed to add track to playlist: database error - {str(e)}")
+
+    except Exception as e:
+        logger.error(f"Unexpected error adding track to playlist: {e}")
+        raise DatabaseOperationError(f"Failed to add track to playlist: {str(e)}")
+
+
+def remove_track_from_playlist(playlist_id: str, audio_track_id: str) -> bool:
+    """
+    Remove a track from a playlist and renumber remaining positions.
+
+    Deletes the playlist_tracks entry and renumbers remaining tracks
+    to maintain contiguous positions.
+
+    Args:
+        playlist_id: UUID of the playlist
+        audio_track_id: UUID of the audio track
+
+    Returns:
+        True if deleted, False if not found
+
+    Raises:
+        ValidationError: If UUID formats are invalid
+        DatabaseOperationError: If operation fails
+
+    Example:
+        >>> remove_track_from_playlist('playlist-id', 'track-id')
+    """
+    # Validate UUIDs
+    try:
+        uuid.UUID(playlist_id)
+    except ValueError:
+        raise ValidationError(f"Invalid playlist_id format: {playlist_id}")
+
+    try:
+        uuid.UUID(audio_track_id)
+    except ValueError:
+        raise ValidationError(f"Invalid audio_track_id format: {audio_track_id}")
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # Delete the track
+                delete_query = """
+                    DELETE FROM playlist_tracks
+                    WHERE playlist_id = %s AND audio_track_id = %s
+                """
+                cur.execute(delete_query, (playlist_id, audio_track_id))
+                deleted = cur.rowcount > 0
+
+                # Renumber remaining positions
+                if deleted:
+                    renumber_query = """
+                        UPDATE playlist_tracks
+                        SET position = subquery.new_position
+                        FROM (
+                            SELECT
+                                id,
+                                ROW_NUMBER() OVER (ORDER BY position ASC) AS new_position
+                            FROM playlist_tracks
+                            WHERE playlist_id = %s
+                        ) AS subquery
+                        WHERE playlist_tracks.id = subquery.id
+                    """
+                    cur.execute(renumber_query, (playlist_id,))
+
+                conn.commit()
+
+                if deleted:
+                    logger.info(f"Removed track {audio_track_id} from playlist {playlist_id}")
+                else:
+                    logger.debug(f"Track {audio_track_id} not in playlist {playlist_id}")
+
+                return deleted
+
+    except DatabaseError as e:
+        logger.error(f"Database error removing track from playlist: {e}")
+        raise DatabaseOperationError(f"Failed to remove track from playlist: database error - {str(e)}")
+
+    except Exception as e:
+        logger.error(f"Unexpected error removing track from playlist: {e}")
+        raise DatabaseOperationError(f"Failed to remove track from playlist: {str(e)}")
+
+
+def reorder_playlist_tracks(playlist_id: str, track_order: List[str]) -> Dict[str, Any]:
+    """
+    Reorder tracks in a playlist.
+
+    Uses two-pass update to avoid constraint violations during reordering:
+    1. Set all positions to negative values
+    2. Set final positive positions
+
+    Args:
+        playlist_id: UUID of the playlist
+        track_order: List of audio_track_ids in desired order
+
+    Returns:
+        Dictionary with count of updated tracks
+
+    Raises:
+        ValidationError: If parameters are invalid
+        DatabaseOperationError: If reordering fails
+
+    Example:
+        >>> result = reorder_playlist_tracks('playlist-id', ['track1', 'track2', 'track3'])
+        >>> print(f"Reordered {result['updated_count']} tracks")
+    """
+    # Validate playlist_id
+    try:
+        uuid.UUID(playlist_id)
+    except ValueError:
+        raise ValidationError(f"Invalid playlist_id format: {playlist_id}")
+
+    if not track_order:
+        raise ValidationError("Track order list cannot be empty")
+
+    # Validate all track IDs
+    for track_id in track_order:
+        try:
+            uuid.UUID(track_id)
+        except ValueError:
+            raise ValidationError(f"Invalid audio_track_id format: {track_id}")
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # First pass: set all to negative positions
+                for idx, track_id in enumerate(track_order):
+                    negative_position = -1 * (idx + 1)
+                    update_query = """
+                        UPDATE playlist_tracks
+                        SET position = %s
+                        WHERE playlist_id = %s AND audio_track_id = %s
+                    """
+                    cur.execute(update_query, (negative_position, playlist_id, track_id))
+
+                # Second pass: set final positive positions
+                updated_count = 0
+                for idx, track_id in enumerate(track_order):
+                    final_position = idx + 1
+                    update_query = """
+                        UPDATE playlist_tracks
+                        SET position = %s
+                        WHERE playlist_id = %s AND audio_track_id = %s
+                    """
+                    cur.execute(update_query, (final_position, playlist_id, track_id))
+                    updated_count += cur.rowcount
+
+                conn.commit()
+
+                logger.info(f"Reordered {updated_count} tracks in playlist {playlist_id}")
+                return {'updated_count': updated_count}
+
+    except DatabaseError as e:
+        logger.error(f"Database error reordering playlist tracks: {e}")
+        raise DatabaseOperationError(f"Failed to reorder playlist tracks: database error - {str(e)}")
+
+    except Exception as e:
+        logger.error(f"Unexpected error reordering playlist tracks: {e}")
+        raise DatabaseOperationError(f"Failed to reorder playlist tracks: {str(e)}")
+
+
+def add_playlist_collaborator(
+    playlist_id: str,
+    user_id: str,
+    role: str = 'viewer'
+) -> Dict[str, Any]:
+    """
+    Add a collaborator to a playlist.
+
+    If user is already a collaborator, updates their role.
+
+    Args:
+        playlist_id: UUID of the playlist
+        user_id: UUID of the user to add
+        role: Collaborator role ('viewer', 'editor', 'admin')
+
+    Returns:
+        Dictionary containing the created/updated playlist_collaborators record
+
+    Raises:
+        ValidationError: If parameters are invalid
+        DatabaseOperationError: If operation fails
+
+    Example:
+        >>> add_playlist_collaborator('playlist-id', 'user-id', role='editor')
+    """
+    # Validate UUIDs
+    try:
+        uuid.UUID(playlist_id)
+    except ValueError:
+        raise ValidationError(f"Invalid playlist_id format: {playlist_id}")
+
+    try:
+        uuid.UUID(user_id)
+    except ValueError:
+        raise ValidationError(f"Invalid user_id format: {user_id}")
+
+    # Validate role
+    valid_roles = ('viewer', 'editor', 'admin')
+    if role not in valid_roles:
+        raise ValidationError(f"Invalid role '{role}'. Must be one of: {valid_roles}")
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                insert_query = """
+                    INSERT INTO playlist_collaborators (
+                        playlist_id, user_id, role, created_at, updated_at
+                    ) VALUES (
+                        %s, %s, %s, NOW(), NOW()
+                    )
+                    ON CONFLICT (playlist_id, user_id)
+                    DO UPDATE SET role = EXCLUDED.role, updated_at = NOW()
+                    RETURNING
+                        id, playlist_id, user_id, role, created_at, updated_at
+                """
+
+                cur.execute(insert_query, (playlist_id, user_id, role))
+                result = cur.fetchone()
+                conn.commit()
+
+                logger.info(f"Added/updated collaborator {user_id} to playlist {playlist_id} with role {role}")
+                return dict(result)
+
+    except DatabaseError as e:
+        logger.error(f"Database error adding playlist collaborator: {e}")
+        raise DatabaseOperationError(f"Failed to add playlist collaborator: database error - {str(e)}")
+
+    except Exception as e:
+        logger.error(f"Unexpected error adding playlist collaborator: {e}")
+        raise DatabaseOperationError(f"Failed to add playlist collaborator: {str(e)}")
+
+
+def remove_playlist_collaborator(playlist_id: str, user_id: str) -> bool:
+    """
+    Remove a collaborator from a playlist.
+
+    Args:
+        playlist_id: UUID of the playlist
+        user_id: UUID of the user to remove
+
+    Returns:
+        True if deleted, False if not found
+
+    Raises:
+        ValidationError: If UUID formats are invalid
+        DatabaseOperationError: If operation fails
+
+    Example:
+        >>> remove_playlist_collaborator('playlist-id', 'user-id')
+    """
+    # Validate UUIDs
+    try:
+        uuid.UUID(playlist_id)
+    except ValueError:
+        raise ValidationError(f"Invalid playlist_id format: {playlist_id}")
+
+    try:
+        uuid.UUID(user_id)
+    except ValueError:
+        raise ValidationError(f"Invalid user_id format: {user_id}")
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                delete_query = """
+                    DELETE FROM playlist_collaborators
+                    WHERE playlist_id = %s AND user_id = %s
+                """
+
+                cur.execute(delete_query, (playlist_id, user_id))
+                deleted = cur.rowcount > 0
+                conn.commit()
+
+                if deleted:
+                    logger.info(f"Removed collaborator {user_id} from playlist {playlist_id}")
+                else:
+                    logger.debug(f"User {user_id} not a collaborator on playlist {playlist_id}")
+
+                return deleted
+
+    except DatabaseError as e:
+        logger.error(f"Database error removing playlist collaborator: {e}")
+        raise DatabaseOperationError(f"Failed to remove playlist collaborator: database error - {str(e)}")
+
+    except Exception as e:
+        logger.error(f"Unexpected error removing playlist collaborator: {e}")
+        raise DatabaseOperationError(f"Failed to remove playlist collaborator: {str(e)}")
+
+
+# ============================================================================
 # Error and Transaction Management
 # ============================================================================
 # Note: Error handling and transaction management are already implemented

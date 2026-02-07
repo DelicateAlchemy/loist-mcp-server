@@ -43,11 +43,13 @@ graph TB
 #### 2. Service Layer
 - **Separation of Concerns**: Contains all business logic, decoupled from the protocol and data access layers.
 - **`audio_service`**: Handles logic for metadata retrieval, search, and track management.
+- **`album_service`**: Album CRUD, track management (add/remove/reorder), status progression (project → draft → released).
+- **`playlist_service`**: Playlist CRUD, track management, and collaborator management (add/remove with roles).
 - **`streaming_service`**: Manages the generation of signed URLs for audio and thumbnails, including caching.
 - **`download_service`**: Encapsulates complex logic for audio format conversion and download preparation.
 
 #### 3. Data Access Layer
-- **Repository Pattern**: `AudioRepositoryInterface` provides a clean data access abstraction.
+- **Repository Pattern**: `AudioRepositoryInterface`, `AlbumRepositoryInterface`, `PlaylistRepositoryInterface` provide clean data access abstractions.
 - **Connection Pooling**: Optimized PostgreSQL connection management.
 - **Performance Optimizations**: Batch operations and indexing.
 
@@ -541,9 +543,12 @@ graph TD
 ```
 src/
 ├── exceptions/           # Unified exception framework
-├── repositories/         # Data access abstractions
+├── repositories/         # Data access abstractions (audio, party, work, album, playlist)
+├── services/            # Business logic (audio, album, playlist, party, work, download, streaming)
+├── schemas/             # Pydantic models (album, playlist, party, work, metadata, http_api)
 ├── fastmcp_setup.py     # Clean FastMCP initialization
 ├── server.py            # MCP server and tool registration
+├── http_api.py          # HTTP REST API route registration
 ├── resources/           # MCP resource handlers
 ├── tools/              # MCP tool implementations
 └── config.py           # Configuration management

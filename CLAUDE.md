@@ -9,9 +9,9 @@ Layered architecture with dependency injection via repository pattern:
 
 ```
 src/tools/          MCP tool endpoints (query, update, download, embed, process_audio)
-src/services/       Business logic (audio, party, work, download, streaming)
-src/repositories/   Data access abstraction (audio, party, work) - ABC interfaces + Postgres impl
-src/schemas/        Pydantic models (party, work, publishing, metadata, http_api)
+src/services/       Business logic (audio, party, work, album, playlist, download, streaming)
+src/repositories/   Data access abstraction (audio, party, work, album, playlist) - ABC interfaces + Postgres impl
+src/schemas/        Pydantic models (party, work, album, playlist, publishing, metadata, http_api)
 src/storage/        GCS client, waveform storage, retry logic
 src/metadata/       Audio metadata extraction (ID3, BWF, XMP, format validation)
 src/resources/      MCP resource providers (audio_stream, thumbnail, cache)

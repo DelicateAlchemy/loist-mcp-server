@@ -44,6 +44,26 @@ from .operations import (
     calculate_split_warnings,
     link_artist_to_recording,
     unlink_artist_from_recording,
+    # Album Operations
+    create_album,
+    get_album_by_id,
+    update_album,
+    delete_album,
+    search_albums,
+    add_track_to_album,
+    remove_track_from_album,
+    reorder_album_tracks,
+    # Playlist Operations
+    create_playlist,
+    get_playlist_by_id,
+    update_playlist,
+    delete_playlist,
+    search_playlists,
+    add_track_to_playlist,
+    remove_track_from_playlist,
+    reorder_playlist_tracks,
+    add_playlist_collaborator,
+    remove_playlist_collaborator,
 )
 from .utils import check_database_availability
 
@@ -84,5 +104,25 @@ __all__ = [
     "calculate_split_warnings",
     "link_artist_to_recording",
     "unlink_artist_from_recording",
+    # Album Operations
+    "create_album",
+    "get_album_by_id",
+    "update_album",
+    "delete_album",
+    "search_albums",
+    "add_track_to_album",
+    "remove_track_from_album",
+    "reorder_album_tracks",
+    # Playlist Operations
+    "create_playlist",
+    "get_playlist_by_id",
+    "update_playlist",
+    "delete_playlist",
+    "search_playlists",
+    "add_track_to_playlist",
+    "remove_track_from_playlist",
+    "reorder_playlist_tracks",
+    "add_playlist_collaborator",
+    "remove_playlist_collaborator",
 ]
 

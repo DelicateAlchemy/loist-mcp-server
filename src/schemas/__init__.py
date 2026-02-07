@@ -35,6 +35,41 @@ from src.schemas.publishing import (
     LinkArtistInput,
 )
 
+# Album schemas
+from src.schemas.album import (
+    AlbumStatus,
+    CreateAlbumInput,
+    UpdateAlbumInput,
+    SearchAlbumsInput,
+    AddAlbumTrackInput,
+    RemoveAlbumTrackInput,
+    ReorderAlbumTracksInput,
+    AlbumTrackOutput,
+    AlbumOutput,
+    AlbumSearchResult,
+    SearchAlbumsOutput,
+    validate_album_id,
+)
+
+# Playlist schemas
+from src.schemas.playlist import (
+    PlaylistCollaboratorRole,
+    CreatePlaylistInput,
+    UpdatePlaylistInput,
+    SearchPlaylistsInput,
+    AddPlaylistTrackInput,
+    RemovePlaylistTrackInput,
+    ReorderPlaylistTracksInput,
+    AddCollaboratorInput,
+    RemoveCollaboratorInput,
+    PlaylistTrackOutput,
+    PlaylistCollaboratorOutput,
+    PlaylistOutput,
+    PlaylistSearchResult,
+    SearchPlaylistsOutput,
+    validate_playlist_id,
+)
+
 __all__ = [
     # Party
     "PartyType",
@@ -60,5 +95,33 @@ __all__ = [
     "PublisherInput",
     "UpdateWorkPublishersInput",
     "LinkArtistInput",
+    # Album
+    "AlbumStatus",
+    "CreateAlbumInput",
+    "UpdateAlbumInput",
+    "SearchAlbumsInput",
+    "AddAlbumTrackInput",
+    "RemoveAlbumTrackInput",
+    "ReorderAlbumTracksInput",
+    "AlbumTrackOutput",
+    "AlbumOutput",
+    "AlbumSearchResult",
+    "SearchAlbumsOutput",
+    "validate_album_id",
+    # Playlist
+    "PlaylistCollaboratorRole",
+    "CreatePlaylistInput",
+    "UpdatePlaylistInput",
+    "SearchPlaylistsInput",
+    "AddPlaylistTrackInput",
+    "RemovePlaylistTrackInput",
+    "ReorderPlaylistTracksInput",
+    "AddCollaboratorInput",
+    "RemoveCollaboratorInput",
+    "PlaylistTrackOutput",
+    "PlaylistCollaboratorOutput",
+    "PlaylistOutput",
+    "PlaylistSearchResult",
+    "SearchPlaylistsOutput",
+    "validate_playlist_id",
 ]
-

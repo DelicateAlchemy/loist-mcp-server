@@ -395,6 +395,291 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
 
 ---
 
+### Album Endpoints
+
+Albums are flexible groupings of audio tracks with a status progression (project → draft → released), ideal for WIP music creation.
+
+#### Create Album
+```http
+POST /api/albums
+Content-Type: application/json
+```
+
+**Request Body**:
+```json
+{
+  "name": "My New Album",
+  "description": "Work in progress tracks",
+  "status": "project",
+  "owner_id": "user-uuid-here"
+}
+```
+
+**Response** (`201`):
+```json
+{
+  "id": "album-uuid",
+  "name": "My New Album",
+  "description": "Work in progress tracks",
+  "status": "project",
+  "cover_art_gcs_path": null,
+  "owner_id": "user-uuid-here",
+  "created_at": "2025-01-15T10:30:00Z",
+  "updated_at": "2025-01-15T10:30:00Z"
+}
+```
+
+---
+
+#### Search Albums
+```http
+GET /api/albums?q={query}&limit={limit}&offset={offset}&status={status}
+```
+
+**Query Parameters**:
+- `q` (string, required): Search query (matches album name)
+- `limit` (integer, optional): Max results (1-100, default: 20)
+- `offset` (integer, optional): Pagination offset (default: 0)
+- `status` (string, optional): Filter by status (`project`, `draft`, `released`)
+
+**Response** (`200`):
+```json
+{
+  "results": [{ "id": "...", "name": "...", "status": "project", "track_count": 5 }],
+  "total": 1,
+  "limit": 20,
+  "offset": 0,
+  "has_more": false
+}
+```
+
+---
+
+#### Get Album
+```http
+GET /api/albums/{albumId}
+```
+
+**Response** (`200`): Full album object with nested `tracks` array.
+
+**Status Codes**: `200` (success), `404` (not found)
+
+---
+
+#### Update Album
+```http
+PUT /api/albums/{albumId}
+Content-Type: application/json
+```
+
+**Request Body** (all fields optional):
+```json
+{
+  "name": "Updated Name",
+  "description": "New description",
+  "status": "draft"
+}
+```
+
+**Status Codes**: `200` (success), `404` (not found)
+
+---
+
+#### Delete Album
+```http
+DELETE /api/albums/{albumId}
+```
+
+**Status Codes**: `200` (success), `404` (not found)
+
+---
+
+#### Add Track to Album
+```http
+POST /api/albums/{albumId}/tracks
+Content-Type: application/json
+```
+
+**Request Body**:
+```json
+{
+  "audio_track_id": "track-uuid",
+  "position": 1,
+  "disc_number": 1
+}
+```
+
+**Status Codes**: `201` (success), `400` (duplicate or invalid)
+
+---
+
+#### Remove Track from Album
+```http
+DELETE /api/albums/{albumId}/tracks/{audioId}
+```
+
+**Status Codes**: `200` (success)
+
+---
+
+#### Reorder Album Tracks
+```http
+PUT /api/albums/{albumId}/tracks/order
+Content-Type: application/json
+```
+
+**Request Body**:
+```json
+{
+  "track_order": ["track-uuid-3", "track-uuid-1", "track-uuid-2"]
+}
+```
+
+**Status Codes**: `200` (success)
+
+---
+
+### Playlist Endpoints
+
+Playlists support collaborative track groupings with role-based collaborators (viewer, editor, admin). Auth enforcement is deferred pending multi-tenant implementation.
+
+#### Create Playlist
+```http
+POST /api/playlists
+Content-Type: application/json
+```
+
+**Request Body**:
+```json
+{
+  "name": "My Playlist",
+  "description": "Favorite tracks",
+  "is_public": false,
+  "owner_id": "user-uuid-here"
+}
+```
+
+**Response** (`201`): Created playlist object.
+
+---
+
+#### Search Playlists
+```http
+GET /api/playlists?q={query}&limit={limit}&offset={offset}
+```
+
+**Query Parameters**:
+- `q` (string, required): Search query (matches playlist name)
+- `limit` (integer, optional): Max results (1-100, default: 20)
+- `offset` (integer, optional): Pagination offset (default: 0)
+
+**Response** (`200`): Search results with pagination info (same shape as album search).
+
+---
+
+#### Get Playlist
+```http
+GET /api/playlists/{playlistId}
+```
+
+**Response** (`200`): Full playlist object with nested `tracks` and `collaborators` arrays.
+
+---
+
+#### Update Playlist
+```http
+PUT /api/playlists/{playlistId}
+Content-Type: application/json
+```
+
+**Request Body** (all fields optional):
+```json
+{
+  "name": "Updated Name",
+  "description": "New description",
+  "is_public": true
+}
+```
+
+---
+
+#### Delete Playlist
+```http
+DELETE /api/playlists/{playlistId}
+```
+
+**Status Codes**: `200` (success), `404` (not found)
+
+---
+
+#### Add Track to Playlist
+```http
+POST /api/playlists/{playlistId}/tracks
+Content-Type: application/json
+```
+
+**Request Body**:
+```json
+{
+  "audio_track_id": "track-uuid",
+  "position": 1,
+  "added_by": "user-uuid"
+}
+```
+
+**Status Codes**: `201` (success), `400` (duplicate or invalid)
+
+---
+
+#### Remove Track from Playlist
+```http
+DELETE /api/playlists/{playlistId}/tracks/{audioId}
+```
+
+---
+
+#### Reorder Playlist Tracks
+```http
+PUT /api/playlists/{playlistId}/tracks/order
+Content-Type: application/json
+```
+
+**Request Body**:
+```json
+{
+  "track_order": ["track-uuid-3", "track-uuid-1", "track-uuid-2"]
+}
+```
+
+---
+
+#### Add Collaborator
+```http
+POST /api/playlists/{playlistId}/collaborators
+Content-Type: application/json
+```
+
+**Request Body**:
+```json
+{
+  "user_id": "user-uuid",
+  "role": "editor"
+}
+```
+
+**Roles**: `viewer`, `editor`, `admin`
+
+**Note**: If the user is already a collaborator, their role is updated (upsert behavior).
+
+---
+
+#### Remove Collaborator
+```http
+DELETE /api/playlists/{playlistId}/collaborators/{userId}
+```
+
+---
+
 ### Embed Endpoints
 
 #### 9. Embed Player Page
@@ -1062,7 +1347,7 @@ const API_TIMEOUT = parseInt(import.meta.env.VITE_API_TIMEOUT || '30000');
 const BEARER_TOKEN = import.meta.env.VITE_API_BEARER_TOKEN;
 
 interface ApiRequest {
-  method: 'GET' | 'POST' | 'DELETE';
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE';
   path: string;
   body?: any;
   headers?: Record<string, string>;
@@ -1172,7 +1457,51 @@ export const api = {
       method: 'POST',
       path: '/mcp/tools/get_embed_url',
       body: { audio_id: audioId, template: 'waveform', device: 'auto' }
-    })
+    }),
+
+  // Albums
+  albums: {
+    create: (data: { name: string; description?: string; status?: string; owner_id?: string }) =>
+      apiRequest({ method: 'POST', path: '/api/albums', body: data }),
+    search: (q: string, limit = 20, offset = 0, status?: string) =>
+      apiRequest({ method: 'GET', path: `/api/albums?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}${status ? `&status=${status}` : ''}` }),
+    get: (albumId: string) =>
+      apiRequest({ method: 'GET', path: `/api/albums/${albumId}` }),
+    update: (albumId: string, data: { name?: string; description?: string; status?: string }) =>
+      apiRequest({ method: 'PUT', path: `/api/albums/${albumId}`, body: data }),
+    delete: (albumId: string) =>
+      apiRequest({ method: 'DELETE', path: `/api/albums/${albumId}` }),
+    addTrack: (albumId: string, audioTrackId: string, position?: number, discNumber?: number) =>
+      apiRequest({ method: 'POST', path: `/api/albums/${albumId}/tracks`, body: { audio_track_id: audioTrackId, position, disc_number: discNumber } }),
+    removeTrack: (albumId: string, audioId: string) =>
+      apiRequest({ method: 'DELETE', path: `/api/albums/${albumId}/tracks/${audioId}` }),
+    reorderTracks: (albumId: string, trackOrder: string[]) =>
+      apiRequest({ method: 'PUT', path: `/api/albums/${albumId}/tracks/order`, body: { track_order: trackOrder } }),
+  },
+
+  // Playlists
+  playlists: {
+    create: (data: { name: string; description?: string; is_public?: boolean; owner_id?: string }) =>
+      apiRequest({ method: 'POST', path: '/api/playlists', body: data }),
+    search: (q: string, limit = 20, offset = 0) =>
+      apiRequest({ method: 'GET', path: `/api/playlists?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}` }),
+    get: (playlistId: string) =>
+      apiRequest({ method: 'GET', path: `/api/playlists/${playlistId}` }),
+    update: (playlistId: string, data: { name?: string; description?: string; is_public?: boolean }) =>
+      apiRequest({ method: 'PUT', path: `/api/playlists/${playlistId}`, body: data }),
+    delete: (playlistId: string) =>
+      apiRequest({ method: 'DELETE', path: `/api/playlists/${playlistId}` }),
+    addTrack: (playlistId: string, audioTrackId: string, position?: number, addedBy?: string) =>
+      apiRequest({ method: 'POST', path: `/api/playlists/${playlistId}/tracks`, body: { audio_track_id: audioTrackId, position, added_by: addedBy } }),
+    removeTrack: (playlistId: string, audioId: string) =>
+      apiRequest({ method: 'DELETE', path: `/api/playlists/${playlistId}/tracks/${audioId}` }),
+    reorderTracks: (playlistId: string, trackOrder: string[]) =>
+      apiRequest({ method: 'PUT', path: `/api/playlists/${playlistId}/tracks/order`, body: { track_order: trackOrder } }),
+    addCollaborator: (playlistId: string, userId: string, role: 'viewer' | 'editor' | 'admin' = 'viewer') =>
+      apiRequest({ method: 'POST', path: `/api/playlists/${playlistId}/collaborators`, body: { user_id: userId, role } }),
+    removeCollaborator: (playlistId: string, userId: string) =>
+      apiRequest({ method: 'DELETE', path: `/api/playlists/${playlistId}/collaborators/${userId}` }),
+  }
 };
 ```
 
