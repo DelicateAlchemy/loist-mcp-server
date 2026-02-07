@@ -171,64 +171,65 @@ update_work_publishers(
 | Component | Status | Notes |
 |-----------|--------|-------|
 | Migration SQL | ✅ Done | `010_song_publishing_schema.sql` (reviewed 2024-12-22) |
-| Party operations | 🔵 TODO | Create, get, search (ILIKE) |
-| Work operations | 🔵 TODO | Create, get, search (ILIKE) |
-| Junction table operations | 🔵 TODO | Batch replace for writers/publishers |
-| Split warning calculation | 🔵 TODO | SUM query in get_work |
+| Party operations | ✅ Done | Create, get, search (ILIKE) |
+| Work operations | ✅ Done | Create, get, search (ILIKE) |
+| Junction table operations | ✅ Done | Batch replace for writers/publishers |
+| Split warning calculation | ✅ Done | SUM query in get_work |
 
 ### 2. Repository Layer (Simplified)
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| `PartyRepository` | 🔵 TODO | Minimal: create, get, search |
-| `WorkRepository` | 🔵 TODO | With junction table batch ops |
+| `PartyRepository` | ✅ Done | Minimal: create, get, search |
+| `WorkRepository` | ✅ Done | With junction table batch ops |
 | (No separate SplitRepository) | ✅ Decided | Junction ops are part of WorkRepository |
 
 ### 3. Service Layer
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| `party_service.py` | 🔵 TODO | Create, get, search |
-| `work_service.py` | 🔵 TODO | CRUD + batch writer/publisher updates |
-| Modify `audio_service.py` | 🔵 TODO | Auto-create work on track creation |
+| `party_service.py` | ✅ Done | Create, get, search |
+| `work_service.py` | ✅ Done | CRUD + batch writer/publisher updates |
+| Modify `audio_service.py` | ✅ Done | Auto-create work on track creation |
 | (No separate split_service) | ✅ Decided | Split logic is in work_service |
 
 ### 4. MCP Tools
 
 | Tool | Status | Notes |
 |------|--------|-------|
-| `create_party` | 🔵 TODO | |
-| `search_parties` | 🔵 TODO | ILIKE search |
-| `get_party` | 🔵 TODO | With works list |
-| `get_work` | 🔵 TODO | With writers/publishers/recordings + warnings |
-| `search_works` | 🔵 TODO | ILIKE search |
-| `update_work_writers` | 🔵 TODO | Batch replace pattern |
-| `update_work_publishers` | 🔵 TODO | Batch replace pattern |
-| `link_artist_to_recording` | 🔵 TODO | |
+| `create_party` | ✅ Done | MCP tool + HTTP `POST /api/parties` |
+| `search_parties` | ✅ Done | MCP tool + HTTP `GET /api/parties/search` |
+| `get_party` | ✅ Done | MCP tool + HTTP `GET /api/parties/{partyId}` |
+| `get_work` | ✅ Done | MCP tool + HTTP `GET /api/works/{workId}` |
+| `search_works` | ✅ Done | MCP tool + HTTP `GET /api/works/search` |
+| `update_work_writers` | ✅ Done | MCP tool + HTTP `PUT /api/works/{workId}/writers` |
+| `update_work_publishers` | ✅ Done | MCP tool + HTTP `PUT /api/works/{workId}/publishers` |
+| `link_artist_to_recording` | ✅ Done | MCP tool + HTTP `POST /api/tracks/{audioId}/artists` |
 
 ### 5. A2A Integration
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| Auto-work creation in audio pipeline | 🔵 TODO | Extend `save_audio_metadata()` |
+| Auto-work creation in audio pipeline | ✅ Done | Extended `save_audio_metadata()` |
 | (No separate A2A actions) | ✅ Decided | Just modify existing audio flow |
 
 ### 6. Pydantic Schemas
 
 | Schema | Status | Notes |
 |--------|--------|-------|
-| `PartyInput` / `PartyOutput` | 🔵 TODO | |
-| `WorkOutput` (with warnings) | 🔵 TODO | |
-| `WriterInput` / `PublisherInput` | 🔵 TODO | For batch update tools |
-| `SearchInput` / `SearchOutput` | 🔵 TODO | Simple pagination |
+| `PartyInput` / `PartyOutput` | ⏭️ Deferred | MCP tools use explicit typed params instead |
+| `WorkOutput` (with warnings) | ⏭️ Deferred | MCP tools use explicit typed params instead |
+| `WriterInput` / `PublisherInput` | ⏭️ Deferred | MCP tools use explicit typed params instead |
+| `SearchInput` / `SearchOutput` | ⏭️ Deferred | MCP tools use explicit typed params instead |
 
 ### 7. Testing
 
 | Test Type | Status | Notes |
 |-----------|--------|-------|
-| Unit: Database operations | 🔵 TODO | CRUD + search + batch ops |
-| Integration: MCP tools | 🔵 TODO | Tool → service → db |
-| Integration: Auto-work creation | 🔵 TODO | Audio track → work linking |
+| Unit: Database operations | ✅ Done | `tests/unit/test_song_publishing_operations.py` (689 lines) |
+| Unit: Service layer | ✅ Done | `tests/unit/test_party_service.py`, `test_work_service.py` (22 tests) |
+| Integration: MCP tools | 🔵 TODO | Tool → service → db (requires Docker PostgreSQL) |
+| Integration: Auto-work creation | 🔵 TODO | Audio track → work linking (requires Docker) |
 
 ---
 
@@ -259,12 +260,12 @@ update_work_publishers(
 **Linear**: [LOI-32](https://linear.app/loist/issue/LOI-32) | **Priority**: High | **Estimate**: 2 points
 
 **Subtasks**:
-- [ ] SP-2.1: Create `PartyRepository` (interface + Postgres implementation)
-- [ ] SP-2.2: Create `WorkRepository` (interface + Postgres implementation)
-- [ ] SP-2.3: Create `party_service.py`
-- [ ] SP-2.4: Create `work_service.py` with batch writer/publisher logic
-- [ ] SP-2.5: Modify `audio_service.py` to auto-create works
-- [ ] SP-2.6: Write service unit tests
+- [x] SP-2.1: Create `PartyRepository` (interface + Postgres implementation)
+- [x] SP-2.2: Create `WorkRepository` (interface + Postgres implementation)
+- [x] SP-2.3: Create `party_service.py`
+- [x] SP-2.4: Create `work_service.py` with batch writer/publisher logic
+- [x] SP-2.5: Modify `audio_service.py` to auto-create works
+- [x] SP-2.6: Write service unit tests
 
 **Acceptance Criteria**:
 - Repositories follow `AudioRepository` pattern
@@ -293,10 +294,10 @@ update_work_publishers(
 **Linear**: [LOI-34](https://linear.app/loist/issue/LOI-34) | **Priority**: High | **Estimate**: 3 points
 
 **Subtasks**:
-- [ ] SP-4.1: Create `src/tools/party_tools.py` (create, search, get)
-- [ ] SP-4.2: Create `src/tools/work_tools.py` (get, search)
-- [ ] SP-4.3: Create `src/tools/publishing_tools.py` (update_writers, update_publishers, link_artist)
-- [ ] SP-4.4: Register all tools in `src/server.py`
+- [x] SP-4.1: Register party tools in `src/server.py` (create_party, search_parties, get_party)
+- [x] SP-4.2: Register work tools in `src/server.py` (get_work, search_works)
+- [x] SP-4.3: Register publishing tools in `src/server.py` (update_work_writers, update_work_publishers, link_artist_to_recording)
+- [x] SP-4.4: Register HTTP API endpoints in `src/http_api.py` (8 endpoints)
 - [ ] SP-4.5: Write tool integration tests
 
 **Acceptance Criteria**:
@@ -310,10 +311,10 @@ update_work_publishers(
 **Linear**: [LOI-35](https://linear.app/loist/issue/LOI-35) | **Priority**: High | **Estimate**: 1 point
 
 **Subtasks**:
-- [ ] SP-5.1: Modify `save_audio_metadata()` to create work first
-- [ ] SP-5.2: Link audio_track to work via work_id
+- [x] SP-5.1: Modify `save_audio_metadata()` to create work first
+- [x] SP-5.2: Link audio_track to work via work_id
 - [ ] SP-5.3: Integration test for audio upload → work creation
-- [ ] SP-5.4: Update A2A handler if needed
+- [x] SP-5.4: Update A2A handler if needed
 
 **Acceptance Criteria**:
 - Every audio track has a work
@@ -433,12 +434,12 @@ GROUP BY w.id;
 
 | Task | Linear | Points | Status | Notes |
 |------|--------|--------|--------|-------|
-| SP-1: Database Operations | [LOI-31](https://linear.app/loist/issue/LOI-31) | 2 | 🔵 TODO | |
-| SP-2: Repository & Service | [LOI-32](https://linear.app/loist/issue/LOI-32) | 2 | 🔵 TODO | |
-| SP-3: Pydantic Schemas | [LOI-33](https://linear.app/loist/issue/LOI-33) | 1 | 🔵 TODO | |
-| SP-4: MCP Tools | [LOI-34](https://linear.app/loist/issue/LOI-34) | 3 | 🔵 TODO | |
-| SP-5: Auto-Work Creation | [LOI-35](https://linear.app/loist/issue/LOI-35) | 1 | 🔵 TODO | |
-| SP-6: Integration Testing | [LOI-36](https://linear.app/loist/issue/LOI-36) | 1 | 🔵 TODO | |
+| SP-1: Database Operations | [LOI-31](https://linear.app/loist/issue/LOI-31) | 2 | ✅ Done | All CRUD, search, batch ops, split warnings |
+| SP-2: Repository & Service | [LOI-32](https://linear.app/loist/issue/LOI-32) | 2 | ✅ Done | PartyRepo, WorkRepo, party_service, work_service |
+| SP-3: Pydantic Schemas | [LOI-33](https://linear.app/loist/issue/LOI-33) | 1 | ⏭️ Deferred | Tools use explicit typed params instead |
+| SP-4: MCP Tools + HTTP API | [LOI-34](https://linear.app/loist/issue/LOI-34) | 3 | ✅ Done | 8 MCP tools + 8 HTTP endpoints registered |
+| SP-5: Auto-Work Creation | [LOI-35](https://linear.app/loist/issue/LOI-35) | 1 | ✅ Done | save_audio_metadata() creates draft work |
+| SP-6: Integration Testing | [LOI-36](https://linear.app/loist/issue/LOI-36) | 1 | 🔵 TODO | Requires Docker PostgreSQL |
 | **Total** | | **10** | | |
 
 ### Completed Items
@@ -453,14 +454,20 @@ GROUP BY w.id;
   - Fixed SQL syntax error (line 1)
   - Fixed DECIMAL(6,4) → DECIMAL(5,2) for split percentages (allows 0-200%)
   - Added UNIQUE indexes for IPI/CAE, ISNI, and ISWC
+- ✅ SP-1: Database operations implemented (party CRUD, work CRUD, batch ops, split warnings)
+- ✅ SP-2: Repository & service layer implemented (PartyRepository, WorkRepository, party_service, work_service)
+- ✅ SP-4: 8 MCP tools registered in `src/server.py` + 8 HTTP API endpoints in `src/http_api.py`
+- ✅ SP-5: Auto-work creation in `save_audio_metadata()`
+- ✅ Unit tests: 689+ lines in `test_song_publishing_operations.py` + 22 service tests
 
 ---
 
 ## Next Steps
 
 1. ~~**Create Linear Tasks**: Create SP-1 through SP-6 in Linear~~ ✅ Done (LOI-31 to LOI-36)
-2. **Start Implementation**: Begin with SP-1 (Database Operations) - [LOI-31](https://linear.app/loist/issue/LOI-31)
-3. **Iterate**: Update this document as implementation progresses
+2. ~~**Implement SP-1 through SP-5**~~ ✅ Done
+3. **SP-6: Integration testing** — requires Docker PostgreSQL to run full tool → service → DB flow tests
+4. **SP-3: Pydantic schemas** — deferred; tools use explicit typed parameters which provide equivalent validation
 
 ---
 

@@ -126,13 +126,25 @@ You interact with the server by sending JSON-RPC 2.0 requests to the `/mcp` endp
 #### Core Business Tools (via MCP)
 
 These are the primary tools available through the MCP protocol:
-- `process_audio_complete`
-- `get_audio_metadata`
-- `update_metadata`
-- `delete_audio`
-- `search_library`
-- `download_audio`
-- `get_embed_url`
+
+**Audio Library Tools:**
+- `process_audio_complete` — Ingest audio from URL (download, extract metadata, upload to GCS, save to DB)
+- `get_audio_metadata` — Retrieve metadata for a processed audio track
+- `update_metadata` — Update track metadata fields (artist, title, album, genre, year, etc.)
+- `delete_audio` — Delete an audio track
+- `search_library` — Full-text search across all audio tracks with filters
+- `download_audio` — Download audio with optional format conversion
+- `get_embed_url` — Generate embed player URL for a track
+
+**Song Publishing Tools:**
+- `create_party` — Create a person or organization (writer, publisher, artist, label)
+- `search_parties` — Search parties by name
+- `get_party` — Get party details with involvement summary (works as writer/publisher/artist)
+- `get_work` — Get work (composition) with writers, publishers, recordings, and split warnings
+- `search_works` — Search works by title
+- `update_work_writers` — Batch replace writers on a work with split percentages
+- `update_work_publishers` — Batch replace publishers on a work with split percentages
+- `link_artist_to_recording` — Link a party as a performing artist on an audio track
 
 #### Usage Examples
 

@@ -114,10 +114,13 @@ The Music Library MCP Server has a solid MVP foundation with core audio processi
 **Priority**: Low | **Phase**: Future (Post-MVP)
 
 **Current State**: ✅ MVP Complete
+- 8 MCP tools: `create_party`, `search_parties`, `get_party`, `get_work`, `search_works`, `update_work_writers`, `update_work_publishers`, `link_artist_to_recording`
+- 8 HTTP API endpoints under `/api/parties/`, `/api/works/`, `/api/tracks/{id}/artists`
 - Repository and service layer for parties, works, and relationships
 - Auto-work creation when saving audio tracks (audio-first workflow)
-- Split validation warnings (non-blocking)
+- Split validation warnings (non-blocking, included in `get_work` response)
 - Basic search using ILIKE pattern matching
+- Unit tests: 689+ lines for database operations, 22 service layer tests
 
 **Future Enhancements**:
 - **Full-text search optimization**: Switch `search_works` to use `search_vector` TSVECTOR column (created in migration 010) for improved performance on large datasets
