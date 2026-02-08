@@ -1,6 +1,7 @@
 ---
-description: Guidelines for creating and maintaining VS Code rules to ensure consistency and effectiveness.
-applyTo: ".github/instructions/*.instructions.md"
+description: Guidelines for creating and maintaining Cline rules to ensure consistency and effectiveness.
+globs: .cline/rules/*.md
+alwaysApply: true
 ---
 
 - **Required Rule Structure:**
@@ -18,11 +19,7 @@ applyTo: ".github/instructions/*.instructions.md"
 
 - **File References:**
   - Use `[filename](mdc:path/to/file)` ([filename](mdc:filename)) to reference files
-<<<<<<<< HEAD:.github/instructions/vscode_rules.instructions.md
-  - Example: [prisma.instructions.md](.github/instructions/prisma.instructions.md) for rule references
-========
-  - Example: [prisma.md](.roo/rules/prisma.md) for rule references
->>>>>>>> origin/main:.roo/rules/roo_rules.md
+  - Example: [prisma.md](.clinerules/prisma.md) for rule references
   - Example: [schema.prisma](mdc:prisma/schema.prisma) for code references
 
 - **Code Examples:**

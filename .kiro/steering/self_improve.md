@@ -1,6 +1,5 @@
 ---
-description: Guidelines for continuously improving VS Code rules based on emerging code patterns and best practices.
-applyTo: "**/*"
+inclusion: always
 ---
 
 - **Rule Improvement Triggers:**
@@ -38,11 +37,7 @@ applyTo: "**/*"
     where: { status: 'ACTIVE' }
   });
   
-<<<<<<<< HEAD:.github/instructions/self_improve.instructions.md
-  // Consider adding to [prisma.instructions.md](.github/instructions/prisma.instructions.md):
-========
-  // Consider adding to [prisma.md](.roo/rules/prisma.md):
->>>>>>>> origin/main:.roo/rules/self_improve.md
+  // Consider adding to [prisma.md](.kiro/steering/prisma.md):
   // - Standard select fields
   // - Common where conditions
   // - Performance optimization patterns
@@ -72,8 +67,4 @@ applyTo: "**/*"
   - Update references to external docs
   - Maintain links between related rules
   - Document breaking changes
-<<<<<<<< HEAD:.github/instructions/self_improve.instructions.md
-Follow [vscode_rules.instructions.md](.github/instructions/vscode_rules.instructions.md) for proper rule formatting and structure.
-========
-Follow [roo_rules.md](.roo/rules/roo_rules.md) for proper rule formatting and structure.
->>>>>>>> origin/main:.roo/rules/self_improve.md
+Follow [kiro_rules.md](.kiro/steering/kiro_rules.md) for proper rule formatting and structure.

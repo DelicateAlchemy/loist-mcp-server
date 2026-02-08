@@ -1,11 +1,10 @@
 ---
-description: Comprehensive reference for Taskmaster MCP tools and CLI commands.
-applyTo: "**/*"
+inclusion: always
 ---
 
 # Taskmaster Tool & Command Reference
 
-This document provides a detailed reference for interacting with Taskmaster, covering both the recommended MCP tools, suitable for integrations like VS Code, and the corresponding `task-master` CLI commands, designed for direct user interaction or fallback.
+This document provides a detailed reference for interacting with Taskmaster, covering both the recommended MCP tools, suitable for integrations like Kiro, and the corresponding `task-master` CLI commands, designed for direct user interaction or fallback.
 
 **Note:** For interacting with Taskmaster programmatically or via integrated tools, using the **MCP tools is strongly recommended** due to better performance, structured data, and error handling. The CLI commands serve as a user-friendly alternative and fallback. 
 
@@ -37,7 +36,7 @@ This document provides a detailed reference for interacting with Taskmaster, cov
     *   `skipInstall`: `Skip installing dependencies. Default is false.` (CLI: `--skip-install`)
     *   `addAliases`: `Add shell aliases tm and taskmaster. Default is false.` (CLI: `--aliases`)
     *   `yes`: `Skip prompts and use defaults/provided arguments. Default is false.` (CLI: `-y, --yes`)
-*   **Usage:** Run this once at the beginning of a new project, typically via an integrated tool like VS Code. Operates on the current working directory of the MCP server. 
+*   **Usage:** Run this once at the beginning of a new project, typically via an integrated tool like Kiro. Operates on the current working directory of the MCP server. 
 *   **Important:** Once complete, you *MUST* parse a prd in order to generate tasks. There will be no tasks files until then. The next step after initializing should be to create a PRD using the example PRD in .taskmaster/templates/example_prd.txt. 
 *   **Tagging:** Use the `--tag` option to parse the PRD into a specific, non-default tag context. If the tag doesn't exist, it will be created automatically. Example: `task-master parse-prd spec.txt --tag=new-feature`.
 
@@ -550,74 +549,8 @@ Environment variables are used **only** for sensitive API keys related to AI pro
     *   `AZURE_OPENAI_ENDPOINT`
     *   `OLLAMA_BASE_URL` (Default: `http://localhost:11434/api`)
 
-**Set API keys** in your **`.env`** file in the project root (for CLI use) or within the `env` section of your **`.vscode/mcp.json`** file (for MCP/VS Code integration). All other settings (model choice, max tokens, temperature, log level, custom endpoints) are managed in `.taskmaster/config.json` via `task-master models` command or `models` MCP tool.
+**Set API keys** in your **`.env`** file in the project root (for CLI use) or within the `env` section of your **`.kiro/mcp.json`** file (for MCP/Kiro integration). All other settings (model choice, max tokens, temperature, log level, custom endpoints) are managed in `.taskmaster/config.json` via `task-master models` command or `models` MCP tool.
 
 ---
 
-<<<<<<<< HEAD:.github/instructions/taskmaster.instructions.md
-For details on how these commands fit into the development process, see the [dev_workflow.instructions.md](.github/instructions/dev_workflow.instructions.md).
-========
-## Cloud Build Integration
-
-Taskmaster integrates with Google Cloud Build pipelines for automated deployment. The project includes `cloudbuild.yaml` and `cloudbuild-staging.yaml` configurations that work seamlessly with the task-driven development workflow.
-
-### Production Deployment (`cloudbuild.yaml`)
-
-**Triggered on `main` branch merges:**
-
-- **Multi-stage Docker builds** with Alpine builder → Distroless runtime
-- **Automated vulnerability scanning** using Google Container Analysis
-- **Comprehensive environment variables** (50+ variables configured)
-- **Secret management** via Google Secret Manager for sensitive data
-- **Health checks** and deployment verification
-- **Traffic management** with automatic rollbacks on failure
-
-### Staging Deployment (`cloudbuild-staging.yaml`)
-
-**Triggered on `dev` branch merges:**
-
-- **Faster builds** with reduced resource allocation
-- **Staging-specific configurations** (different secrets, smaller instances)
-- **Integration testing** environment for QA validation
-- **Parallel deployment** capability alongside production
-
-### Task Workflow Integration
-
-**Deployment tasks follow the same principles:**
-
-1. **Create deployment task**: `task-master add-task --prompt="Set up Cloud Run deployment pipeline" --research`
-2. **Break down into subtasks**: Docker optimization, security hardening, environment configuration, etc.
-3. **One subtask per commit**: Each deployment component gets its own commit
-4. **Branch structure**: Deployment tasks use `task-{id}` branches like any other task
-5. **Documentation**: Update deployment docs as part of task implementation
-
-### Environment Variable Validation
-
-**Cloud Build validates configuration consistency:**
-
-- Cross-checks environment variables between `Dockerfile`, `cloudbuild.yaml`, and application code
-- Ensures all required secrets are properly configured
-- Validates service account permissions and IAM roles
-- Tests health check endpoints post-deployment
-
-### Deployment Verification Scripts
-
-**Included validation scripts:**
-
-- `scripts/test-container-build.sh`: Validates Docker image functionality and optimizations
-- `scripts/validate-env-config.sh`: Ensures environment variable consistency across deployment methods
-- `scripts/create-artifact-registry.sh`: Automates Artifact Registry setup
-
-### Integration with Git Workflow
-
-**Deployment follows Git branching rules:**
-
-- **Production deployments**: Only via `main` branch merges (no direct commits)
-- **Staging deployments**: Via `dev` branch merges
-- **Rollback capability**: Cloud Build supports automatic and manual rollbacks
-- **Branch cleanup**: Delete task branches after successful deployment merges
-
----
-
-For details on how these commands fit into the development process, see the [Development Workflow Guide](mdc:.cursor/rules/dev_workflow.mdc).
->>>>>>>> origin/main:.cursor/rules/taskmaster.mdc
+For details on how these commands fit into the development process, see the [dev_workflow.md](.kiro/steering/dev_workflow.md).
