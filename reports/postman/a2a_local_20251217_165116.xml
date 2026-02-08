@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="Loist Music Library A2A - Regression Suite" tests="7" time="0.176">
+  <testsuite name="Agent Discovery / GET /.well-known/agent-card.json" id="267c767e-bed9-4a4c-b66b-96f0eb314cfc" timestamp="2025-12-17T16:51:16.872Z" tests="5" failures="0" errors="0" time="0.046">
+    <testcase name="Agent Card returned 200" time="0.046" classname="AgentDiscoveryGetWellKnownAgentCardJson"/>
+    <testcase name="Response is valid JSON" time="0.046" classname="AgentDiscoveryGetWellKnownAgentCardJson"/>
+    <testcase name="Agent Card has required fields" time="0.046" classname="AgentDiscoveryGetWellKnownAgentCardJson"/>
+    <testcase name="Agent Card has expected skills" time="0.046" classname="AgentDiscoveryGetWellKnownAgentCardJson"/>
+    <testcase name="Agent Card has valid capabilities" time="0.046" classname="AgentDiscoveryGetWellKnownAgentCardJson"/>
+  </testsuite>
+  <testsuite name="Agent Discovery / GET /.well-known/agent.json (deprecated)" id="a82eca28-2d3b-4ca1-973a-fb8fb05f071f" timestamp="2025-12-17T16:51:16.872Z" tests="2" failures="0" errors="0" time="0.005">
+    <testcase name="Deprecated endpoint returns acceptable status" time="0.005" classname="AgentDiscoveryGetWellKnownAgentJsonDeprecated"/>
+    <testcase name="Deprecated endpoint returns valid JSON when supported" time="0.005" classname="AgentDiscoveryGetWellKnownAgentJsonDeprecated"/>
+  </testsuite>
+  <testsuite name="JSON-RPC Tasks / POST / - message/send" id="8a47f38c-65cf-4152-bb44-9d6132070d48" timestamp="2025-12-17T16:51:16.872Z" tests="5" failures="3" errors="0" time="0.023">
+    <testcase name="message/send returned 200" time="0.023" classname="JsonRpcTasksPostMessageSend"/>
+    <testcase name="Response is valid JSON" time="0.023" classname="JsonRpcTasksPostMessageSend"/>
+    <testcase name="Response follows JSON-RPC 2.0" time="0.023" classname="JsonRpcTasksPostMessageSend">
+      <failure type="AssertionFailure" message="expected undefined to exist">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: JSON-RPC Tasks / POST / - message/send.]]>
+        <![CDATA[Test description: Response follows JSON-RPC 2.0.]]>
+        <![CDATA[Error message: expected undefined to exist.]]>
+        <![CDATA[Stacktrace: AssertionError: expected undefined to exist
+   at Object.eval sandbox-script.js:3:3).]]>
+      </failure>
+    </testcase>
+    <testcase name="Task object has required fields" time="0.023" classname="JsonRpcTasksPostMessageSend">
+      <failure type="AssertionFailure" message="Cannot read properties of undefined (reading 'id')">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: JSON-RPC Tasks / POST / - message/send.]]>
+        <![CDATA[Test description: Task object has required fields.]]>
+        <![CDATA[Error message: Cannot read properties of undefined (reading 'id').]]>
+        <![CDATA[Stacktrace: TypeError: Cannot read properties of undefined (reading 'id')
+   at Object.eval sandbox-script.js:4:3).]]>
+      </failure>
+    </testcase>
+    <testcase name="Task starts in submitted state" time="0.023" classname="JsonRpcTasksPostMessageSend">
+      <failure type="AssertionFailure" message="Cannot read properties of undefined (reading 'status')">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: JSON-RPC Tasks / POST / - message/send.]]>
+        <![CDATA[Test description: Task starts in submitted state.]]>
+        <![CDATA[Error message: Cannot read properties of undefined (reading 'status').]]>
+        <![CDATA[Stacktrace: TypeError: Cannot read properties of undefined (reading 'status')
+   at Object.eval sandbox-script.js:5:3).]]>
+      </failure>
+    </testcase>
+  </testsuite>
+  <testsuite name="JSON-RPC Tasks / POST / - tasks/get" id="8f792e48-a199-488f-82c8-7948f68a907d" timestamp="2025-12-17T16:51:16.872Z" tests="7" failures="5" errors="0" time="0.076">
+    <testcase name="tasks/get returned 200" time="0.076" classname="JsonRpcTasksPostTasksGet"/>
+    <testcase name="Response is valid JSON" time="0.076" classname="JsonRpcTasksPostTasksGet"/>
+    <testcase name="Response follows JSON-RPC 2.0" time="0.076" classname="JsonRpcTasksPostTasksGet">
+      <failure type="AssertionFailure" message="expected undefined to exist">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: JSON-RPC Tasks / POST / - tasks/get.]]>
+        <![CDATA[Test description: Response follows JSON-RPC 2.0.]]>
+        <![CDATA[Error message: expected undefined to exist.]]>
+        <![CDATA[Stacktrace: AssertionError: expected undefined to exist
+   at Object.eval sandbox-script.js:3:4).]]>
+      </failure>
+    </testcase>
+    <testcase name="Task object has required fields" time="0.076" classname="JsonRpcTasksPostTasksGet">
+      <failure type="AssertionFailure" message="Cannot read properties of undefined (reading 'id')">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: JSON-RPC Tasks / POST / - tasks/get.]]>
+        <![CDATA[Test description: Task object has required fields.]]>
+        <![CDATA[Error message: Cannot read properties of undefined (reading 'id').]]>
+        <![CDATA[Stacktrace: TypeError: Cannot read properties of undefined (reading 'id')
+   at Object.eval sandbox-script.js:4:4).]]>
+      </failure>
+    </testcase>
+    <testcase name="Task shows state progression" time="0.076" classname="JsonRpcTasksPostTasksGet">
+      <failure type="AssertionFailure" message="Cannot read properties of undefined (reading 'status')">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: JSON-RPC Tasks / POST / - tasks/get.]]>
+        <![CDATA[Test description: Task shows state progression.]]>
+        <![CDATA[Error message: Cannot read properties of undefined (reading 'status').]]>
+        <![CDATA[Stacktrace: TypeError: Cannot read properties of undefined (reading 'status')
+   at Object.eval sandbox-script.js:5:4).]]>
+      </failure>
+    </testcase>
+    <testcase name="Completed task has audio metadata" time="0.076" classname="JsonRpcTasksPostTasksGet">
+      <failure type="AssertionFailure" message="Cannot read properties of undefined (reading 'status')">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: JSON-RPC Tasks / POST / - tasks/get.]]>
+        <![CDATA[Test description: Completed task has audio metadata.]]>
+        <![CDATA[Error message: Cannot read properties of undefined (reading 'status').]]>
+        <![CDATA[Stacktrace: TypeError: Cannot read properties of undefined (reading 'status')
+   at Object.eval sandbox-script.js:6:4).]]>
+      </failure>
+    </testcase>
+    <testcase name="Failed task has error information" time="0.076" classname="JsonRpcTasksPostTasksGet">
+      <failure type="AssertionFailure" message="Cannot read properties of undefined (reading 'status')">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: JSON-RPC Tasks / POST / - tasks/get.]]>
+        <![CDATA[Test description: Failed task has error information.]]>
+        <![CDATA[Error message: Cannot read properties of undefined (reading 'status').]]>
+        <![CDATA[Stacktrace: TypeError: Cannot read properties of undefined (reading 'status')
+   at Object.eval sandbox-script.js:7:4).]]>
+      </failure>
+    </testcase>
+  </testsuite>
+  <testsuite name="Negative Test Cases / POST / - Invalid Params" id="fc1a8631-2dec-47f3-8e49-6777a17e27cc" timestamp="2025-12-17T16:51:16.872Z" tests="5" failures="0" errors="0" time="0.006">
+    <testcase name="Invalid params returned 200 with error" time="0.006" classname="NegativeTestCasesPostInvalidParams"/>
+    <testcase name="Response is valid JSON" time="0.006" classname="NegativeTestCasesPostInvalidParams"/>
+    <testcase name="Response is JSON-RPC error object" time="0.006" classname="NegativeTestCasesPostInvalidParams"/>
+    <testcase name="Error has required fields" time="0.006" classname="NegativeTestCasesPostInvalidParams"/>
+    <testcase name="Error indicates invalid params" time="0.006" classname="NegativeTestCasesPostInvalidParams"/>
+  </testsuite>
+  <testsuite name="Negative Test Cases / POST / - Unknown Method" id="51a51a51-a7b0-4afc-867e-7177d9af91b2" timestamp="2025-12-17T16:51:16.872Z" tests="5" failures="0" errors="0" time="0.006">
+    <testcase name="Unknown method returned 200 with error" time="0.006" classname="NegativeTestCasesPostUnknownMethod"/>
+    <testcase name="Response is valid JSON" time="0.006" classname="NegativeTestCasesPostUnknownMethod"/>
+    <testcase name="Response is JSON-RPC error object" time="0.006" classname="NegativeTestCasesPostUnknownMethod"/>
+    <testcase name="Error has required fields" time="0.006" classname="NegativeTestCasesPostUnknownMethod"/>
+    <testcase name="Error indicates method not found" time="0.006" classname="NegativeTestCasesPostUnknownMethod"/>
+  </testsuite>
+  <testsuite name="Negative Test Cases / POST / - Task Not Found" id="4a3cf650-67a7-42c1-8a3b-d0047cc0a3f5" timestamp="2025-12-17T16:51:16.872Z" tests="5" failures="1" errors="0" time="0.014">
+    <testcase name="Task not found returned 200 with error" time="0.014" classname="NegativeTestCasesPostTaskNotFound"/>
+    <testcase name="Response is valid JSON" time="0.014" classname="NegativeTestCasesPostTaskNotFound"/>
+    <testcase name="Response is JSON-RPC error object" time="0.014" classname="NegativeTestCasesPostTaskNotFound"/>
+    <testcase name="Error has required fields" time="0.014" classname="NegativeTestCasesPostTaskNotFound"/>
+    <testcase name="Error indicates task not found" time="0.014" classname="NegativeTestCasesPostTaskNotFound">
+      <failure type="AssertionFailure" message="Invalid Chai property: or. Did you mean &quot;of&quot;?">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: Negative Test Cases / POST / - Task Not Found.]]>
+        <![CDATA[Test description: Error indicates task not found.]]>
+        <![CDATA[Error message: Invalid Chai property: or. Did you mean "of"?.]]>
+        <![CDATA[Stacktrace: Error: Invalid Chai property: or. Did you mean "of"?
+   at Object.eval sandbox-script.js:5:7).]]>
+      </failure>
+    </testcase>
+  </testsuite>
+</testsuites>

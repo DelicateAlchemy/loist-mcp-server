@@ -1,7 +1,6 @@
 ---
 description: Git branching and commit workflow for Task-Master task implementation
-globs: **/*
-alwaysApply: true
+alwaysApply: false
 ---
 
 # Git Workflow for Task-Master Tasks

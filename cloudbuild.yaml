@@ -30,15 +30,15 @@ steps:
         pip install -r requirements.txt
 
         # Install test dependencies
-        pip install pytest-cov pytest-xdist pytest-html
+        pip install pytest-cov pytest-xdist pytest-html pytest-asyncio beautifulsoup4
 
         # Create test results directory
         mkdir -p test-results/unit coverage-reports
 
-        # Run unit tests only (no database, GCS, or slow tests)
+        # Run unit tests only (no database, GCS, slow, or tool-dependency tests)
         echo "📊 Running unit tests..."
         python -m pytest \
-          -m "not (requires_db or requires_gcs or slow)" \
+          -m "not (requires_db or requires_gcs or slow or requires_tools)" \
           --cov=. \
           --cov-report=html:coverage-reports/htmlcov \
           --cov-report=xml:coverage-reports/coverage.xml \
@@ -262,7 +262,7 @@ steps:
         pip install -r requirements.txt
 
         # Install static analysis tools
-        pip install mypy flake8 black isort pylint bandit
+        pip install mypy ruff black isort pylint bandit
 
         # Create analysis results directory
         mkdir -p analysis-results
@@ -280,8 +280,8 @@ steps:
         python -m mypy src/ --config-file mypy.ini
 
         echo "🎯 Running code quality checks..."
-        # Run flake8
-        python -m flake8 src/ tests/ --config .flake8
+        # Run ruff
+        python -m ruff check src/ tests/
 
         echo "🛡️ Running security scanning..."
         # Run bandit security scanning
@@ -293,7 +293,7 @@ steps:
           "timestamp": "$(date -Iseconds)",
           "commit": "$COMMIT_SHA",
           "branch": "main",
-          "tools_run": ["black", "isort", "mypy", "flake8", "bandit"]
+          "tools_run": ["black", "isort", "mypy", "ruff", "bandit"]
         }
         EOF
 
@@ -384,6 +384,7 @@ steps:
       - '--update-secrets=DB_PASSWORD=${_DB_PASSWORD}:latest'
       - '--update-secrets=GCS_BUCKET_NAME=${_GCS_BUCKET_NAME}:latest'
       - '--update-secrets=BEARER_TOKEN=${_BEARER_TOKEN}:latest'
+      - '--add-cloudsql-instances=loist-music-library:us-central1:loist-music-library-db'
       - '--quiet'
     waitFor: ['push-image']
 

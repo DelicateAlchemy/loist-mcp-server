@@ -7,11 +7,7 @@ import sys
 import os
 from pathlib import Path
 
-# Setup paths
-project_root = Path.cwd()
-src_dir = project_root / 'src'
-sys.path.insert(0, str(src_dir))
-sys.path.insert(0, str(project_root))
+# Setup paths - now handled by PYTHONPATH configuration
 
 async def test_mcp_tools():
     try:

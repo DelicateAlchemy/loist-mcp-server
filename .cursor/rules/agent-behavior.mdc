@@ -1,0 +1,219 @@
+---
+description: Guidelines for AI agent communication, confidence assessment, and research collaboration
+alwaysApply: true
+---
+
+# Agent Behavior Guidelines
+
+**Communicate intent clearly, assess confidence honestly, and collaborate on research when uncertain.**
+
+## Intent Communication
+
+### Before Taking Action
+
+**Always state intent before significant actions:**
+
+```
+🎯 **Intent**: I'm going to [action] because [reason].
+   - Files affected: [list]
+   - Expected outcome: [outcome]
+   - Potential risks: [risks, if any]
+```
+
+**Examples of significant actions:**
+- Modifying multiple files
+- Changing configuration or infrastructure
+- Running database migrations
+- Modifying CI/CD pipelines
+- Making architectural changes
+
+### After Completing Actions
+
+**Summarize what was done:**
+
+```
+✅ **Completed**: [brief summary]
+   - Changes: [files/items changed]
+   - Next steps: [suggested follow-up]
+```
+
+## Confidence Assessment
+
+### Self-Assessment Framework
+
+**Rate confidence honestly using this scale:**
+
+| Level | Indicator | When to Use |
+|-------|-----------|-------------|
+| 🟢 **High** (0.8-1.0) | Confident | Clear documentation, familiar pattern, tested approach |
+| 🟡 **Medium** (0.5-0.8) | Reasonably sure | Based on code patterns, may need verification |
+| 🟠 **Low** (0.3-0.5) | Uncertain | Limited context, outdated docs possible, needs research |
+| 🔴 **Very Low** (<0.3) | Guessing | No clear information, external research needed |
+
+### When to Flag Uncertainty
+
+**Proactively communicate when:**
+- Documentation may be outdated (>6 months since update)
+- Working with external APIs or services with frequent changes
+- Making infrastructure/deployment decisions
+- Implementing security-related features
+- GCP/cloud services configuration (APIs change frequently)
+
+**Format:**
+
+```
+⚠️ **Confidence: Medium-Low** 
+
+I'm not certain about [specific area]. My understanding is based on:
+- [source 1]
+- [source 2]
+
+**Recommendation**: Before proceeding, would you like to verify via:
+1. Check recent docs at [specific location]
+2. Web research (see Perplexity prompt below)
+3. Test in staging environment first
+```
+
+## Research Collaboration
+
+### When to Request Research
+
+**Trigger research assistance when:**
+- Confidence < 0.66 on technical decisions
+- Dealing with version-specific behavior (Python, GCP, FastMCP, etc.)
+- Cloud service configurations that may have changed
+- Security best practices (always evolving)
+- Performance optimizations for specific technologies
+
+### Perplexity Prompt Format
+
+**Provide copy-paste ready prompts for web research:**
+
+```
+🔍 **Suggested Perplexity Research**
+
+**Topic**: [brief topic description]
+
+**Prompt to copy**:
+---
+[Specific, contextual research question with relevant technical details]
+
+Include: current best practices, recent changes, version-specific considerations.
+Context: [brief project context relevant to the search]
+---
+
+**What to look for**: [specific aspects to validate]
+```
+
+### Example Research Prompts
+
+**GCP Cloud Build changes:**
+```
+🔍 **Suggested Perplexity Research**
+
+**Topic**: Cloud Build vulnerability scanning configuration
+
+**Prompt to copy**:
+---
+Google Cloud Build 2025 vulnerability scanning best practices for Cloud Run deployments.
+What is the current recommended configuration for container image scanning in cloudbuild.yaml?
+Are there any recent changes to the vulnerability scanning API or configuration options?
+---
+
+**What to look for**: Step names, API versions, any deprecated options
+```
+
+**FastMCP updates:**
+```
+🔍 **Suggested Perplexity Research**
+
+**Topic**: FastMCP recent changes
+
+**Prompt to copy**:
+---
+FastMCP Python library recent updates and breaking changes in 2025.
+Current best practices for MCP tool registration and exception handling.
+Are there any changes to transport modes (stdio, http, sse) or authentication?
+---
+
+**What to look for**: API changes, new features, deprecation warnings
+```
+
+## Decision Documentation
+
+### For Uncertain Decisions
+
+**When making decisions with <0.8 confidence, document:**
+
+```
+📝 **Decision Record**
+
+**Decision**: [what was decided]
+**Confidence**: [level]
+**Reasoning**: [why this approach]
+**Alternatives considered**: [other options]
+**Validation needed**: [how to verify this works]
+**Rollback plan**: [if it doesn't work]
+```
+
+### After Research Results
+
+**When user provides research results:**
+
+1. Acknowledge the new information
+2. Update approach if needed
+3. Note if this should update documentation
+4. Suggest memory update if pattern will recur
+
+## Specific Guidance for This Project
+
+### High-Confidence Areas (0.8+)
+- Repository pattern usage
+- Exception framework patterns
+- Docker Compose local development
+- Git workflow (task branches)
+- PostgreSQL full-text search
+
+### Medium-Confidence Areas (0.5-0.8)
+- Cloud Build configuration details
+- GCS signed URL implementation
+- Cloud Run scaling settings
+- MCP protocol edge cases
+
+### Research-Recommended Areas (<0.5)
+- GCP service-specific API changes
+- Python/FastMCP version updates
+- Security scanning tool configurations
+- IAM permission changes
+
+## Integration with Workflow
+
+### During Task Implementation
+
+1. **Before starting**: State intent and confidence level
+2. **During implementation**: Flag uncertainties as they arise
+3. **When blocked**: Provide Perplexity prompts for research
+4. **After completion**: Document decisions and confidence levels
+
+### Example Workflow
+
+```
+🎯 **Intent**: Implementing Cloud Build trigger modification (Task 12.3)
+
+⚠️ **Confidence: Medium** on the specific cloudbuild.yaml syntax for 
+vulnerability scanning thresholds. The docs I have are from 3 months ago.
+
+**Options**:
+1. Proceed with current understanding (may need adjustment)
+2. Research first (see prompt below)
+
+🔍 **If you'd like to research**:
+---
+Google Cloud Build 2025 vulnerabilityScanning configuration options.
+What are the current threshold settings and severity level configurations?
+---
+```
+
+---
+
+**Remember**: It's better to flag uncertainty and collaborate than to confidently implement something wrong. The user has Perplexity for research - leverage it!

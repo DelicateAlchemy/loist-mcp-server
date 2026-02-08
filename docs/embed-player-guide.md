@@ -8,18 +8,31 @@ The Loist Music Library provides a beautiful, accessible HTML5 audio player that
 
 ## Quick Start
 
-### Direct Access
+### Dual Access Patterns
+
+The Loist Music Library supports two primary access patterns for audio players:
+
+#### 1. Direct Access (Full Browser Context)
+
+Users navigate directly to the embed URL in their browser:
 
 ```
 https://loist.io/embed/{audioId}
 ```
 
-Example:
+**Use Cases:**
+- Share links sent via email, messaging, or social media
+- Direct navigation from search results or bookmarks
+- Full-page player experience with complete browser context
+
+**Example:**
 ```
 https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000
 ```
 
-### Iframe Embedding
+#### 2. Iframe Embedding (Constrained Context)
+
+The player is embedded within an iframe on another website or platform:
 
 ```html
 <iframe 
@@ -31,6 +44,17 @@ https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000
     style="border-radius: 12px;">
 </iframe>
 ```
+
+**Use Cases:**
+- Embedding in content platforms (Notion, Coda, WordPress)
+- Integration into third-party websites
+- oEmbed consumption by platforms that support rich media
+
+**Key Differences:**
+- **Direct Access**: Full browser window, complete page context, optimized for standalone viewing
+- **Iframe Embedding**: Constrained dimensions, optimized for embedded contexts, respects iframe security policies
+
+**Note**: The same embed URL works for both patterns. The player automatically adapts to its context (direct browser access vs iframe embedding). When using the MCP `get_embed_url` tool, the response includes a `context` field that indicates the intended usage pattern (`"embed"` for iframe contexts, `"direct"` for direct browser access).
 
 ---
 

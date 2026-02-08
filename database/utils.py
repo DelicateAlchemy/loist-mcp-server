@@ -21,7 +21,7 @@ class AudioTrackDB:
     def insert_track(
         track_id: UUID,
         title: str,
-        audio_path: str,
+        audio_gcs_path: str,
         artist: Optional[str] = None,
         album: Optional[str] = None,
         genre: Optional[str] = None,
@@ -31,15 +31,15 @@ class AudioTrackDB:
         sample_rate: Optional[int] = None,
         bitrate: Optional[int] = None,
         format: Optional[str] = None,
-        thumbnail_path: Optional[str] = None,
+        thumbnail_gcs_path: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Insert a new audio track record.
-        
+
         Args:
             track_id: Unique track identifier
             title: Track title (required)
-            audio_path: GCS path to audio file (required)
+            audio_gcs_path: GCS path to audio file (required)
             artist: Artist name
             album: Album name
             genre: Genre
@@ -49,15 +49,15 @@ class AudioTrackDB:
             sample_rate: Sample rate in Hz
             bitrate: Bitrate in kbps
             format: Audio format (mp3, flac, etc.)
-            thumbnail_path: GCS path to thumbnail
-        
+            thumbnail_gcs_path: GCS path to thumbnail
+
         Returns:
             Inserted track record as dictionary
         """
         query = """
             INSERT INTO audio_tracks (
-                id, title, audio_path, artist, album, genre, year,
-                duration, channels, sample_rate, bitrate, format, thumbnail_path,
+                id, title, audio_gcs_path, artist, album, genre, year,
+                duration_seconds, channels, sample_rate, bitrate, format, thumbnail_gcs_path,
                 status, created_at, updated_at
             ) VALUES (
                 %s, %s, %s, %s, %s, %s, %s,
@@ -66,10 +66,10 @@ class AudioTrackDB:
             )
             RETURNING *
         """
-        
+
         params = (
-            str(track_id), title, audio_path, artist, album, genre, year,
-            duration, channels, sample_rate, bitrate, format, thumbnail_path
+            str(track_id), title, audio_gcs_path, artist, album, genre, year,
+            duration, channels, sample_rate, bitrate, format, thumbnail_gcs_path
         )
         
         with get_connection() as conn:
@@ -365,6 +365,7 @@ def check_database_availability() -> Dict[str, Any]:
     start_time = time.time()
     error_message = None
 
+    conn = None
     try:
         db_manager = get_db_manager()
 
@@ -378,7 +379,6 @@ def check_database_availability() -> Dict[str, Any]:
                 # Check if we got a valid result
                 if result and result[0] == 1:
                     response_time = int((time.time() - start_time) * 1000)  # Convert to milliseconds
-                    db_manager.return_connection(conn)
 
                     return {
                         "available": True,

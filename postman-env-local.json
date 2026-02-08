@@ -1,0 +1,71 @@
+{
+	"id": "loist-music-library-local",
+	"name": "Loist Music Library MCP - Local",
+	"values": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8080",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "audio_id",
+			"value": "dea289dc-fc68-4c92-90c8-569e98d79863",
+			"type": "any",
+			"enabled": true,
+			"description": "Set by Process Audio Complete request - UUID of processed audio track (currently set to track with test_bell.wav file)"
+		},
+		{
+			"key": "audio_source_url",
+			"value": "https://tmpfiles.org/dl/14167757/superfurryanimals-northernlights.mp3",
+			"type": "default",
+			"enabled": true,
+			"description": "HTTP URL to audio file for processing tests (expires after 1 hour)"
+		},
+		{
+			"key": "audio_source_filename",
+			"value": "",
+			"type": "any",
+			"enabled": true,
+			"description": "Optional filename override for audio processing"
+		},
+		{
+			"key": "embed_url",
+			"value": "",
+			"type": "any",
+			"enabled": true,
+			"description": "Set by Get Embed URL request - URL for oEmbed testing"
+		},
+		{
+			"key": "download_format",
+			"value": "mp3",
+			"type": "default",
+			"enabled": true,
+			"description": "Target format for download tests"
+		},
+		{
+			"key": "download_preset",
+			"value": "high",
+			"type": "default",
+			"enabled": true,
+			"description": "Quality preset for download conversion"
+		},
+		{
+			"key": "sessionId",
+			"value": "",
+			"type": "any",
+			"enabled": true,
+			"description": "Set by Initialize MCP Session request - MCP session identifier"
+		},
+		{
+			"key": "sessionInitializedAt",
+			"value": "",
+			"type": "any",
+			"enabled": true,
+			"description": "Timestamp when MCP session was initialized"
+		}
+	],
+	"_postman_variable_scope": "environment",
+	"_postman_exported_at": "2025-12-06T16:17:14.231267Z",
+	"_postman_exported_using": "Postman/11.0.0"
+}

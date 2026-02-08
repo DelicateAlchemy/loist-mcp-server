@@ -14,6 +14,52 @@ This document provides a comprehensive list of API endpoints and environment var
 
 ## API Endpoints
 
+### PlayerConfig Response Type
+
+All embed-related MCP tools now return a standardized `PlayerConfig` response shape:
+
+```typescript
+type PlayerConfigUrls = {
+  embed: string;              // Standard embed player URL
+  waveform?: string;          // Waveform player URL (if applicable)
+  artwork?: string;           // Album artwork signed URL
+  waveform_svg?: string;      // Waveform SVG signed URL
+};
+
+type PlayerConfigMetadata = {
+  title: string;
+  artist: string;
+  album?: string;
+  duration_seconds?: number;
+};
+
+type PlayerConfig = {
+  audio_id: string;
+  mode: "simple" | "waveform";
+  device: "desktop" | "mobile" | "auto";
+  context: "embed" | "direct";
+  waveform_available: boolean;
+  urls: PlayerConfigUrls;
+  metadata: PlayerConfigMetadata;
+};
+```
+
+#### Understanding the `context` Field
+
+The `context` field indicates the intended usage pattern for the player:
+
+- **`"embed"`**: The player is intended for **iframe embedding** in external platforms (Notion, Coda, WordPress, etc.) or third-party websites. This is the default context returned by `get_embed_url` MCP tool.
+  - Use when: Embedding the player in an iframe on another website
+  - Example: `<iframe src="https://loist.io/embed/{audioId}"></iframe>`
+  - The player is optimized for constrained iframe environments
+
+- **`"direct"`**: The player is intended for **direct browser access** where users navigate directly to the embed URL.
+  - Use when: Users click a share link and view the player in a full browser window
+  - Example: User clicks `https://loist.io/embed/{audioId}` in a browser
+  - The player has full browser context and can use additional features
+
+**Note**: Currently, all MCP tools return `context: "embed"` as they are designed for programmatic embed URL generation. The `context` field is included for future extensibility and to clearly communicate the intended usage pattern to API consumers.
+
 ### Base URL
 
 The base URL depends on your deployment:
@@ -137,27 +183,29 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
 ```json
 {
   "success": true,
-  "audioId": "550e8400-e29b-41d4-a716-446655440000",
+  "audio_id": "550e8400-e29b-41d4-a716-446655440000",
   "metadata": {
-    "Product": {
-      "Title": "Song Title",
-      "Artist": "Artist Name",
-      "Album": "Album Name",
-      "Year": 2024
+    "product": {
+      "title": "Song Title",
+      "artist": "Artist Name",
+      "album": "Album Name",
+      "year": 2024
     },
-    "Format": {
-      "Duration": 180.5,
-      "Channels": 2,
-      "SampleRate": 44100,
-      "Bitrate": 320,
-      "Format": "MP3"
-    }
+    "format": {
+      "duration": 180.5,
+      "channels": 2,
+      "sample_rate": 44100,
+      "bitrate": 320,
+      "format": "MP3"
+    },
+    "url_embed_link": "https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000"
   },
-  "resourceUris": {
-    "stream": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/stream",
-    "metadata": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/metadata",
-    "thumbnail": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/thumbnail"
-  }
+  "resources": {
+    "audio_url": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/stream",
+    "thumbnail_url": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/thumbnail",
+    "waveform_url": null
+  },
+  "processing_time": 2.45
 }
 ```
 
@@ -177,7 +225,7 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
 **Request Body**:
 ```json
 {
-  "audioId": "550e8400-e29b-41d4-a716-446655440000"
+  "audio_id": "550e8400-e29b-41d4-a716-446655440000"
 }
 ```
 
@@ -185,26 +233,27 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
 ```json
 {
   "success": true,
-  "audioId": "550e8400-e29b-41d4-a716-446655440000",
+  "audio_id": "550e8400-e29b-41d4-a716-446655440000",
   "metadata": {
-    "Product": {
-      "Title": "Song Title",
-      "Artist": "Artist Name",
-      "Album": "Album Name",
-      "Year": 2024
+    "product": {
+      "title": "Song Title",
+      "artist": "Artist Name",
+      "album": "Album Name",
+      "year": 2024
     },
-    "Format": {
-      "Duration": 180.5,
-      "Channels": 2,
-      "SampleRate": 44100,
-      "Bitrate": 320,
-      "Format": "MP3"
-    }
+    "format": {
+      "duration": 180.5,
+      "channels": 2,
+      "sample_rate": 44100,
+      "bitrate": 320,
+      "format": "MP3"
+    },
+    "url_embed_link": "https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000"
   },
-  "resourceUris": {
-    "stream": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/stream",
-    "metadata": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/metadata",
-    "thumbnail": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/thumbnail"
+  "resources": {
+    "audio_url": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/stream",
+    "thumbnail_url": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/thumbnail",
+    "waveform_url": null
   }
 }
 ```
@@ -251,19 +300,24 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
   "success": true,
   "results": [
     {
-      "audioId": "550e8400-e29b-41d4-a716-446655440000",
+      "audio_id": "550e8400-e29b-41d4-a716-446655440000",
       "metadata": {
-        "Product": {
-          "Title": "Hey Jude",
-          "Artist": "The Beatles",
-          "Album": "The Beatles",
-          "Year": 1968
+        "product": {
+          "title": "Hey Jude",
+          "artist": "The Beatles",
+          "album": "Hey Jude",
+          "year": 1968
         },
-        "Format": {
-          "Duration": 431.0,
-          "Format": "MP3"
-        }
+        "format": {
+          "duration": 431.0,
+          "channels": 2,
+          "sample_rate": 44100,
+          "bitrate": 320000,
+          "format": "MP3"
+        },
+        "url_embed_link": "https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000"
       },
+      "score": 0.95
       "score": 0.95
     }
   ],
@@ -277,7 +331,56 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
 
 ---
 
-#### 7. Delete Audio Track
+#### 7. Download Audio Track ✅ **IMPLEMENTED & WORKING**
+
+Download audio tracks with on-the-fly format conversion, metadata embedding, and artwork embedding.
+
+```http
+GET /api/tracks/{audioId}/download?format={format}&preset={preset}
+Authorization: Bearer {token}  # If AUTH_ENABLED=true
+```
+
+**Path Parameters**:
+- `audioId` (string, required): UUID of the audio track to download
+
+**Query Parameters**:
+- `format` (string, required): Target format - `mp3`, `wav`, `flac`, `aac`, `ogg`
+- `preset` (string, optional): Quality preset (defaults to `high`)
+
+**Supported Formats & Presets**:
+
+| Format | Presets | Description |
+|--------|---------|-------------|
+| `mp3` | `high` (320kbps), `standard` (192kbps), `compact` (128kbps) | Lossy compression |
+| `wav` | `broadcast` (48kHz/24-bit), `cd` (44.1kHz/16-bit), `high` (96kHz/24-bit) | Lossless with BWF metadata |
+| `flac` | `high` (level 8), `fast` (level 0) | Lossless compressed |
+| `aac` | `high` (256kbps), `standard` (192kbps) | Lossy for Apple devices |
+| `ogg` | `high` (Q8 ~256kbps), `standard` (Q5 ~160kbps) | Lossy VBR |
+
+**Response**:
+- **Content-Type**: `audio/mpeg`, `audio/wav`, `audio/flac`, `audio/aac`, or `audio/ogg`
+- **Content-Disposition**: `attachment; filename="Track Title - Artist.mp3"`
+- **Body**: Audio file with embedded metadata and artwork
+
+**Short-circuit Response**: `302 Found` with `Location` header redirecting to signed GCS URL when no conversion is needed.
+
+**Status Codes**: `200` (converted file), `302` (redirect to original), `400` (invalid params), `404` (not found), `500` (conversion error), `504` (timeout)
+
+**Examples**:
+```bash
+# Download as high-quality MP3
+GET /api/tracks/550e8400-e29b-41d4-a716-446655440000/download?format=mp3
+
+# Download as broadcast WAV
+GET /api/tracks/550e8400-e29b-41d4-a716-446655440000/download?format=wav&preset=broadcast
+
+# Download as lossless FLAC
+GET /api/tracks/550e8400-e29b-41d4-a716-446655440000/download?format=flac
+```
+
+---
+
+#### 8. Delete Audio Track
 ```http
 DELETE /api/tracks/{audioId}
 Authorization: Bearer {token}  # If AUTH_ENABLED=true
@@ -292,9 +395,294 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
 
 ---
 
+### Album Endpoints
+
+Albums are flexible groupings of audio tracks with a status progression (project → draft → released), ideal for WIP music creation.
+
+#### Create Album
+```http
+POST /api/albums
+Content-Type: application/json
+```
+
+**Request Body**:
+```json
+{
+  "name": "My New Album",
+  "description": "Work in progress tracks",
+  "status": "project",
+  "owner_id": "user-uuid-here"
+}
+```
+
+**Response** (`201`):
+```json
+{
+  "id": "album-uuid",
+  "name": "My New Album",
+  "description": "Work in progress tracks",
+  "status": "project",
+  "cover_art_gcs_path": null,
+  "owner_id": "user-uuid-here",
+  "created_at": "2025-01-15T10:30:00Z",
+  "updated_at": "2025-01-15T10:30:00Z"
+}
+```
+
+---
+
+#### Search Albums
+```http
+GET /api/albums?q={query}&limit={limit}&offset={offset}&status={status}
+```
+
+**Query Parameters**:
+- `q` (string, required): Search query (matches album name)
+- `limit` (integer, optional): Max results (1-100, default: 20)
+- `offset` (integer, optional): Pagination offset (default: 0)
+- `status` (string, optional): Filter by status (`project`, `draft`, `released`)
+
+**Response** (`200`):
+```json
+{
+  "results": [{ "id": "...", "name": "...", "status": "project", "track_count": 5 }],
+  "total": 1,
+  "limit": 20,
+  "offset": 0,
+  "has_more": false
+}
+```
+
+---
+
+#### Get Album
+```http
+GET /api/albums/{albumId}
+```
+
+**Response** (`200`): Full album object with nested `tracks` array.
+
+**Status Codes**: `200` (success), `404` (not found)
+
+---
+
+#### Update Album
+```http
+PUT /api/albums/{albumId}
+Content-Type: application/json
+```
+
+**Request Body** (all fields optional):
+```json
+{
+  "name": "Updated Name",
+  "description": "New description",
+  "status": "draft"
+}
+```
+
+**Status Codes**: `200` (success), `404` (not found)
+
+---
+
+#### Delete Album
+```http
+DELETE /api/albums/{albumId}
+```
+
+**Status Codes**: `200` (success), `404` (not found)
+
+---
+
+#### Add Track to Album
+```http
+POST /api/albums/{albumId}/tracks
+Content-Type: application/json
+```
+
+**Request Body**:
+```json
+{
+  "audio_track_id": "track-uuid",
+  "position": 1,
+  "disc_number": 1
+}
+```
+
+**Status Codes**: `201` (success), `400` (duplicate or invalid)
+
+---
+
+#### Remove Track from Album
+```http
+DELETE /api/albums/{albumId}/tracks/{audioId}
+```
+
+**Status Codes**: `200` (success)
+
+---
+
+#### Reorder Album Tracks
+```http
+PUT /api/albums/{albumId}/tracks/order
+Content-Type: application/json
+```
+
+**Request Body**:
+```json
+{
+  "track_order": ["track-uuid-3", "track-uuid-1", "track-uuid-2"]
+}
+```
+
+**Status Codes**: `200` (success)
+
+---
+
+### Playlist Endpoints
+
+Playlists support collaborative track groupings with role-based collaborators (viewer, editor, admin). Auth enforcement is deferred pending multi-tenant implementation.
+
+#### Create Playlist
+```http
+POST /api/playlists
+Content-Type: application/json
+```
+
+**Request Body**:
+```json
+{
+  "name": "My Playlist",
+  "description": "Favorite tracks",
+  "is_public": false,
+  "owner_id": "user-uuid-here"
+}
+```
+
+**Response** (`201`): Created playlist object.
+
+---
+
+#### Search Playlists
+```http
+GET /api/playlists?q={query}&limit={limit}&offset={offset}
+```
+
+**Query Parameters**:
+- `q` (string, required): Search query (matches playlist name)
+- `limit` (integer, optional): Max results (1-100, default: 20)
+- `offset` (integer, optional): Pagination offset (default: 0)
+
+**Response** (`200`): Search results with pagination info (same shape as album search).
+
+---
+
+#### Get Playlist
+```http
+GET /api/playlists/{playlistId}
+```
+
+**Response** (`200`): Full playlist object with nested `tracks` and `collaborators` arrays.
+
+---
+
+#### Update Playlist
+```http
+PUT /api/playlists/{playlistId}
+Content-Type: application/json
+```
+
+**Request Body** (all fields optional):
+```json
+{
+  "name": "Updated Name",
+  "description": "New description",
+  "is_public": true
+}
+```
+
+---
+
+#### Delete Playlist
+```http
+DELETE /api/playlists/{playlistId}
+```
+
+**Status Codes**: `200` (success), `404` (not found)
+
+---
+
+#### Add Track to Playlist
+```http
+POST /api/playlists/{playlistId}/tracks
+Content-Type: application/json
+```
+
+**Request Body**:
+```json
+{
+  "audio_track_id": "track-uuid",
+  "position": 1,
+  "added_by": "user-uuid"
+}
+```
+
+**Status Codes**: `201` (success), `400` (duplicate or invalid)
+
+---
+
+#### Remove Track from Playlist
+```http
+DELETE /api/playlists/{playlistId}/tracks/{audioId}
+```
+
+---
+
+#### Reorder Playlist Tracks
+```http
+PUT /api/playlists/{playlistId}/tracks/order
+Content-Type: application/json
+```
+
+**Request Body**:
+```json
+{
+  "track_order": ["track-uuid-3", "track-uuid-1", "track-uuid-2"]
+}
+```
+
+---
+
+#### Add Collaborator
+```http
+POST /api/playlists/{playlistId}/collaborators
+Content-Type: application/json
+```
+
+**Request Body**:
+```json
+{
+  "user_id": "user-uuid",
+  "role": "editor"
+}
+```
+
+**Roles**: `viewer`, `editor`, `admin`
+
+**Note**: If the user is already a collaborator, their role is updated (upsert behavior).
+
+---
+
+#### Remove Collaborator
+```http
+DELETE /api/playlists/{playlistId}/collaborators/{userId}
+```
+
+---
+
 ### Embed Endpoints
 
-#### 8. Embed Player Page
+#### 9. Embed Player Page
 ```http
 GET /embed/{audioId}?template={template}&device={device}&platform={platform}
 ```
@@ -363,7 +751,7 @@ GET /embed/{audioId}/waveform/desktop
 
 ### oEmbed Endpoints
 
-#### 12. oEmbed Endpoint
+#### 13. oEmbed Endpoint
 ```http
 GET /oembed?url={embed_url}&format=json&maxwidth={width}&maxheight={height}
 ```
@@ -402,7 +790,7 @@ GET /oembed?url=https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000&maxw
 
 ---
 
-#### 13. oEmbed Discovery
+#### 14. oEmbed Discovery
 ```http
 GET /.well-known/oembed.json
 ```
@@ -430,7 +818,7 @@ GET /.well-known/oembed.json
 
 These endpoints return signed GCS URLs for accessing audio content:
 
-#### 14. Audio Stream Resource
+#### 15. Audio Stream Resource
 ```http
 POST /mcp/resources/music-library://audio/{audioId}/stream
 Content-Type: application/json
@@ -451,7 +839,7 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
 
 ---
 
-#### 15. Metadata Resource
+#### 16. Metadata Resource
 ```http
 POST /mcp/resources/music-library://audio/{audioId}/metadata
 Content-Type: application/json
@@ -470,7 +858,7 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
 
 ---
 
-#### 16. Thumbnail Resource
+#### 17. Thumbnail Resource
 ```http
 POST /mcp/resources/music-library://audio/{audioId}/thumbnail
 Content-Type: application/json
@@ -493,7 +881,7 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
 
 ### Embed Management Tools
 
-#### 17. Get Embed URL (MCP Tool via HTTP)
+#### 18. Get Embed URL (MCP Tool via HTTP)
 ```http
 POST /mcp/tools/get_embed_url
 Content-Type: application/json
@@ -503,33 +891,42 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
 **Request Body**:
 ```json
 {
-  "audioId": "550e8400-e29b-41d4-a716-446655440000",
+  "audio_id": "550e8400-e29b-41d4-a716-446655440000",
   "template": "waveform",
   "device": "desktop"
 }
 ```
 
-**Response**:
+**Response**: PlayerConfig shape
+
+**Note**: The `context` field indicates the intended usage pattern. `get_embed_url` returns `context: "embed"` by default, indicating the URL is optimized for iframe embedding. The same URL can also be used for direct browser access, but the `context` field helps API consumers understand the primary use case.
+
 ```json
 {
   "success": true,
-  "audioId": "550e8400-e29b-41d4-a716-446655440000",
-  "embedUrl": "https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000/waveform/desktop",
-  "template": "waveform",
+  "audio_id": "550e8400-e29b-41d4-a716-446655440000",
+  "mode": "waveform",
   "device": "desktop",
-  "waveformAvailable": true,
+  "context": "embed",
+  "waveform_available": true,
+  "urls": {
+    "embed": "https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000",
+    "waveform": "https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000/waveform",
+    "artwork": "https://storage.googleapis.com/bucket/artwork.jpg?X-Goog-Signature=...",
+    "waveform_svg": "https://storage.googleapis.com/bucket/waveform.svg?X-Goog-Signature=..."
+  },
   "metadata": {
     "title": "Song Title",
     "artist": "Artist Name",
-    "duration": 180.5,
-    "format": "MP3"
+    "album": "Album Name",
+    "duration_seconds": 180.5
   }
 }
 ```
 
 ---
 
-#### 18. List Embed Templates (MCP Tool via HTTP)
+#### 19. List Embed Templates (MCP Tool via HTTP)
 ```http
 POST /mcp/tools/list_embed_templates
 Content-Type: application/json
@@ -567,36 +964,263 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
 
 ---
 
-#### 19. Check Waveform Availability (MCP Tool via HTTP)
-```http
-POST /mcp/tools/check_waveform_availability
-Content-Type: application/json
-Authorization: Bearer {token}  # If AUTH_ENABLED=true
-```
+## MCP Resources (Audio Streaming & Artwork)
 
-**Request Body**:
-```json
-{
-  "audioId": "550e8400-e29b-41d4-a716-446655440000"
-}
+### Overview
+
+The Loist Music Library exposes audio content through MCP resources, not direct HTTP endpoints. These resources provide secure, signed URLs for streaming audio and accessing artwork. All resources use in-memory caching and expire after 15 minutes for security.
+
+### Audio Streaming Resource
+
+**Resource URI**: `music-library://audio/{audio_id}/stream`
+
+**Purpose**: Provides signed GCS URL for audio streaming with range request support for seeking.
+
+**How to Access**:
+```javascript
+// Via MCP protocol (recommended for MCP clients)
+const streamUri = `music-library://audio/${audioId}/stream`;
+const resource = await mcpClient.readResource(streamUri);
+
+// Via HTTP API
+const response = await fetch(`${API_BASE_URL}/mcp/resources/`, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${VITE_API_BEARER_TOKEN}` // if auth enabled
+  },
+  body: JSON.stringify({
+    uri: `music-library://audio/${audioId}/stream`
+  })
+});
+
+const resource = await response.json();
+const streamUrl = resource.uri; // Signed GCS URL
 ```
 
 **Response**:
 ```json
 {
-  "success": true,
-  "audioId": "550e8400-e29b-41d4-a716-446655440000",
-  "waveformAvailable": true,
-  "waveformUrl": "https://storage.googleapis.com/...",
-  "generatedAt": "2025-01-15T10:30:00Z",
-  "metadata": {
-    "title": "Song Title",
-    "artist": "Artist Name",
-    "duration": 180.5,
-    "format": "MP3"
+  "uri": "https://storage.googleapis.com/bucket/audio.mp3?X-Goog-Signature=...",
+  "mimeType": "audio/mpeg",
+  "text": null,
+  "blob": null
+}
+```
+
+**Usage in HTML5 Audio**:
+```html
+<audio controls preload="metadata">
+  <source src="https://storage.googleapis.com/bucket/audio.mp3?X-Goog-Signature=..." type="audio/mpeg">
+  Your browser does not support the audio element.
+</audio>
+```
+
+**Important Notes**:
+- URLs expire after **15 minutes** for security
+- Supports HTTP Range requests for seeking (`Accept-Ranges: bytes`)
+- First request: ~50-100ms (database lookup + URL generation)
+- Cached requests: ~5-10ms (cache hit)
+- Supported formats: MP3, FLAC, WAV, M4A, OGG, AAC
+
+---
+
+### Artwork/Thumbnail Resource
+
+**Resource URI**: `music-library://audio/{audio_id}/thumbnail`
+
+**Purpose**: Provides signed GCS URL for album artwork/thumbnail images.
+
+**How to Access**:
+```javascript
+// Via MCP protocol
+const thumbnailUri = `music-library://audio/${audioId}/thumbnail`;
+const resource = await mcpClient.readResource(thumbnailUri);
+
+// Via HTTP API
+const response = await fetch(`${API_BASE_URL}/mcp/resources/`, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${VITE_API_BEARER_TOKEN}` // if auth enabled
+  },
+  body: JSON.stringify({
+    uri: `music-library://audio/${audioId}/thumbnail`
+  })
+});
+
+const resource = await response.json();
+if (resource.uri) {
+  // Artwork exists
+  const artworkUrl = resource.uri; // Signed GCS URL
+} else {
+  // No artwork available
+}
+```
+
+**Response** (when artwork exists):
+```json
+{
+  "uri": "https://storage.googleapis.com/bucket/artwork.jpg?X-Goog-Signature=...",
+  "mimeType": "image/jpeg",
+  "text": null,
+  "blob": null
+}
+```
+
+**Response** (when no artwork exists):
+```json
+{
+  "uri": null,
+  "mimeType": "image/jpeg",
+  "text": null,
+  "blob": null
+}
+```
+
+**Usage in HTML**:
+```html
+<img src="https://storage.googleapis.com/bucket/artwork.jpg?X-Goog-Signature=..."
+     alt="Album artwork"
+     style="max-width: 300px; max-height: 300px;">
+```
+
+**Important Notes**:
+- URLs expire after **15 minutes** for security
+- Recommended client cache: 24 hours (`Cache-Control: public, max-age=86400`)
+- Size: 600x600px (if available)
+- Format: JPEG (if embedded artwork exists)
+
+---
+
+### Metadata Resource
+
+**Resource URI**: `music-library://audio/{audio_id}/metadata`
+
+**Purpose**: Returns complete track metadata as JSON.
+
+**How to Access**:
+```javascript
+// Via MCP protocol
+const metadataUri = `music-library://audio/${audioId}/metadata`;
+const resource = await mcpClient.readResource(metadataUri);
+const metadata = JSON.parse(resource.text);
+
+// Via HTTP API
+const response = await fetch(`${API_BASE_URL}/mcp/resources/`, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${VITE_API_BEARER_TOKEN}` // if auth enabled
+  },
+  body: JSON.stringify({
+    uri: `music-library://audio/${audioId}/metadata`
+  })
+});
+
+const resource = await response.json();
+const metadata = JSON.parse(resource.text);
+```
+
+**Response**:
+```json
+{
+  "uri": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/metadata",
+  "mimeType": "application/json",
+  "text": "{\"id\": \"550e8400-...\", \"Product\": {...}, \"Format\": {...}, \"urlEmbedLink\": \"...\", \"resources\": {...}}",
+  "blob": null
+}
+```
+
+**Complete Metadata Structure**:
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "Product": {
+    "Artist": "The Beatles",
+    "Title": "Hey Jude",
+    "Album": "Hey Jude",
+    "MBID": null,
+    "Genre": ["Rock"],
+    "Year": 1968
+  },
+  "Format": {
+    "Duration": 431.0,
+    "Channels": 2,
+    "SampleRate": 44100,
+    "Bitrate": 320000,
+    "Format": "MP3"
+  },
+  "urlEmbedLink": "https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000",
+  "resources": {
+    "audio": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/stream",
+    "thumbnail": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/thumbnail"
   }
 }
 ```
+
+**Important Notes**:
+- Response time: ~20-50ms (database lookup only)
+- Recommended client cache: 1 hour (`Cache-Control: public, max-age=3600`)
+- MBID field is null (no fingerprinting in MVP)
+
+---
+
+### Resource Access Patterns
+
+#### Recommended Integration Flow
+
+```javascript
+// 1. Get PlayerConfig from get_embed_url (contains artwork URL)
+const embedConfig = await getEmbedUrl(audioId, 'waveform', 'desktop');
+
+// 2. Access audio stream via MCP resource
+const streamResource = await mcpClient.readResource(embedConfig.resources.audio);
+const streamUrl = streamResource.uri;
+
+// 3. Access artwork via MCP resource (or use PlayerConfig.urls.artwork)
+const thumbnailResource = await mcpClient.readResource(embedConfig.resources.thumbnail);
+const artworkUrl = thumbnailResource.uri || '/default-artwork.png';
+
+// 4. Use in HTML5 player
+const audioElement = new Audio(streamUrl);
+const imgElement = new Image();
+imgElement.src = artworkUrl;
+```
+
+#### Error Handling
+
+```javascript
+try {
+  const resource = await mcpClient.readResource(uri);
+  if (resource.uri) {
+    // Resource available
+    return resource.uri;
+  } else {
+    // Resource not available (e.g., no artwork)
+    return defaultValue;
+  }
+} catch (error) {
+  if (error.code === 'ResourceNotFoundError') {
+    // Audio track doesn't exist
+    throw new Error('Audio track not found');
+  }
+  throw error;
+}
+```
+
+#### Performance Considerations
+
+- **Caching**: Resources are cached server-side (13.5 min TTL)
+- **Batch Requests**: Request multiple resources in parallel
+- **Prefetching**: Request resources before they're needed
+- **URL Expiration**: Plan for 15-minute URL expiration
+
+### Related Documentation
+
+For complete technical details, see:
+- **[MCP Resources API](./mcp-resources-api.md)**: Comprehensive resource documentation with examples
+- **[Embed Player Guide](./embed-player-guide.md)**: Player integration and embedding patterns
 
 ---
 
@@ -723,7 +1347,7 @@ const API_TIMEOUT = parseInt(import.meta.env.VITE_API_TIMEOUT || '30000');
 const BEARER_TOKEN = import.meta.env.VITE_API_BEARER_TOKEN;
 
 interface ApiRequest {
-  method: 'GET' | 'POST' | 'DELETE';
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE';
   path: string;
   body?: any;
   headers?: Record<string, string>;
@@ -797,7 +1421,7 @@ export const api = {
     apiRequest({
       method: 'POST',
       path: '/mcp/tools/get_audio_metadata',
-      body: { audioId }
+      body: { audio_id: audioId }
     }),
 
   searchLibrary: (query: string, filters?: any, limit = 20, offset = 0, sortBy = 'relevance', sortOrder = 'desc') =>
@@ -818,7 +1442,7 @@ export const api = {
     apiRequest({
       method: 'POST',
       path: '/mcp/tools/get_embed_url',
-      body: { audioId, template, device }
+      body: { audio_id: audioId, template, device }
     }),
 
   listEmbedTemplates: () =>
@@ -828,12 +1452,56 @@ export const api = {
       body: {}
     }),
 
-  checkWaveformAvailability: (audioId: string) =>
+  getEmbedUrlWaveform: (audioId: string) =>
     apiRequest({
       method: 'POST',
-      path: '/mcp/tools/check_waveform_availability',
-      body: { audioId }
-    })
+      path: '/mcp/tools/get_embed_url',
+      body: { audio_id: audioId, template: 'waveform', device: 'auto' }
+    }),
+
+  // Albums
+  albums: {
+    create: (data: { name: string; description?: string; status?: string; owner_id?: string }) =>
+      apiRequest({ method: 'POST', path: '/api/albums', body: data }),
+    search: (q: string, limit = 20, offset = 0, status?: string) =>
+      apiRequest({ method: 'GET', path: `/api/albums?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}${status ? `&status=${status}` : ''}` }),
+    get: (albumId: string) =>
+      apiRequest({ method: 'GET', path: `/api/albums/${albumId}` }),
+    update: (albumId: string, data: { name?: string; description?: string; status?: string }) =>
+      apiRequest({ method: 'PUT', path: `/api/albums/${albumId}`, body: data }),
+    delete: (albumId: string) =>
+      apiRequest({ method: 'DELETE', path: `/api/albums/${albumId}` }),
+    addTrack: (albumId: string, audioTrackId: string, position?: number, discNumber?: number) =>
+      apiRequest({ method: 'POST', path: `/api/albums/${albumId}/tracks`, body: { audio_track_id: audioTrackId, position, disc_number: discNumber } }),
+    removeTrack: (albumId: string, audioId: string) =>
+      apiRequest({ method: 'DELETE', path: `/api/albums/${albumId}/tracks/${audioId}` }),
+    reorderTracks: (albumId: string, trackOrder: string[]) =>
+      apiRequest({ method: 'PUT', path: `/api/albums/${albumId}/tracks/order`, body: { track_order: trackOrder } }),
+  },
+
+  // Playlists
+  playlists: {
+    create: (data: { name: string; description?: string; is_public?: boolean; owner_id?: string }) =>
+      apiRequest({ method: 'POST', path: '/api/playlists', body: data }),
+    search: (q: string, limit = 20, offset = 0) =>
+      apiRequest({ method: 'GET', path: `/api/playlists?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}` }),
+    get: (playlistId: string) =>
+      apiRequest({ method: 'GET', path: `/api/playlists/${playlistId}` }),
+    update: (playlistId: string, data: { name?: string; description?: string; is_public?: boolean }) =>
+      apiRequest({ method: 'PUT', path: `/api/playlists/${playlistId}`, body: data }),
+    delete: (playlistId: string) =>
+      apiRequest({ method: 'DELETE', path: `/api/playlists/${playlistId}` }),
+    addTrack: (playlistId: string, audioTrackId: string, position?: number, addedBy?: string) =>
+      apiRequest({ method: 'POST', path: `/api/playlists/${playlistId}/tracks`, body: { audio_track_id: audioTrackId, position, added_by: addedBy } }),
+    removeTrack: (playlistId: string, audioId: string) =>
+      apiRequest({ method: 'DELETE', path: `/api/playlists/${playlistId}/tracks/${audioId}` }),
+    reorderTracks: (playlistId: string, trackOrder: string[]) =>
+      apiRequest({ method: 'PUT', path: `/api/playlists/${playlistId}/tracks/order`, body: { track_order: trackOrder } }),
+    addCollaborator: (playlistId: string, userId: string, role: 'viewer' | 'editor' | 'admin' = 'viewer') =>
+      apiRequest({ method: 'POST', path: `/api/playlists/${playlistId}/collaborators`, body: { user_id: userId, role } }),
+    removeCollaborator: (playlistId: string, userId: string) =>
+      apiRequest({ method: 'DELETE', path: `/api/playlists/${playlistId}/collaborators/${userId}` }),
+  }
 };
 ```
 
@@ -1034,7 +1702,7 @@ curl -X POST https://loist.io/mcp/tools/search_library \
 # Get metadata
 curl -X POST https://loist.io/mcp/tools/get_audio_metadata \
   -H "Content-Type: application/json" \
-  -d '{"audioId": "550e8400-e29b-41d4-a716-446655440000"}'
+  -d '{"audio_id": "550e8400-e29b-41d4-a716-446655440000"}'
 ```
 
 ---

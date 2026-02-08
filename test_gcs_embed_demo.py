@@ -12,10 +12,6 @@ import uuid
 import tempfile
 from pathlib import Path
 
-# Add project root to Python path
-project_root = Path(__file__).parent
-sys.path.insert(0, str(project_root))
-
 # Test audio URL (temporary, will expire)
 TEST_AUDIO_URL = "https://tmpfiles.org/dl/4850303/andrewbirdmadisoncunningham-cryinginthenight.mp3"
 

@@ -10,6 +10,8 @@ Tests cover:
 """
 
 import pytest
+
+pytestmark = pytest.mark.requires_db
 import time
 import os
 from unittest.mock import patch, MagicMock

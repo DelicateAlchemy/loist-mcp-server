@@ -1,7 +1,7 @@
 repos:
   # Code formatting
-  - repo: https://github.com/pre-commit/mirrors-black
-    rev: 23.12.1
+  - repo: https://github.com/psf/black
+    rev: 26.1.0
     hooks:
       - id: black
         language_version: python3.11
@@ -13,16 +13,16 @@ repos:
       - id: isort
         args: [--profile=black, --line-length=100]
 
-  # Linting
-  - repo: https://github.com/pycqa/flake8
-    rev: 7.0.0
+  # Linting (ruff replaces flake8)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.0
     hooks:
-      - id: flake8
-        args: [--max-line-length=100, --max-complexity=12]
+      - id: ruff
+        args: [--fix]
 
   # Type checking
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.8.0
+    rev: v1.19.1
     hooks:
       - id: mypy
         additional_dependencies: [types-all]
@@ -30,7 +30,7 @@ repos:
 
   # Security scanning
   - repo: https://github.com/PyCQA/bandit
-    rev: 1.7.6
+    rev: 1.9.3
     hooks:
       - id: bandit
         args: [-c, pyproject.toml]
@@ -38,7 +38,7 @@ repos:
 
   # General pre-commit hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
@@ -47,7 +47,6 @@ repos:
       - id: check-merge-conflict
       - id: debug-statements
 
-# Configuration for bandit
 ci:
   autofix_commit_msg: |
     [pre-commit.ci] auto fixes from pre-commit.com hooks

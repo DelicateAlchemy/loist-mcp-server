@@ -6,11 +6,7 @@ Your MCP server is a **Music Library MCP Server** built with FastMCP that provid
 
 ## Available MCP Tools
 
-### 1. `health_check()` 
-- **Purpose**: Verify server is running and get status information
-- **Returns**: Server status, version, transport, log level, authentication status
-- **Usage**: Basic connectivity test
-- **Example**: `health_check()`
+These are the core business tools, accessible via the MCP JSON-RPC protocol.
 
 ### 2. `process_audio_complete(source, options=None)` - **Async**
 - **Purpose**: Complete audio processing pipeline
@@ -60,6 +56,8 @@ Your MCP server is a **Music Library MCP Server** built with FastMCP that provid
 
 ## Available MCP Resources
 
+These resources provide access to data via MCP resource URIs, and also via convenience HTTP GET endpoints.
+
 ### 1. `music-library://audio/{audioId}/stream`
 - **Purpose**: Stream audio files with range request support
 - **Returns**: Signed GCS URL for audio streaming
@@ -95,7 +93,7 @@ Your MCP server is a **Music Library MCP Server** built with FastMCP that provid
   - `maxwidth` (optional): Maximum width for embed (default: 500)
   - `maxheight` (optional): Maximum height for embed (default: 200)
 - **Returns**: JSON response following oEmbed v1.0 specification
-- **Example**: 
+- **Example**:
   ```bash
   GET /oembed?url=https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000&maxwidth=800&maxheight=300
   ```
@@ -116,6 +114,15 @@ Your MCP server is a **Music Library MCP Server** built with FastMCP that provid
   }
   ```
 
+## Operational HTTP Endpoints
+
+These are standard HTTP endpoints for operational monitoring and health checks. They are *not* MCP tools and are accessed directly via HTTP.
+
+### 1. `/health/ready`, `/health/live` (HTTP GET)
+- **Purpose**: Verify server is running and get status information (live readiness and liveness probes).
+- **Returns**: Server status (`{"status": "healthy"}`)
+- **Usage**: Basic connectivity test, used by Cloud Run and other orchestrators.
+- **Example**: `curl http://localhost:8080/health/ready`
 ## Server Configuration
 
 - **Transport**: `http` (default for Cloud Run), `stdio` (for MCP clients), or `sse`

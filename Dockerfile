@@ -15,11 +15,12 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy dependency files
-COPY requirements.txt pyproject.toml ./
+COPY requirements.txt requirements-dev.txt pyproject.toml ./
 
 # Install dependencies and create wheels for faster runtime install
 RUN pip install --upgrade pip && \
-    pip wheel --no-cache-dir --wheel-dir=/wheels -r requirements.txt
+    pip wheel --no-cache-dir --wheel-dir=/wheels -r requirements.txt && \
+    pip wheel --no-cache-dir --wheel-dir=/wheels -r requirements-dev.txt
 
 
 # ============================================================================
@@ -40,23 +41,33 @@ RUN apt-get update && \
 # Create non-root user for security
 RUN useradd --create-home --shell /bin/bash --uid 1000 fastmcpuser
 
+# Create /tmp directory with proper permissions for tempfile operations
+# This is required for Cloud Run where /tmp may not exist or be writable
+RUN mkdir -p /tmp && chmod 1777 /tmp
+
 # Copy wheels from builder stage
 COPY --from=builder /wheels /wheels
 
 # Copy dependency files
-COPY --chown=fastmcpuser:fastmcpuser requirements.txt pyproject.toml ./
+COPY --chown=fastmcpuser:fastmcpuser requirements.txt requirements-dev.txt pyproject.toml ./
 
 # Install dependencies from wheels (fast, no compilation)
 RUN pip install --no-cache-dir --find-links=/wheels -r requirements.txt && \
+    pip install --no-cache-dir --find-links=/wheels -r requirements-dev.txt && \
     rm -rf /wheels
 
 # Copy application code
 COPY --chown=fastmcpuser:fastmcpuser src/ ./src/
 COPY --chown=fastmcpuser:fastmcpuser database/ ./database/
 COPY --chown=fastmcpuser:fastmcpuser run_server.py ./
+COPY --chown=fastmcpuser:fastmcpuser tests/ ./tests/
 
 # Copy templates directory
 COPY --chown=fastmcpuser:fastmcpuser templates/ ./templates/
+
+# Create application temp directory (owned by fastmcpuser)
+# This provides an alternative temp location if /tmp has issues
+RUN mkdir -p /app/tmp && chown fastmcpuser:fastmcpuser /app/tmp
 
 # Switch to non-root user
 USER fastmcpuser
@@ -67,15 +78,36 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app \
     SERVER_HOST=0.0.0.0 \
     SERVER_PORT=8080 \
-    LOG_LEVEL=INFO
+    LOG_LEVEL=INFO \
+    TMPDIR=/app/tmp
 
 # Expose port (Cloud Run automatically maps to $PORT)
 EXPOSE 8080
 
 # Health check (for Docker, Cloud Run uses HTTP probes)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import sys; sys.path.insert(0, 'src'); from server import mcp; print('healthy')" || exit 1
+    CMD python -c "from src.server import mcp; print('healthy')" || exit 1
 
 # Run the FastMCP server using the runner script
 CMD ["python", "run_server.py"]
+
+
+# ============================================================================
+# Stage 3: A2A Server - A2A agent server image
+# ============================================================================
+FROM runtime AS a2a
+
+# Override environment variables for A2A server
+ENV SERVER_PORT=8081 \
+    PORT=8081
+
+# Expose A2A server port
+EXPOSE 8081
+
+# Health check for A2A server (Agent Card endpoint)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8081/.well-known/agent-card.json')" || exit 1
+
+# Run the A2A server
+CMD ["python", "src/a2a_server/app.py"]
 

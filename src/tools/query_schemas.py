@@ -6,7 +6,7 @@ following best practices from research on read-only APIs.
 """
 
 from typing import Optional, List, Dict, Any, Literal
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 from enum import Enum
 import re
 
@@ -74,12 +74,12 @@ class TimeFilters(BaseModel):
         default=None,
         description="Relative time period (today, yesterday, this_week, etc.)"
     )
-    dateFrom: Optional[str] = Field(
+    date_from: Optional[str] = Field(
         default=None,
         description="Custom start date (ISO format: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)",
         pattern=r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2})?$"
     )
-    dateTo: Optional[str] = Field(
+    date_to: Optional[str] = Field(
         default=None,
         description="Custom end date (ISO format: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)",
         pattern=r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2})?$"
@@ -94,10 +94,10 @@ class TimeFilters(BaseModel):
     def validate_time_filters(self) -> 'TimeFilters':
         """Validate that either period or date range is specified, but not both"""
         has_period = self.period is not None
-        has_date_range = self.dateFrom is not None or self.dateTo is not None
+        has_date_range = self.date_from is not None or self.date_to is not None
 
         if has_period and has_date_range:
-            raise ValueError("Cannot specify both 'period' and custom date range ('dateFrom'/'dateTo')")
+            raise ValueError("Cannot specify both 'period' and custom date range ('date_from'/'date_to')")
 
         if not has_period and not has_date_range:
             # This is okay - no time filtering
@@ -193,34 +193,35 @@ class GetAudioMetadataInput(BaseModel):
     
     Example:
         {
-            "audioId": "550e8400-e29b-41d4-a716-446655440000"
+            "audio_id": "550e8400-e29b-41d4-a716-446655440000"
         }
     """
-    audioId: str = Field(
+    audio_id: str = Field(
         ...,
-        description="UUID of the audio track",
-        pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-        min_length=36,
-        max_length=36
+        description="UUID of the audio track"
+        # UUID format validation handled by custom validator
     )
 
-    @field_validator('audioId')
+    @field_validator('audio_id')
     @classmethod
     def validate_uuid_format(cls, v):
-        """Ensure audioId is a valid UUID format"""
-        uuid_pattern = re.compile(
-            r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
-            re.IGNORECASE
-        )
-        if not uuid_pattern.match(v):
-            raise ValueError("audioId must be a valid UUID format")
-        return v.lower()  # Normalize to lowercase
+        """Ensure audio_id is a valid UUID format"""
+        import uuid
+        try:
+            # Use Python's uuid.UUID for robust validation
+            parsed_uuid = uuid.UUID(v)
+            return str(parsed_uuid).lower()  # Normalize to lowercase hyphenated format
+        except ValueError:
+            raise ValueError(
+                f"audio_id must be a valid UUID format "
+                f"(e.g., 550e8400-e29b-41d4-a716-446655440000), got: {v[:50]}"
+            )
 
     model_config = {
         "json_schema_extra": {
             "examples": [
                 {
-                    "audioId": "550e8400-e29b-41d4-a716-446655440000"
+                    "audio_id": "550e8400-e29b-41d4-a716-446655440000"
                 }
             ]
         }
@@ -275,14 +276,14 @@ def validate_fields(fields: Optional[str]) -> Optional[str]:
     """
     Validate comma-separated field list.
 
-    Allowed fields: id, title, score, artist, album, genre, year, duration, channels, sampleRate, bitrate, format, embedLink
+    Allowed fields: id, title, score, artist, album, genre, year, duration, channels, sample_rate, bitrate, format, embed_link
     """
     if not fields:
         return fields
 
     allowed_fields = {
         'id', 'title', 'score', 'artist', 'album', 'genre', 'year',
-        'duration', 'channels', 'sampleRate', 'bitrate', 'format', 'embedLink'
+        'duration', 'channels', 'sample_rate', 'bitrate', 'format', 'embed_link'
     }
 
     requested_fields = [f.strip() for f in fields.split(',') if f.strip()]
@@ -314,8 +315,8 @@ class SearchLibraryInput(BaseModel):
             },
             "limit": 20,
             "offset": 0,
-            "sortBy": "relevance",
-            "sortOrder": "desc"
+            "sort_by": "relevance",
+            "sort_order": "desc"
         }
     """
     query: str = Field(
@@ -339,11 +340,11 @@ class SearchLibraryInput(BaseModel):
         ge=0,
         description="Number of results to skip for pagination"
     )
-    sortBy: SortField = Field(
+    sort_by: SortField = Field(
         default=SortField.RELEVANCE,
         description="Field to sort results by"
     )
-    sortOrder: SortOrder = Field(
+    sort_order: SortOrder = Field(
         default=SortOrder.DESC,
         description="Sort order (asc or desc)"
     )
@@ -389,15 +390,15 @@ class SearchLibraryInput(BaseModel):
                     },
                     "limit": 50,
                     "offset": 0,
-                    "sortBy": "year",
-                    "sortOrder": "desc"
+                    "sort_by": "year",
+                    "sort_order": "desc"
                 },
                 {
                     "query": "jazz",
                     "filters": {
                         "time": {
-                            "dateFrom": "2025-11-01",
-                            "dateTo": "2025-11-30",
+                            "date_from": "2025-11-01",
+                            "date_to": "2025-11-30",
                             "timezone": "Europe/London"
                         }
                     },
@@ -413,7 +414,7 @@ class SearchLibraryInput(BaseModel):
 # ============================================================================
 
 # Reuse Product and Format metadata from process_audio schemas
-from .schemas import ProductMetadata, FormatMetadata, AudioMetadata, AudioResources
+from src.schemas.metadata import ProductMetadata, FormatMetadata, AudioMetadata, AudioResources
 
 
 class GetAudioMetadataOutput(BaseModel):
@@ -423,7 +424,7 @@ class GetAudioMetadataOutput(BaseModel):
     Returns complete metadata for a single audio track.
     """
     success: Literal[True] = Field(description="Operation success indicator")
-    audioId: str = Field(description="UUID of the audio track")
+    audio_id: str = Field(description="UUID of the audio track")
     metadata: AudioMetadata = Field(description="Complete audio metadata")
     resources: AudioResources = Field(description="Resource URIs")
 
@@ -432,29 +433,29 @@ class GetAudioMetadataOutput(BaseModel):
             "examples": [
                 {
                     "success": True,
-                    "audioId": "550e8400-e29b-41d4-a716-446655440000",
+                    "audio_id": "550e8400-e29b-41d4-a716-446655440000",
                     "metadata": {
-                        "Product": {
-                            "Artist": "The Beatles",
-                            "Title": "Hey Jude",
-                            "Album": "Hey Jude",
-                            "MBID": None,
-                            "Genre": ["Rock"],
-                            "Year": 1968
+                        "product": {
+                            "artist": "The Beatles",
+                            "title": "Hey Jude",
+                            "album": "Hey Jude",
+                            "mbid": None,
+                            "genre": ["Rock"],
+                            "year": 1968
                         },
-                        "Format": {
-                            "Duration": 431.0,
-                            "Channels": 2,
-                            "Sample rate": 44100,
-                            "Bitrate": 320000,
-                            "Format": "MP3"
+                        "format": {
+                            "duration": 431.0,
+                            "channels": 2,
+                            "sample_rate": 44100,
+                            "bitrate": 320000,
+                            "format": "MP3"
                         },
-                        "urlEmbedLink": "http://localhost:8080/embed/550e8400-e29b-41d4-a716-446655440000"
+                        "url_embed_link": "http://localhost:8080/embed/550e8400-e29b-41d4-a716-446655440000"
                     },
                     "resources": {
-                        "audio": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/stream",
-                        "thumbnail": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/thumbnail",
-                        "waveform": None
+                        "audio_url": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/stream",
+                        "thumbnail_url": "music-library://audio/550e8400-e29b-41d4-a716-446655440000/thumbnail",
+                        "waveform_url": None
                     }
                 }
             ]
@@ -464,7 +465,7 @@ class GetAudioMetadataOutput(BaseModel):
 
 class SearchResult(BaseModel):
     """Individual search result with metadata and relevance score"""
-    audioId: str = Field(description="UUID of the audio track")
+    audio_id: str = Field(description="UUID of the audio track")
     metadata: AudioMetadata = Field(description="Complete audio metadata")
     score: float = Field(
         ge=0.0,
@@ -485,7 +486,7 @@ class SearchLibraryOutput(BaseModel):
     total: int = Field(description="Total number of matching tracks")
     limit: int = Field(description="Number of results requested")
     offset: int = Field(description="Number of results skipped")
-    hasMore: bool = Field(
+    has_more: bool = Field(
         description="Whether more results are available"
     )
     facets: Optional[SearchFacets] = Field(
@@ -500,31 +501,31 @@ class SearchLibraryOutput(BaseModel):
                     "success": True,
                     "results": [
                         {
-                            "audioId": "550e8400-e29b-41d4-a716-446655440000",
+                            "audio_id": "550e8400-e29b-41d4-a716-446655440000",
                             "metadata": {
-                                "Product": {
-                                    "Artist": "The Beatles",
-                                    "Title": "Hey Jude",
-                                    "Album": "Hey Jude",
-                                    "MBID": None,
-                                    "Genre": ["Rock"],
-                                    "Year": 1968
+                                "product": {
+                                    "artist": "The Beatles",
+                                    "title": "Hey Jude",
+                                    "album": "Hey Jude",
+                                    "mbid": None,
+                                    "genre": ["Rock"],
+                                    "year": 1968
                                 },
-                                "Format": {
-                                    "Duration": 431.0,
-                                    "Channels": 2,
-                                    "Sample rate": 44100,
-                                    "Bitrate": 320000,
-                                    "Format": "MP3"
+                                "format": {
+                                    "duration": 431.0,
+                                    "channels": 2,
+                                    "sample_rate": 44100,
+                                    "bitrate": 320000,
+                                    "format": "MP3"
                                 },
-                                "urlEmbedLink": "http://localhost:8080/embed/550e8400-e29b-41d4-a716-446655440000"
+                                "url_embed_link": "http://localhost:8080/embed/550e8400-e29b-41d4-a716-446655440000"
                             },
                             "score": 0.95
                         }
                     ],
                     "limit": 20,
-                    "hasMore": True,
-                    "nextCursor": "eyJzY29yZSI6MC45NSwiY3JlYXRlZF9hdCI6IjIwMjQtMTEtMTJUMTI6MzQ6NTYuMDAwWiIsImlkIjoiNTUwZTg0MDAtZTJiYi00MWQ0LWE3MTYtNDQ2NjU1NDQwMDAwIn0="
+                    "has_more": True,
+                    "next_cursor": "eyJzY29yZSI6MC45NSwiY3JlYXRlZF9hdCI6IjIwMjQtMTEtMTJUMTI6MzQ6NTYuMDAwWiIsImlkIjoiNTUwZTg0MDAtZTJiYi00MWQ0LWE3MTYtNDQ2NjU1NDQwMDAwIn0="
                 }
             ]
         }
@@ -554,7 +555,7 @@ class QueryError(BaseModel):
             "success": false,
             "error": "RESOURCE_NOT_FOUND",
             "message": "Audio track not found",
-            "details": {"audioId": "invalid-uuid"}
+            "details": {"audio_id": "invalid-uuid"}
         }
     """
     success: Literal[False] = Field(description="Operation failure indicator")
@@ -573,7 +574,7 @@ class QueryError(BaseModel):
                     "error": "RESOURCE_NOT_FOUND",
                     "message": "Audio track with the specified ID was not found",
                     "details": {
-                        "audioId": "550e8400-e29b-41d4-a716-446655440000"
+                        "audio_id": "550e8400-e29b-41d4-a716-446655440000"
                     }
                 },
                 {
@@ -601,42 +602,53 @@ class DeleteAudioInput(BaseModel):
 
     Example:
         {
-            "audioId": "550e8400-e29b-41d4-a716-446655440000"
-            # "userId": "uuid-for-auth"  # TODO: Add when auth is implemented
+            "audio_id": "550e8400-e29b-41d4-a716-446655440000"
+            # "user_id": "uuid-for-auth"  # TODO: Add when auth is implemented
         }
     """
-    audioId: str = Field(
+    audio_id: str = Field(
         ...,
-        description="UUID of the audio track to delete",
-        pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-        min_length=36,
-        max_length=36
+        description="UUID of the audio track to delete"
+        # UUID format validation handled by custom validator
     )
     # TODO: Add user_id for authorization when auth is implemented
-    # userId: Optional[str] = Field(
+
+    @model_validator(mode='before')
+    @classmethod
+    def handle_field_aliases(cls, values):
+        """Handle both snake_case and camelCase field names for audio_id."""
+        if isinstance(values, dict):
+            # Check for camelCase version and convert to snake_case
+            if 'audioId' in values and 'audio_id' not in values:
+                values['audio_id'] = values.pop('audioId')
+        return values
+    # user_id: Optional[str] = Field(
     #     default=None,
     #     description="User ID for authorization (future feature)",
     #     pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
     # )
 
-    @field_validator('audioId')
+    @field_validator('audio_id')
     @classmethod
     def validate_uuid_format(cls, v):
-        """Ensure audioId is a valid UUID format"""
-        uuid_pattern = re.compile(
-            r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
-            re.IGNORECASE
-        )
-        if not uuid_pattern.match(v):
-            raise ValueError("audioId must be a valid UUID format")
-        return v.lower()  # Normalize to lowercase
+        """Ensure audio_id is a valid UUID format"""
+        import uuid
+        try:
+            # Use Python's uuid.UUID for robust validation
+            parsed_uuid = uuid.UUID(v)
+            return str(parsed_uuid).lower()  # Normalize to lowercase hyphenated format
+        except ValueError:
+            raise ValueError(
+                f"audio_id must be a valid UUID format "
+                f"(e.g., 550e8400-e29b-41d4-a716-446655440000), got: {v[:50]}"
+            )
 
     model_config = {
         "json_schema_extra": {
             "examples": [
                 {
-                    "audioId": "550e8400-e29b-41d4-a716-446655440000"
-                    # "userId": "user-uuid-here"  # TODO: Add when auth implemented
+                    "audio_id": "550e8400-e29b-41d4-a716-446655440000"
+                    # "user_id": "user-uuid-here"  # TODO: Add when auth implemented
                 }
             ]
         }
@@ -650,7 +662,7 @@ class DeleteAudioOutput(BaseModel):
     Confirms successful deletion of an audio track.
     """
     success: Literal[True] = Field(description="Operation success indicator")
-    audioId: str = Field(description="UUID of the deleted audio track")
+    audio_id: str = Field(description="UUID of the deleted audio track")
     deleted: bool = Field(description="Whether the track was actually deleted")
 
     model_config = {
@@ -658,7 +670,7 @@ class DeleteAudioOutput(BaseModel):
             "examples": [
                 {
                     "success": True,
-                    "audioId": "550e8400-e29b-41d4-a716-446655440000",
+                    "audio_id": "550e8400-e29b-41d4-a716-446655440000",
                     "deleted": True
                 }
             ]
@@ -675,7 +687,7 @@ class DeleteAudioError(BaseModel):
             "success": false,
             "error": "RESOURCE_NOT_FOUND",
             "message": "Audio track not found",
-            "details": {"audioId": "invalid-uuid"}
+            "details": {"audio_id": "invalid-uuid"}
         }
     """
     success: Literal[False] = Field(description="Operation failure indicator")
@@ -694,7 +706,7 @@ class DeleteAudioError(BaseModel):
                     "error": "RESOURCE_NOT_FOUND",
                     "message": "Audio track with the specified ID was not found",
                     "details": {
-                        "audioId": "550e8400-e29b-41d4-a716-446655440000"
+                        "audio_id": "550e8400-e29b-41d4-a716-446655440000"
                     }
                 },
                 {
@@ -702,7 +714,7 @@ class DeleteAudioError(BaseModel):
                     "error": "DELETE_FAILED",
                     "message": "Failed to delete audio track",
                     "details": {
-                        "audioId": "550e8400-e29b-41d4-a716-446655440000",
+                        "audio_id": "550e8400-e29b-41d4-a716-446655440000",
                         "reason": "Database transaction failed"
                     }
                 }

@@ -27,7 +27,7 @@ __pycache__/
 .coverage
 htmlcov/
 reports/
-tests/
+# tests/ # Removed to allow copying tests into container
 test_*.py
 test_*.sh
 *_test.py

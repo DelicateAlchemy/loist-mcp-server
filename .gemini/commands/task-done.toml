@@ -1,0 +1,29 @@
+# Invoked as: /task:done <task_id>
+
+description = "Mark a task as complete and update the rolling summary"
+
+prompt = """
+
+The user has completed task: $ARGUMENTS
+
+1. Open `docs/MCP-AUDIT-TASKS.md`
+
+2. Find the task with ID matching "$ARGUMENTS"
+
+3. Change `- [STATUS: pending]` to `- [STATUS: done]` for that task
+
+4. Add an entry to the Rolling Summary table:
+
+   | Date | Task ID | Summary | Files Changed |
+
+   Use today's date, the task ID, a brief summary, and list files touched.
+
+5. Check if any follow-up tasks were discovered during this work.
+
+   If yes, add them to the "Discovered Tasks" section.
+
+6. Update the "Last Updated" timestamp at the bottom.
+
+7. Show the updated Rolling Summary section to confirm.
+
+"""

@@ -1,13 +1,15 @@
 # Cloud Build Triggers Configuration
 
-This document describes the automated Cloud Build triggers for the Loist Music Library MCP Server deployment pipeline.
+This document describes the automated Cloud Build triggers for the Loist Music Library deployment pipeline, including both MCP server and A2A agent server.
 
 ## Overview
 
 The project uses GitHub-connected Cloud Build triggers for automated CI/CD deployments:
 
-- **Production**: Automatically deploys to Cloud Run when code is pushed to `main` branch
-- **Staging**: Automatically deploys to staging when code is pushed to `dev` branch
+- **MCP Production**: Automatically deploys MCP server to Cloud Run when code is pushed to `main` branch
+- **MCP Staging**: Automatically deploys MCP server to staging when code is pushed to `dev` branch
+- **A2A Production**: Automatically deploys A2A agent server when A2A code changes are pushed to `main` branch
+- **A2A Staging**: Automatically deploys A2A agent server when A2A code changes are pushed to `dev` branch
 
 ## Configured Triggers
 
@@ -43,6 +45,40 @@ The project uses GitHub-connected Cloud Build triggers for automated CI/CD deplo
 - Region: `us-central1`
 - Environment: Staging
 
+### A2A Production Trigger
+
+**Trigger Name**: `a2a-prod-deployment`
+
+**Configuration**:
+- **Branch Pattern**: `^main$` (main branch only)
+- **Path Filter**: `src/a2a_server/**,cloudbuild-a2a-prod.yaml` (A2A code or config changes)
+- **Build Config**: `cloudbuild-a2a-prod.yaml`
+- **Service Account**: `loist-music-library-sa@loist-music-library.iam.gserviceaccount.com`
+- **Approval**: Not required (automated deployment)
+- **GitHub Repo**: `DelicateAlchemy/loist-mcp-server`
+
+**Deployment Target**:
+- Service: `a2a-prod`
+- Region: `us-central1`
+- Environment: Production
+
+### A2A Staging Trigger
+
+**Trigger Name**: `a2a-staging-deployment`
+
+**Configuration**:
+- **Branch Pattern**: `^dev$` (dev branch only)
+- **Path Filter**: `src/a2a_server/**,cloudbuild-a2a-staging.yaml` (A2A code or config changes)
+- **Build Config**: `cloudbuild-a2a-staging.yaml`
+- **Service Account**: `loist-music-library-sa@loist-music-library.iam.gserviceaccount.com`
+- **Approval**: Not required (automated deployment)
+- **GitHub Repo**: `DelicateAlchemy/loist-mcp-server`
+
+**Deployment Target**:
+- Service: `a2a-staging`
+- Region: `us-central1`
+- Environment: Staging
+
 ## Trigger Workflow
 
 ### Production Deployment
@@ -73,6 +109,34 @@ Push to dev → GitHub webhook → Cloud Build trigger → Build image → Deplo
    - Deploys to `music-library-mcp-staging` service
 4. Cloud Run automatically switches traffic to new revision
 
+### A2A Production Deployment
+
+```
+Push to main (A2A code) → GitHub webhook → Cloud Build trigger → Build A2A image → Deploy to Cloud Run (a2a-prod)
+```
+
+1. Developer pushes A2A code or config changes to `main` branch (`src/a2a_server/**` or `cloudbuild-a2a-prod.yaml`)
+2. GitHub sends webhook to Cloud Build
+3. Cloud Build executes `cloudbuild-a2a-prod.yaml`:
+   - Builds Docker image with `--target a2a`
+   - Pushes to Artifact Registry (tagged with `a2a-prod`)
+   - Deploys to `a2a-prod` service
+4. Cloud Run automatically switches traffic to new revision
+
+### A2A Staging Deployment
+
+```
+Push to dev (A2A code) → GitHub webhook → Cloud Build trigger → Build A2A image → Deploy to Cloud Run (a2a-staging)
+```
+
+1. Developer pushes A2A code or config changes to `dev` branch (`src/a2a_server/**` or `cloudbuild-a2a-staging.yaml`)
+2. GitHub sends webhook to Cloud Build
+3. Cloud Build executes `cloudbuild-a2a-staging.yaml`:
+   - Builds Docker image with `--target a2a`
+   - Pushes to Artifact Registry (tagged with `a2a-staging`)
+   - Deploys to `a2a-staging` service
+4. Cloud Run automatically switches traffic to new revision
+
 ## Verifying Trigger Configuration
 
 ### List All Triggers
@@ -94,6 +158,20 @@ gcloud builds triggers describe production-deployment-init-location \
 
 ```bash
 gcloud builds triggers describe staging-deployment-dev-branch \
+  --project=loist-music-library
+```
+
+### View A2A Production Trigger Details
+
+```bash
+gcloud builds triggers describe a2a-prod-deployment \
+  --project=loist-music-library
+```
+
+### View A2A Staging Trigger Details
+
+```bash
+gcloud builds triggers describe a2a-staging-deployment \
   --project=loist-music-library
 ```
 
@@ -140,6 +218,44 @@ Monitor the build:
 
 ```bash
 gcloud builds list --project=loist-music-library --ongoing --format="table(id,status,createTime)"
+```
+
+### Test A2A Production Trigger
+
+Push A2A code changes to `main` branch:
+
+```bash
+git checkout main
+git add src/a2a_server/
+git commit -m "feat(a2a): Test A2A production deployment trigger"
+git push origin main
+```
+
+Monitor the build:
+
+```bash
+gcloud builds list --project=loist-music-library --ongoing \
+  --filter="tags:a2a-prod" \
+  --format="table(id,status,createTime)"
+```
+
+### Test A2A Staging Trigger
+
+Push A2A code changes to `dev` branch:
+
+```bash
+git checkout dev
+git add src/a2a_server/
+git commit -m "feat(a2a): Test A2A staging deployment trigger"
+git push origin dev
+```
+
+Monitor the build:
+
+```bash
+gcloud builds list --project=loist-music-library --ongoing \
+  --filter="tags:a2a-staging" \
+  --format="table(id,status,createTime)"
 ```
 
 ## Manual Approval Workflow (Optional)
@@ -280,6 +396,6 @@ Secrets are injected at deployment time via `cloudbuild.yaml` configuration.
 
 ---
 
-**Last Updated**: 2025-11-02  
-**Status**: Automated triggers configured and operational
+**Last Updated**: 2025-12-15
+**Status**: Automated triggers configured for MCP and A2A services (triggers need manual setup in Cloud Console)
 

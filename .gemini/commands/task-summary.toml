@@ -1,0 +1,39 @@
+# Invoked as: /task:summary
+
+description = "Generate a session summary for handoff or documentation"
+
+prompt = """
+
+Read `docs/MCP-AUDIT-TASKS.md` and generate a handoff summary:
+
+1. **Session Overview**:
+
+   - What was accomplished in this session?
+
+   - Pull from the Rolling Summary section
+
+2. **Key Decisions**:
+
+   - List decisions from the "Key Decisions Made" section
+
+3. **Current State**:
+
+   - What phase is active?
+
+   - What's the immediate next task?
+
+4. **Outstanding Items**:
+
+   - Any blockers?
+
+   - Any discovered tasks not yet integrated?
+
+5. **Recommendations for Next Session**:
+
+   - What should the next session focus on?
+
+   - Any preparation needed?
+
+Format as a brief, scannable summary suitable for sharing with team members or resuming work later.
+
+"""

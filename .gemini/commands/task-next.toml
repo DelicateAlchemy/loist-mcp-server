@@ -1,0 +1,29 @@
+# Invoked as: /task:next
+
+description = "Find and start the next uncompleted task from MCP-AUDIT-TASKS.md"
+
+prompt = """
+
+Read the file `docs/MCP-AUDIT-TASKS.md` (or wherever the task tracker is located).
+
+1. Find the first task with `- [STATUS: pending]` (pending)
+
+2. State your intent using this format:
+
+   🎯 Intent: I'm going to [task description] because [it's the next task in sequence].
+
+   Files affected: [anticipated files]
+
+   Expected outcome: [what success looks like]
+
+3. Ask for confirmation before proceeding.
+
+Remember:
+
+- Execute ONE task at a time
+
+- Mark tasks complete with `- [STATUS: done]` after finishing
+
+- Update the Rolling Summary section
+
+"""

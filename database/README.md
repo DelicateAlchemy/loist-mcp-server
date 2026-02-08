@@ -45,6 +45,57 @@ thumbnail_gcs_path TEXT                -- GCS path to artwork
 search_vector TSVECTOR                 -- Full-text search vector
 ```
 
+### Albums & Playlists Tables
+
+The schema includes support for grouping tracks into albums (project/album hybrids) and collaborative playlists:
+
+#### `albums`
+```sql
+id UUID PRIMARY KEY                    -- Unique identifier
+owner_id UUID                          -- Future multi-tenant user (nullable, no FK)
+name VARCHAR(255) NOT NULL             -- Album name
+description TEXT                       -- Optional description
+cover_art_gcs_path TEXT                -- GCS path to cover artwork
+status VARCHAR(20)                     -- project | draft | released
+```
+
+#### `album_tracks` (junction)
+```sql
+album_id UUID REFERENCES albums(id) ON DELETE CASCADE
+audio_track_id UUID REFERENCES audio_tracks(id) ON DELETE CASCADE
+position INTEGER NOT NULL              -- Track ordering within album
+disc_number INTEGER DEFAULT 1          -- Disc/side grouping
+UNIQUE(album_id, audio_track_id)       -- No duplicate track entries
+UNIQUE(album_id, position, disc_number) -- Unique position per disc
+```
+
+#### `playlists`
+```sql
+id UUID PRIMARY KEY                    -- Unique identifier
+owner_id UUID                          -- Future multi-tenant user (nullable, no FK)
+name VARCHAR(255) NOT NULL             -- Playlist name
+description TEXT                       -- Optional description
+is_public BOOLEAN DEFAULT FALSE        -- Visibility flag
+```
+
+#### `playlist_tracks` (junction)
+```sql
+playlist_id UUID REFERENCES playlists(id) ON DELETE CASCADE
+audio_track_id UUID REFERENCES audio_tracks(id) ON DELETE CASCADE
+position INTEGER NOT NULL              -- Track ordering
+added_by UUID                          -- User who added the track (nullable, no FK)
+UNIQUE(playlist_id, audio_track_id)    -- No duplicate track entries
+UNIQUE(playlist_id, position)          -- Unique position
+```
+
+#### `playlist_collaborators`
+```sql
+playlist_id UUID REFERENCES playlists(id) ON DELETE CASCADE
+user_id UUID NOT NULL                  -- Collaborator user ID (no FK)
+role VARCHAR(20)                       -- viewer | editor | admin
+UNIQUE(playlist_id, user_id)           -- One role per user per playlist
+```
+
 ### Key Design Decisions
 
 1. **Single Table Design**: Denormalized for MVP simplicity, avoids JOIN complexity
@@ -52,7 +103,9 @@ search_vector TSVECTOR                 -- Full-text search vector
 3. **Precise Duration**: NUMERIC(10,3) for millisecond accuracy
 4. **Weighted Search**: Title/artist highest priority, album medium, genre lower
 5. **Partial Indexes**: Exclude completed tracks for status filtering
-6. **Multi-User SaaS Ready**: user_id column for data isolation between users
+6. **Multi-User SaaS Ready**: user_id/owner_id columns for data isolation between users
+7. **Album Status Progression**: project → draft → released for WIP music creation
+8. **Collaboration-Ready Schema**: playlist_collaborators table with role-based access (auth enforcement deferred)
 
 ### Multi-User SaaS Architecture
 
@@ -99,7 +152,16 @@ The database is designed to support multi-user SaaS functionality with proper da
 
 ### Migrations
 - `migrations/001_initial_schema.sql`: Initial schema creation
-- `migrate.py`: Migration runner with rollback support
+- `migrations/002_add_user_id.sql`: Multi-user support (user_id column)
+- `migrations/002_add_waveform_support.sql`: Waveform generation columns
+- `migrations/002_performance_indexes.sql`: Additional performance indexes
+- `migrations/003_add_a2a_tasks.sql`: Agent-to-agent task coordination table
+- `migrations/004_add_xmp_fields.sql`: XMP metadata fields (composer, publisher, record_label, isrc)
+- `migrations/005_optimize_xmp_indexes.sql`: Composite indexes for XMP field filtering
+- `migrations/006_optimize_search_vector.sql`: Enhanced full-text search optimization
+- `migrations/011_albums_schema.sql`: Albums and album_tracks tables with indexes
+- `migrations/012_playlists_schema.sql`: Playlists, playlist_tracks, and playlist_collaborators tables
+- `migrate.py`: Migration runner with automatic discovery and rollback support
 
 ### Configuration
 - `config.py`: Database connection and pool management
@@ -112,16 +174,36 @@ The database is designed to support multi-user SaaS functionality with proper da
 
 ### Running Migrations
 
+The migration system automatically discovers and applies all `.sql` files in the `migrations/` directory in order.
+
 ```bash
-# Apply all pending migrations
+# Apply all pending migrations (automatic discovery)
 python migrate.py --action=up --database-url=postgresql://user:pass@host:port/db
 
 # Check migration status
 python migrate.py --action=status --database-url=postgresql://user:pass@host:port/db
 
-# Rollback specific migration (manual rollback required)
+# Rollback specific migration (manual rollback SQL required)
 python migrate.py --action=down --migration=001 --database-url=postgresql://user:pass@host:port/db
 ```
+
+### Automated Deployment Migrations
+
+Migrations run automatically during Cloud Build deployments:
+
+```bash
+# Staging environment (post-deployment)
+./scripts/migrate-db.sh staging
+
+# Production environment (during deployment)
+# Handled automatically by Cloud Build pipeline
+```
+
+The system ensures:
+- **Idempotent**: Migrations only run once, tracked in `schema_migrations` table
+- **Transactional**: Each migration runs in a transaction for consistency
+- **Ordered**: Migrations execute in version order (001, 002, 003, etc.)
+- **Environment-aware**: Automatically detects production vs staging databases
 
 ### Environment Variables
 

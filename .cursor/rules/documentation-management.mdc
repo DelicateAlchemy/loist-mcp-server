@@ -1,7 +1,7 @@
 ---
 description: Guidelines for managing documentation updates, deciding between README.md updates vs separate documentation files, and maintaining documentation quality
-globs: README.md,docs/**/*
-alwaysApply: true
+globs: README.md, docs/**/*
+alwaysApply: false
 ---
 
 # Documentation Management Guidelines

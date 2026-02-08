@@ -1,0 +1,515 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="Loist Music Library A2A - Regression Suite" tests="7" time="0.913">
+  <testsuite name="Agent Discovery / GET /.well-known/agent-card.json" id="33732a2e-b4c9-413b-87bf-4d241ef509d9" timestamp="2025-12-15T16:08:29.726Z" tests="5" failures="5" errors="0" time="0.264">
+    <testcase name="Agent Card returned 200" time="0.264" classname="AgentDiscoveryGetWellKnownAgentCardJson">
+      <failure type="AssertionFailure" message="expected response to have status code 200 but got 404">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: Agent Discovery / GET /.well-known/agent-card.json.]]>
+        <![CDATA[Test description: Agent Card returned 200.]]>
+        <![CDATA[Error message: expected response to have status code 200 but got 404.]]>
+        <![CDATA[Stacktrace: AssertionError: expected response to have status code 200 but got 404
+   at Object.eval sandbox-script.js:1:1).]]>
+      </failure>
+    </testcase>
+    <testcase name="Response is valid JSON" time="0.264" classname="AgentDiscoveryGetWellKnownAgentCardJson">
+      <failure type="AssertionFailure" message="Unexpected token '&lt;' at 2:1&#xA;&lt;html>&lt;head>&#xA;^">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: Agent Discovery / GET /.well-known/agent-card.json.]]>
+        <![CDATA[Test description: Response is valid JSON.]]>
+        <![CDATA[Error message: Unexpected token '<' at 2:1
+<html><head>
+^.]]>
+        <![CDATA[Stacktrace: JSONError: Unexpected token '<' at 2:1
+<html><head>
+^
+   at Object.eval sandbox-script.js:2:1).]]>
+      </failure>
+    </testcase>
+    <testcase name="Agent Card has required fields" time="0.264" classname="AgentDiscoveryGetWellKnownAgentCardJson">
+      <failure type="AssertionFailure" message="Unexpected token '&lt;' at 2:1&#xA;&lt;html>&lt;head>&#xA;^">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: Agent Discovery / GET /.well-known/agent-card.json.]]>
+        <![CDATA[Test description: Agent Card has required fields.]]>
+        <![CDATA[Error message: Unexpected token '<' at 2:1
+<html><head>
+^.]]>
+        <![CDATA[Stacktrace: JSONError: Unexpected token '<' at 2:1
+<html><head>
+^
+   at Object.eval sandbox-script.js:3:1).]]>
+      </failure>
+    </testcase>
+    <testcase name="Agent Card has expected skills" time="0.264" classname="AgentDiscoveryGetWellKnownAgentCardJson">
+      <failure type="AssertionFailure" message="Unexpected token '&lt;' at 2:1&#xA;&lt;html>&lt;head>&#xA;^">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: Agent Discovery / GET /.well-known/agent-card.json.]]>
+        <![CDATA[Test description: Agent Card has expected skills.]]>
+        <![CDATA[Error message: Unexpected token '<' at 2:1
+<html><head>
+^.]]>
+        <![CDATA[Stacktrace: JSONError: Unexpected token '<' at 2:1
+<html><head>
+^
+   at Object.eval sandbox-script.js:4:1).]]>
+      </failure>
+    </testcase>
+    <testcase name="Agent Card has valid capabilities" time="0.264" classname="AgentDiscoveryGetWellKnownAgentCardJson">
+      <failure type="AssertionFailure" message="Unexpected token '&lt;' at 2:1&#xA;&lt;html>&lt;head>&#xA;^">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: Agent Discovery / GET /.well-known/agent-card.json.]]>
+        <![CDATA[Test description: Agent Card has valid capabilities.]]>
+        <![CDATA[Error message: Unexpected token '<' at 2:1
+<html><head>
+^.]]>
+        <![CDATA[Stacktrace: JSONError: Unexpected token '<' at 2:1
+<html><head>
+^
+   at Object.eval sandbox-script.js:5:1).]]>
+      </failure>
+    </testcase>
+  </testsuite>
+  <testsuite name="Agent Discovery / GET /.well-known/agent.json (deprecated)" id="159e1d04-c088-4483-8507-76d1f2ca7e3b" timestamp="2025-12-15T16:08:29.726Z" tests="2" failures="0" errors="0" time="0.108">
+    <testcase name="Deprecated endpoint returns acceptable status" time="0.108" classname="AgentDiscoveryGetWellKnownAgentJsonDeprecated"/>
+    <testcase name="Deprecated endpoint correctly returns 404 when not supported" time="0.108" classname="AgentDiscoveryGetWellKnownAgentJsonDeprecated"/>
+  </testsuite>
+  <testsuite name="JSON-RPC Tasks / POST / - tasks/send" id="9204e3cf-d5d1-4a74-8399-c95e1a0604c2" timestamp="2025-12-15T16:08:29.726Z" tests="5" failures="5" errors="1" time="0.109">
+    <system-err><![CDATA[Iteration: 0
+
+---
+testScriptError: Unexpected token '<' at 2:1
+<html><head>
+^
+---
+]]></system-err>
+    <testcase name="tasks/send returned 200" time="0.109" classname="JsonRpcTasksPostTasksSend">
+      <failure type="AssertionFailure" message="expected response to have status code 200 but got 404">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: JSON-RPC Tasks / POST / - tasks/send.]]>
+        <![CDATA[Test description: tasks/send returned 200.]]>
+        <![CDATA[Error message: expected response to have status code 200 but got 404.]]>
+        <![CDATA[Stacktrace: AssertionError: expected response to have status code 200 but got 404
+   at Object.eval sandbox-script.js:1:3).]]>
+      </failure>
+    </testcase>
+    <testcase name="Response is valid JSON" time="0.109" classname="JsonRpcTasksPostTasksSend">
+      <failure type="AssertionFailure" message="Unexpected token '&lt;' at 2:1&#xA;&lt;html>&lt;head>&#xA;^">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: JSON-RPC Tasks / POST / - tasks/send.]]>
+        <![CDATA[Test description: Response is valid JSON.]]>
+        <![CDATA[Error message: Unexpected token '<' at 2:1
+<html><head>
+^.]]>
+        <![CDATA[Stacktrace: JSONError: Unexpected token '<' at 2:1
+<html><head>
+^
+   at Object.eval sandbox-script.js:2:3).]]>
+      </failure>
+    </testcase>
+    <testcase name="Response follows JSON-RPC 2.0" time="0.109" classname="JsonRpcTasksPostTasksSend">
+      <failure type="AssertionFailure" message="Unexpected token '&lt;' at 2:1&#xA;&lt;html>&lt;head>&#xA;^">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: JSON-RPC Tasks / POST / - tasks/send.]]>
+        <![CDATA[Test description: Response follows JSON-RPC 2.0.]]>
+        <![CDATA[Error message: Unexpected token '<' at 2:1
+<html><head>
+^.]]>
+        <![CDATA[Stacktrace: JSONError: Unexpected token '<' at 2:1
+<html><head>
+^
+   at Object.eval sandbox-script.js:3:3).]]>
+      </failure>
+    </testcase>
+    <testcase name="Task object has required fields" time="0.109" classname="JsonRpcTasksPostTasksSend">
+      <failure type="AssertionFailure" message="Unexpected token '&lt;' at 2:1&#xA;&lt;html>&lt;head>&#xA;^">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: JSON-RPC Tasks / POST / - tasks/send.]]>
+        <![CDATA[Test description: Task object has required fields.]]>
+        <![CDATA[Error message: Unexpected token '<' at 2:1
+<html><head>
+^.]]>
+        <![CDATA[Stacktrace: JSONError: Unexpected token '<' at 2:1
+<html><head>
+^
+   at Object.eval sandbox-script.js:4:3).]]>
+      </failure>
+    </testcase>
+    <testcase name="Task starts in submitted state" time="0.109" classname="JsonRpcTasksPostTasksSend">
+      <failure type="AssertionFailure" message="Unexpected token '&lt;' at 2:1&#xA;&lt;html>&lt;head>&#xA;^">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: JSON-RPC Tasks / POST / - tasks/send.]]>
+        <![CDATA[Test description: Task starts in submitted state.]]>
+        <![CDATA[Error message: Unexpected token '<' at 2:1
+<html><head>
+^.]]>
+        <![CDATA[Stacktrace: JSONError: Unexpected token '<' at 2:1
+<html><head>
+^
+   at Object.eval sandbox-script.js:5:3).]]>
+      </failure>
+    </testcase>
+  </testsuite>
+  <testsuite name="JSON-RPC Tasks / POST / - tasks/get" id="669f140e-ac7d-409a-b883-bceac3e56952" timestamp="2025-12-15T16:08:29.726Z" tests="7" failures="7" errors="0" time="0.107">
+    <testcase name="tasks/get returned 200" time="0.107" classname="JsonRpcTasksPostTasksGet">
+      <failure type="AssertionFailure" message="expected response to have status code 200 but got 404">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: JSON-RPC Tasks / POST / - tasks/get.]]>
+        <![CDATA[Test description: tasks/get returned 200.]]>
+        <![CDATA[Error message: expected response to have status code 200 but got 404.]]>
+        <![CDATA[Stacktrace: AssertionError: expected response to have status code 200 but got 404
+   at Object.eval sandbox-script.js:1:4).]]>
+      </failure>
+    </testcase>
+    <testcase name="Response is valid JSON" time="0.107" classname="JsonRpcTasksPostTasksGet">
+      <failure type="AssertionFailure" message="Unexpected token '&lt;' at 2:1&#xA;&lt;html>&lt;head>&#xA;^">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: JSON-RPC Tasks / POST / - tasks/get.]]>
+        <![CDATA[Test description: Response is valid JSON.]]>
+        <![CDATA[Error message: Unexpected token '<' at 2:1
+<html><head>
+^.]]>
+        <![CDATA[Stacktrace: JSONError: Unexpected token '<' at 2:1
+<html><head>
+^
+   at Object.eval sandbox-script.js:2:4).]]>
+      </failure>
+    </testcase>
+    <testcase name="Response follows JSON-RPC 2.0" time="0.107" classname="JsonRpcTasksPostTasksGet">
+      <failure type="AssertionFailure" message="Unexpected token '&lt;' at 2:1&#xA;&lt;html>&lt;head>&#xA;^">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: JSON-RPC Tasks / POST / - tasks/get.]]>
+        <![CDATA[Test description: Response follows JSON-RPC 2.0.]]>
+        <![CDATA[Error message: Unexpected token '<' at 2:1
+<html><head>
+^.]]>
+        <![CDATA[Stacktrace: JSONError: Unexpected token '<' at 2:1
+<html><head>
+^
+   at Object.eval sandbox-script.js:3:4).]]>
+      </failure>
+    </testcase>
+    <testcase name="Task object has required fields" time="0.107" classname="JsonRpcTasksPostTasksGet">
+      <failure type="AssertionFailure" message="Unexpected token '&lt;' at 2:1&#xA;&lt;html>&lt;head>&#xA;^">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: JSON-RPC Tasks / POST / - tasks/get.]]>
+        <![CDATA[Test description: Task object has required fields.]]>
+        <![CDATA[Error message: Unexpected token '<' at 2:1
+<html><head>
+^.]]>
+        <![CDATA[Stacktrace: JSONError: Unexpected token '<' at 2:1
+<html><head>
+^
+   at Object.eval sandbox-script.js:4:4).]]>
+      </failure>
+    </testcase>
+    <testcase name="Task shows state progression" time="0.107" classname="JsonRpcTasksPostTasksGet">
+      <failure type="AssertionFailure" message="Unexpected token '&lt;' at 2:1&#xA;&lt;html>&lt;head>&#xA;^">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: JSON-RPC Tasks / POST / - tasks/get.]]>
+        <![CDATA[Test description: Task shows state progression.]]>
+        <![CDATA[Error message: Unexpected token '<' at 2:1
+<html><head>
+^.]]>
+        <![CDATA[Stacktrace: JSONError: Unexpected token '<' at 2:1
+<html><head>
+^
+   at Object.eval sandbox-script.js:5:4).]]>
+      </failure>
+    </testcase>
+    <testcase name="Completed task has audio metadata" time="0.107" classname="JsonRpcTasksPostTasksGet">
+      <failure type="AssertionFailure" message="Unexpected token '&lt;' at 2:1&#xA;&lt;html>&lt;head>&#xA;^">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: JSON-RPC Tasks / POST / - tasks/get.]]>
+        <![CDATA[Test description: Completed task has audio metadata.]]>
+        <![CDATA[Error message: Unexpected token '<' at 2:1
+<html><head>
+^.]]>
+        <![CDATA[Stacktrace: JSONError: Unexpected token '<' at 2:1
+<html><head>
+^
+   at Object.eval sandbox-script.js:6:4).]]>
+      </failure>
+    </testcase>
+    <testcase name="Failed task has error information" time="0.107" classname="JsonRpcTasksPostTasksGet">
+      <failure type="AssertionFailure" message="Unexpected token '&lt;' at 2:1&#xA;&lt;html>&lt;head>&#xA;^">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: JSON-RPC Tasks / POST / - tasks/get.]]>
+        <![CDATA[Test description: Failed task has error information.]]>
+        <![CDATA[Error message: Unexpected token '<' at 2:1
+<html><head>
+^.]]>
+        <![CDATA[Stacktrace: JSONError: Unexpected token '<' at 2:1
+<html><head>
+^
+   at Object.eval sandbox-script.js:7:4).]]>
+      </failure>
+    </testcase>
+  </testsuite>
+  <testsuite name="Negative Test Cases / POST / - Invalid Params" id="fe6a44b8-394d-459c-bf16-394ffab82652" timestamp="2025-12-15T16:08:29.726Z" tests="5" failures="5" errors="0" time="0.108">
+    <testcase name="Invalid params returned 200 with error" time="0.108" classname="NegativeTestCasesPostInvalidParams">
+      <failure type="AssertionFailure" message="expected response to have status code 200 but got 404">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: Negative Test Cases / POST / - Invalid Params.]]>
+        <![CDATA[Test description: Invalid params returned 200 with error.]]>
+        <![CDATA[Error message: expected response to have status code 200 but got 404.]]>
+        <![CDATA[Stacktrace: AssertionError: expected response to have status code 200 but got 404
+   at Object.eval sandbox-script.js:1:5).]]>
+      </failure>
+    </testcase>
+    <testcase name="Response is valid JSON" time="0.108" classname="NegativeTestCasesPostInvalidParams">
+      <failure type="AssertionFailure" message="Unexpected token '&lt;' at 2:1&#xA;&lt;html>&lt;head>&#xA;^">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: Negative Test Cases / POST / - Invalid Params.]]>
+        <![CDATA[Test description: Response is valid JSON.]]>
+        <![CDATA[Error message: Unexpected token '<' at 2:1
+<html><head>
+^.]]>
+        <![CDATA[Stacktrace: JSONError: Unexpected token '<' at 2:1
+<html><head>
+^
+   at Object.eval sandbox-script.js:2:5).]]>
+      </failure>
+    </testcase>
+    <testcase name="Response is JSON-RPC error object" time="0.108" classname="NegativeTestCasesPostInvalidParams">
+      <failure type="AssertionFailure" message="Unexpected token '&lt;' at 2:1&#xA;&lt;html>&lt;head>&#xA;^">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: Negative Test Cases / POST / - Invalid Params.]]>
+        <![CDATA[Test description: Response is JSON-RPC error object.]]>
+        <![CDATA[Error message: Unexpected token '<' at 2:1
+<html><head>
+^.]]>
+        <![CDATA[Stacktrace: JSONError: Unexpected token '<' at 2:1
+<html><head>
+^
+   at Object.eval sandbox-script.js:3:5).]]>
+      </failure>
+    </testcase>
+    <testcase name="Error has required fields" time="0.108" classname="NegativeTestCasesPostInvalidParams">
+      <failure type="AssertionFailure" message="Unexpected token '&lt;' at 2:1&#xA;&lt;html>&lt;head>&#xA;^">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: Negative Test Cases / POST / - Invalid Params.]]>
+        <![CDATA[Test description: Error has required fields.]]>
+        <![CDATA[Error message: Unexpected token '<' at 2:1
+<html><head>
+^.]]>
+        <![CDATA[Stacktrace: JSONError: Unexpected token '<' at 2:1
+<html><head>
+^
+   at Object.eval sandbox-script.js:4:5).]]>
+      </failure>
+    </testcase>
+    <testcase name="Error indicates invalid params" time="0.108" classname="NegativeTestCasesPostInvalidParams">
+      <failure type="AssertionFailure" message="Unexpected token '&lt;' at 2:1&#xA;&lt;html>&lt;head>&#xA;^">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: Negative Test Cases / POST / - Invalid Params.]]>
+        <![CDATA[Test description: Error indicates invalid params.]]>
+        <![CDATA[Error message: Unexpected token '<' at 2:1
+<html><head>
+^.]]>
+        <![CDATA[Stacktrace: JSONError: Unexpected token '<' at 2:1
+<html><head>
+^
+   at Object.eval sandbox-script.js:5:5).]]>
+      </failure>
+    </testcase>
+  </testsuite>
+  <testsuite name="Negative Test Cases / POST / - Unknown Method" id="e15eef7f-e444-4f7c-9856-cc10ff74a97b" timestamp="2025-12-15T16:08:29.726Z" tests="5" failures="5" errors="0" time="0.108">
+    <testcase name="Unknown method returned 200 with error" time="0.108" classname="NegativeTestCasesPostUnknownMethod">
+      <failure type="AssertionFailure" message="expected response to have status code 200 but got 404">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: Negative Test Cases / POST / - Unknown Method.]]>
+        <![CDATA[Test description: Unknown method returned 200 with error.]]>
+        <![CDATA[Error message: expected response to have status code 200 but got 404.]]>
+        <![CDATA[Stacktrace: AssertionError: expected response to have status code 200 but got 404
+   at Object.eval sandbox-script.js:1:6).]]>
+      </failure>
+    </testcase>
+    <testcase name="Response is valid JSON" time="0.108" classname="NegativeTestCasesPostUnknownMethod">
+      <failure type="AssertionFailure" message="Unexpected token '&lt;' at 2:1&#xA;&lt;html>&lt;head>&#xA;^">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: Negative Test Cases / POST / - Unknown Method.]]>
+        <![CDATA[Test description: Response is valid JSON.]]>
+        <![CDATA[Error message: Unexpected token '<' at 2:1
+<html><head>
+^.]]>
+        <![CDATA[Stacktrace: JSONError: Unexpected token '<' at 2:1
+<html><head>
+^
+   at Object.eval sandbox-script.js:2:6).]]>
+      </failure>
+    </testcase>
+    <testcase name="Response is JSON-RPC error object" time="0.108" classname="NegativeTestCasesPostUnknownMethod">
+      <failure type="AssertionFailure" message="Unexpected token '&lt;' at 2:1&#xA;&lt;html>&lt;head>&#xA;^">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: Negative Test Cases / POST / - Unknown Method.]]>
+        <![CDATA[Test description: Response is JSON-RPC error object.]]>
+        <![CDATA[Error message: Unexpected token '<' at 2:1
+<html><head>
+^.]]>
+        <![CDATA[Stacktrace: JSONError: Unexpected token '<' at 2:1
+<html><head>
+^
+   at Object.eval sandbox-script.js:3:6).]]>
+      </failure>
+    </testcase>
+    <testcase name="Error has required fields" time="0.108" classname="NegativeTestCasesPostUnknownMethod">
+      <failure type="AssertionFailure" message="Unexpected token '&lt;' at 2:1&#xA;&lt;html>&lt;head>&#xA;^">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: Negative Test Cases / POST / - Unknown Method.]]>
+        <![CDATA[Test description: Error has required fields.]]>
+        <![CDATA[Error message: Unexpected token '<' at 2:1
+<html><head>
+^.]]>
+        <![CDATA[Stacktrace: JSONError: Unexpected token '<' at 2:1
+<html><head>
+^
+   at Object.eval sandbox-script.js:4:6).]]>
+      </failure>
+    </testcase>
+    <testcase name="Error indicates method not found" time="0.108" classname="NegativeTestCasesPostUnknownMethod">
+      <failure type="AssertionFailure" message="Unexpected token '&lt;' at 2:1&#xA;&lt;html>&lt;head>&#xA;^">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: Negative Test Cases / POST / - Unknown Method.]]>
+        <![CDATA[Test description: Error indicates method not found.]]>
+        <![CDATA[Error message: Unexpected token '<' at 2:1
+<html><head>
+^.]]>
+        <![CDATA[Stacktrace: JSONError: Unexpected token '<' at 2:1
+<html><head>
+^
+   at Object.eval sandbox-script.js:5:6).]]>
+      </failure>
+    </testcase>
+  </testsuite>
+  <testsuite name="Negative Test Cases / POST / - Task Not Found" id="b76370f0-12c8-455f-8b22-52afe22f0097" timestamp="2025-12-15T16:08:29.726Z" tests="5" failures="5" errors="0" time="0.109">
+    <testcase name="Task not found returned 200 with error" time="0.109" classname="NegativeTestCasesPostTaskNotFound">
+      <failure type="AssertionFailure" message="expected response to have status code 200 but got 404">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: Negative Test Cases / POST / - Task Not Found.]]>
+        <![CDATA[Test description: Task not found returned 200 with error.]]>
+        <![CDATA[Error message: expected response to have status code 200 but got 404.]]>
+        <![CDATA[Stacktrace: AssertionError: expected response to have status code 200 but got 404
+   at Object.eval sandbox-script.js:1:7).]]>
+      </failure>
+    </testcase>
+    <testcase name="Response is valid JSON" time="0.109" classname="NegativeTestCasesPostTaskNotFound">
+      <failure type="AssertionFailure" message="Unexpected token '&lt;' at 2:1&#xA;&lt;html>&lt;head>&#xA;^">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: Negative Test Cases / POST / - Task Not Found.]]>
+        <![CDATA[Test description: Response is valid JSON.]]>
+        <![CDATA[Error message: Unexpected token '<' at 2:1
+<html><head>
+^.]]>
+        <![CDATA[Stacktrace: JSONError: Unexpected token '<' at 2:1
+<html><head>
+^
+   at Object.eval sandbox-script.js:2:7).]]>
+      </failure>
+    </testcase>
+    <testcase name="Response is JSON-RPC error object" time="0.109" classname="NegativeTestCasesPostTaskNotFound">
+      <failure type="AssertionFailure" message="Unexpected token '&lt;' at 2:1&#xA;&lt;html>&lt;head>&#xA;^">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: Negative Test Cases / POST / - Task Not Found.]]>
+        <![CDATA[Test description: Response is JSON-RPC error object.]]>
+        <![CDATA[Error message: Unexpected token '<' at 2:1
+<html><head>
+^.]]>
+        <![CDATA[Stacktrace: JSONError: Unexpected token '<' at 2:1
+<html><head>
+^
+   at Object.eval sandbox-script.js:3:7).]]>
+      </failure>
+    </testcase>
+    <testcase name="Error has required fields" time="0.109" classname="NegativeTestCasesPostTaskNotFound">
+      <failure type="AssertionFailure" message="Unexpected token '&lt;' at 2:1&#xA;&lt;html>&lt;head>&#xA;^">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: Negative Test Cases / POST / - Task Not Found.]]>
+        <![CDATA[Test description: Error has required fields.]]>
+        <![CDATA[Error message: Unexpected token '<' at 2:1
+<html><head>
+^.]]>
+        <![CDATA[Stacktrace: JSONError: Unexpected token '<' at 2:1
+<html><head>
+^
+   at Object.eval sandbox-script.js:4:7).]]>
+      </failure>
+    </testcase>
+    <testcase name="Error indicates task not found" time="0.109" classname="NegativeTestCasesPostTaskNotFound">
+      <failure type="AssertionFailure" message="Unexpected token '&lt;' at 2:1&#xA;&lt;html>&lt;head>&#xA;^">
+        <![CDATA[Failed 1 times.]]>
+        <![CDATA[Collection JSON ID: loist-music-library-a2a.]]>
+        <![CDATA[Collection name: Loist Music Library A2A - Regression Suite.]]>
+        <![CDATA[Request name: Negative Test Cases / POST / - Task Not Found.]]>
+        <![CDATA[Test description: Error indicates task not found.]]>
+        <![CDATA[Error message: Unexpected token '<' at 2:1
+<html><head>
+^.]]>
+        <![CDATA[Stacktrace: JSONError: Unexpected token '<' at 2:1
+<html><head>
+^
+   at Object.eval sandbox-script.js:5:7).]]>
+      </failure>
+    </testcase>
+  </testsuite>
+</testsuites>

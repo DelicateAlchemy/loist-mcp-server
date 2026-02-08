@@ -14,6 +14,7 @@ Features:
 import logging
 import json
 import hashlib
+import os
 import time
 import threading
 from typing import Dict, Any, Optional
@@ -28,6 +29,7 @@ from src.storage.waveform_storage import upload_waveform_svg
 from database.operations import update_waveform_metadata, check_waveform_cache
 from src.storage.gcs_client import create_gcs_client
 from src.exceptions import ValidationError, DatabaseOperationError, StorageError
+from src.config import get_safe_temp_dir
 
 # Try to import circuit breaker for fault tolerance
 try:
@@ -289,8 +291,11 @@ async def handle_waveform_task(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     try:
         # Create temp directory
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_audio_path = Path(temp_dir) / f"{audio_id}_audio.mp3"
+        with tempfile.TemporaryDirectory(dir=get_safe_temp_dir()) as temp_dir:
+            logger.debug(f"Created temp directory for waveform generation: {temp_dir}")
+            # Extract file extension from GCS path
+            audio_suffix = Path(audio_gcs_path).suffix or '.mp3'  # fallback to .mp3 if no extension
+            temp_audio_path = Path(temp_dir) / f"{audio_id}_audio{audio_suffix}"
             temp_svg_path = Path(temp_dir) / f"{audio_id}_waveform.svg"
 
             # Download audio from GCS

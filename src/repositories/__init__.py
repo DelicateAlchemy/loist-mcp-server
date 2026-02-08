@@ -1,7 +1,7 @@
 """
-Audio Repository Module
+Repository Module
 
-Provides clean data access abstraction for audio operations.
+Provides clean data access abstraction for audio, party, work, album, and playlist operations.
 """
 
 from .audio_repository import (
@@ -15,8 +15,33 @@ from .audio_repository import (
     search_tracks,
     update_track_status,
 )
+from .party_repository import (
+    PartyRepositoryInterface,
+    PostgresPartyRepository,
+    get_party_repository,
+    set_party_repository,
+)
+from .work_repository import (
+    WorkRepositoryInterface,
+    PostgresWorkRepository,
+    get_work_repository,
+    set_work_repository,
+)
+from .album_repository import (
+    AlbumRepositoryInterface,
+    PostgresAlbumRepository,
+    get_album_repository,
+    set_album_repository,
+)
+from .playlist_repository import (
+    PlaylistRepositoryInterface,
+    PostgresPlaylistRepository,
+    get_playlist_repository,
+    set_playlist_repository,
+)
 
 __all__ = [
+    # Audio repository
     "AudioRepositoryInterface",
     "PostgresAudioRepository",
     "get_audio_repository",
@@ -26,4 +51,24 @@ __all__ = [
     "get_metadata_by_id",
     "search_tracks",
     "update_track_status",
+    # Party repository
+    "PartyRepositoryInterface",
+    "PostgresPartyRepository",
+    "get_party_repository",
+    "set_party_repository",
+    # Work repository
+    "WorkRepositoryInterface",
+    "PostgresWorkRepository",
+    "get_work_repository",
+    "set_work_repository",
+    # Album repository
+    "AlbumRepositoryInterface",
+    "PostgresAlbumRepository",
+    "get_album_repository",
+    "set_album_repository",
+    # Playlist repository
+    "PlaylistRepositoryInterface",
+    "PostgresPlaylistRepository",
+    "get_playlist_repository",
+    "set_playlist_repository",
 ]

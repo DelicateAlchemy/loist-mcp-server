@@ -8,10 +8,6 @@ import sys
 import os
 from pathlib import Path
 
-# Add project root to Python path
-project_root = Path(__file__).parent
-sys.path.insert(0, str(project_root))
-
 # Set environment variables for local development only (not for Cloud Run)
 # Cloud Run provides these via environment variables/secrets
 if not os.getenv('GOOGLE_CLOUD_PROJECT'):  # Only set defaults if not running on Cloud Run
@@ -26,10 +22,28 @@ if not os.getenv('GOOGLE_CLOUD_PROJECT'):  # Only set defaults if not running on
     os.environ.setdefault('ENABLE_CORS', 'true')
     os.environ.setdefault('CORS_ORIGINS', 'http://localhost:3000,http://localhost:8000,http://localhost:5173')
 
+# Validate TMPDIR directory exists and is writable
+import logging
+logger = logging.getLogger(__name__)
+
+tmpdir = os.environ.get('TMPDIR', '/app/tmp')
+logger.info(f"TMPDIR environment variable: {os.environ.get('TMPDIR', 'not set (using /app/tmp)')}")
+logger.info(f"Temp directory will be: {tmpdir}")
+
+tmp_path = Path(tmpdir)
+if not tmp_path.exists():
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    logger.info(f"Created TMPDIR directory: {tmpdir}")
+elif not os.access(tmpdir, os.W_OK):
+    logger.error(f"TMPDIR {tmpdir} is not writable!")
+    raise PermissionError(f"Cannot write to TMPDIR: {tmpdir}")
+else:
+    logger.debug(f"TMPDIR validated: {tmpdir} (writable)")
+
 # Now import and run the server
 if __name__ == "__main__":
     from src.server import mcp
-    
+
     # Run the server
     mcp.run(
         transport="http",

@@ -10,6 +10,28 @@ The Loist Music Library MCP Server provides 3 resource endpoints for accessing a
 
 All resources use **signed GCS URLs** with **in-memory caching** for performance and security.
 
+## Protocol Access Methods
+
+The data provided by these resources is available through two methods: canonical MCP resource URIs for agentic workflows and convenience HTTP REST endpoints for simple, direct access.
+
+### MCP Resource URIs (Canonical)
+
+The primary and recommended way to access this data is through MCP resource URIs. This allows an MCP client to resolve the data in a protocol-standard way.
+
+-   `music-library://audio/{audioId}/stream`
+-   `music-library://audio/{audioId}/metadata`
+-   `music-library://audio/{audioId}/thumbnail`
+
+### HTTP REST API (Convenience Wrapper)
+
+For direct use in web frontends or simple scripts, the server provides standard HTTP REST endpoints that wrap the resource logic. These are available when the server is in HTTP transport mode.
+
+-   `GET /api/tracks/{audioId}/stream`
+-   `GET /api/tracks/{audioId}`
+-   `GET /api/tracks/{audioId}/thumbnail`
+
+These endpoints are convenience wrappers around the same core logic used by the MCP resources.
+
 ---
 
 ## Architecture

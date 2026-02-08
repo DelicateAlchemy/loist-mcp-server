@@ -1,422 +1,148 @@
-# Task Master AI - Agent Integration Guide
+# AGENTS.md - AI Agent Instructions
 
-## Essential Commands
+**Action-oriented rules for AI agents working in this codebase.**
 
-### Core Workflow Commands
+## Critical Rules (MUST FOLLOW)
 
-```bash
-# Project Setup
-task-master init                                    # Initialize Task Master in current project
-task-master parse-prd .taskmaster/docs/prd.md       # Generate tasks from PRD document
-task-master models --setup                        # Configure AI models interactively
+### Intent Communication
+- **ALWAYS** state intent before significant actions (multi-file changes, infrastructure, migrations)
+- Format: `🎯 Intent: [action] because [reason]. Files: [list]. Expected: [outcome]`
+- **ALWAYS** summarize after completion: `✅ Completed: [summary]. Changes: [files]. Next: [steps]`
 
-# Daily Development Workflow
-task-master list                                   # Show all tasks with status
-task-master next                                   # Get next available task to work on
-task-master show <id>                             # View detailed task information (e.g., task-master show 1.2)
-task-master set-status --id=<id> --status=done    # Mark task complete
+### Confidence Assessment
+- **ALWAYS** rate confidence honestly (🟢 High 0.8+, 🟡 Medium 0.5-0.8, 🟠 Low 0.3-0.5, 🔴 Very Low <0.3)
+- **FLAG** uncertainty when confidence < 0.66 or working with GCP/cloud services
+- **PROVIDE** WebSearch research prompts when uncertain
 
-# Task Management
-task-master add-task --prompt="description" --research        # Add new task with AI assistance
-task-master expand --id=<id> --research --force              # Break task into subtasks
-task-master update-task --id=<id> --prompt="changes"         # Update specific task
-task-master update --from=<id> --prompt="changes"            # Update multiple tasks from ID onwards
-task-master update-subtask --id=<id> --prompt="notes"        # Add implementation notes to subtask
+### Cloud SQL Cost Optimization
+- **NEVER** suggest starting Cloud SQL for local development
+- **ALWAYS** use `docker-compose up -d` for local development (uses local PostgreSQL - FREE)
+- **ONLY** suggest Cloud SQL when testing staging/production deployments
+- **ALWAYS** remind to stop Cloud SQL after testing: `./scripts/manage-cloud-sql.sh stop`
+- **CHECK** Cloud SQL status before starting work: `./scripts/manage-cloud-sql.sh status`
 
-# Analysis & Planning
-task-master analyze-complexity --research          # Analyze task complexity
-task-master complexity-report                      # View complexity analysis
-task-master expand --all --research               # Expand all eligible tasks
+### Git Workflow
+- **ALWAYS** create `task-{id}` branch from `dev` before starting work
+- **ONE** commit per subtask completion (never batch multiple subtasks)
+- **ALWAYS** mark subtask `in-progress` before starting, `done` after committing
+- Commit format: `feat(module): [subtask title] (Task {id}.{subtaskId})\n\n- Details\n- Files: [list]`
+- **NEVER** commit directly to `main` or `dev` branches
 
-# Dependencies & Organization
-task-master add-dependency --id=<id> --depends-on=<id>       # Add task dependency
-task-master move --from=<id> --to=<id>                       # Reorganize task hierarchy
-task-master validate-dependencies                            # Check for dependency issues
-task-master generate                                         # Update task markdown files (usually auto-called)
-```
+### MCP Server Connection
+- **ALWAYS** restart MCP client after Docker container changes (`docker-compose down` → `docker-compose up -d`)
+- **VERIFY** health checks before MCP operations: `curl http://localhost:8080/health/ready`
+- **DON'T** troubleshoot "session ID" errors - restart MCP client instead
 
-## Key Files & Project Structure
+### Development Environment
+- **ALWAYS** use Docker/docker-compose (not local venv - outdated dependencies)
+- **VERIFY** container health before operations
+- **USE** `docker-compose logs -f mcp-server` for debugging
 
-### Core Files
+### Testing (CRITICAL)
+- **ALWAYS** run tests inside Docker: `docker-compose exec mcp-server pytest tests/ -v`
+- **NEVER** use local venv for testing (outdated dependencies, wrong paths)
+- **NEVER** add `sys.path.insert/append` calls in test files or source code
+- **ALWAYS** use standard imports: `from src.exceptions import ...` (NOT `from exceptions import ...`)
+- **ALWAYS** put test files in `tests/` directory (NEVER in `src/` or project root)
+- Configuration is in `pyproject.toml` (NOT `pytest.ini`)
+- **VERIFY** imports work: `docker-compose exec mcp-server python -c "from src.server import mcp"`
 
-- `.taskmaster/tasks/tasks.json` - Main task data file (auto-managed)
-- `.taskmaster/config.json` - AI model configuration (use `task-master models` to modify)
-- `.taskmaster/docs/prd.md` - Product Requirements Document for parsing (`.md` extension recommended for better editor support)
-- `.taskmaster/tasks/*.txt` - Individual task files (auto-generated from tasks.json)
-- `.env` - API keys for CLI usage
+### Documentation Management
+- **UPDATE** README.md for high-impact changes (new features, breaking changes, installation changes)
+- **CREATE** separate docs/ files for detailed content (>500 words, technical depth, reference material)
+- **LINK** to detailed docs from README, don't duplicate content
 
-**PRD File Format:** While both `.txt` and `.md` extensions work, **`.md` is recommended** because:
-- Markdown syntax highlighting in editors improves readability
-- Proper rendering when previewing in VS Code, GitHub, or other tools
-- Better collaboration through formatted documentation
+### Code Citation Format
+- **USE** code references for existing code: ` ```startLine:endLine:filepath`
+- **USE** markdown code blocks for new/proposed code: ` ```language`
+- **NEVER** mix formats or add line numbers to code content
 
-### Claude Code Integration Files
+### Project Management (Long-Running Work)
 
-- `CLAUDE.md` - Auto-loaded context for Claude Code (this file)
-- `.claude/settings.json` - Claude Code tool allowlist and preferences
-- `.claude/commands/` - Custom slash commands for repeated workflows
-- `.mcp.json` - MCP server configuration (project-specific)
+**When given a spec file (e.g., `docs/api-endpoint-refactoring.md`):**
+- **PARSE** spec into task list and write to `docs/{project-name}-tasks.md`
+- **FORMAT** tasks with IDs (e.g., R1, R2, E1, E2), status (todo/doing/done), brief description
+- **GROUP** tasks by phase/milestone from spec
+- **INCLUDE** open questions from spec as tracked items
 
-### Directory Structure
+**Before starting work:**
+- **READ** task list file (`docs/{project-name}-tasks.md`)
+- **PICK** next "todo" task (optionally filtered by phase/area if requested)
+- **MARK** task as "doing" and write file back
+- **STATE** intent using standard format: `🎯 Intent: [action] because [reason]...`
 
-```
-project/
-├── .taskmaster/
-│   ├── tasks/              # Task files directory
-│   │   ├── tasks.json      # Main task database
-│   │   ├── task-1.md      # Individual task files
-│   │   └── task-2.md
-│   ├── docs/              # Documentation directory
-│   │   ├── prd.md         # Product requirements (.md recommended)
-│   ├── reports/           # Analysis reports directory
-│   │   └── task-complexity-report.json
-│   ├── templates/         # Template files
-│   │   └── example_prd.md  # Example PRD template (.md recommended)
-│   └── config.json        # AI models & settings
-├── .claude/
-│   ├── settings.json      # Claude Code configuration
-│   └── commands/         # Custom slash commands
-├── .env                  # API keys
-├── .mcp.json            # MCP configuration
-└── CLAUDE.md            # This file - auto-loaded by Claude Code
-```
+**After finishing work:**
+- **MARK** task as "done" and write file back
+- **UPDATE** summary file (`docs/{project-name}-summary.md`) with:
+  - What was done (brief bullet)
+  - Files touched
+  - Outstanding follow-ups / new TODOs
+- **RESEARCH** open questions if needed (see Research Collaboration below)
 
-## MCP Integration
+**At start of new session:**
+- **READ** task list (`docs/{project-name}-tasks.md`) and summary (`docs/{project-name}-summary.md`)
+- **SUMMARIZE** current state in 3-5 bullets before continuing
+- **IDENTIFY** next task to work on
 
-Task Master provides an MCP server that Claude Code can connect to. Configure in `.mcp.json`:
+**Research for open questions:**
+- **FOR** questions in spec's "Open Questions" section:
+  - **PROPOSE** concrete WebSearch query
+  - **CALL** WebSearch tool with query
+  - **WRITE** answers to `docs/{project-name}-research.md` or update spec
+- **KEEP** research grounded in project files, not transient chat
 
-```json
-{
-  "mcpServers": {
-    "task-master-ai": {
-      "command": "npx",
-      "args": ["-y", "task-master-ai"],
-      "env": {
-        "ANTHROPIC_API_KEY": "your_key_here",
-        "PERPLEXITY_API_KEY": "your_key_here",
-        "OPENAI_API_KEY": "OPENAI_API_KEY_HERE",
-        "GOOGLE_API_KEY": "GOOGLE_API_KEY_HERE",
-        "XAI_API_KEY": "XAI_API_KEY_HERE",
-        "OPENROUTER_API_KEY": "OPENROUTER_API_KEY_HERE",
-        "MISTRAL_API_KEY": "MISTRAL_API_KEY_HERE",
-        "AZURE_OPENAI_API_KEY": "AZURE_OPENAI_API_KEY_HERE",
-        "OLLAMA_API_KEY": "OLLAMA_API_KEY_HERE"
-      }
-    }
-  }
-}
-```
+## Project-Specific Patterns
 
-### Essential MCP Tools
+### High-Confidence Areas (0.8+)
+- Repository pattern usage (`src/repositories/`)
+- Exception framework patterns (`src/exceptions/`)
+- Docker Compose local development
+- Git workflow (task branches)
+- PostgreSQL full-text search
 
-```javascript
-help; // = shows available taskmaster commands
-// Project setup
-initialize_project; // = task-master init
-parse_prd; // = task-master parse-prd
+### Research-Recommended Areas (<0.5)
+- GCP service-specific API changes
+- Python/FastMCP version updates
+- Security scanning tool configurations
+- IAM permission changes
+- HTTP streaming best practices (Range requests, proxy vs redirect)
+- Image optimization and caching strategies
+- API versioning patterns
 
-// Daily workflow
-get_tasks; // = task-master list
-next_task; // = task-master next
-get_task; // = task-master show <id>
-set_task_status; // = task-master set-status
-
-// Task management
-add_task; // = task-master add-task
-expand_task; // = task-master expand
-update_task; // = task-master update-task
-update_subtask; // = task-master update-subtask
-update; // = task-master update
-
-// Analysis
-analyze_project_complexity; // = task-master analyze-complexity
-complexity_report; // = task-master complexity-report
-```
-
-## Claude Code Workflow Integration
-
-### Standard Development Workflow
-
-#### 1. Project Initialization
+## Quick Reference Commands
 
 ```bash
-# Initialize Task Master
-task-master init
+# Local development
+docker-compose up -d
+docker-compose logs -f mcp-server
 
-# Create or obtain PRD, then parse it (use .md extension for better editor support)
-task-master parse-prd .taskmaster/docs/prd.md
+# Cloud SQL management
+./scripts/manage-cloud-sql.sh status
+./scripts/manage-cloud-sql.sh stop  # Save money!
 
-# Analyze complexity and expand tasks
-task-master analyze-complexity --research
-task-master expand --all --research
+# Health checks
+curl http://localhost:8080/health/ready
+curl http://localhost:8080/health/database
+
+# Testing (ALWAYS use Docker)
+docker-compose exec mcp-server pytest tests/ -v
+docker-compose exec mcp-server pytest tests/ -m unit -v
+docker-compose exec mcp-server pytest tests/ --cov=src --cov-report=term-missing
+
+# Verify imports work
+docker-compose exec mcp-server python -c "from src.server import mcp; print('OK')"
+
+# Rebuild after code changes
+docker-compose up -d --build
 ```
 
-If tasks already exist, another PRD can be parsed (with new information only!) using parse-prd with --append flag. This will add the generated tasks to the existing list of tasks..
-
-#### 2. Daily Development Loop
-
-```bash
-# Start each session
-task-master next                           # Find next available task
-task-master show <id>                     # Review task details
-
-# During implementation, check in code context into the tasks and subtasks
-task-master update-subtask --id=<id> --prompt="implementation notes..."
-
-# Complete tasks
-task-master set-status --id=<id> --status=done
-```
-
-#### 3. Multi-Claude Workflows
-
-For complex projects, use multiple Claude Code sessions:
-
-```bash
-# Terminal 1: Main implementation
-cd project && claude
-
-# Terminal 2: Testing and validation
-cd project-test-worktree && claude
-
-# Terminal 3: Documentation updates
-cd project-docs-worktree && claude
-```
-
-### Custom Slash Commands
-
-Create `.claude/commands/taskmaster-next.md`:
-
-```markdown
-Find the next available Task Master task and show its details.
-
-Steps:
-
-1. Run `task-master next` to get the next task
-2. If a task is available, run `task-master show <id>` for full details
-3. Provide a summary of what needs to be implemented
-4. Suggest the first implementation step
-```
-
-Create `.claude/commands/taskmaster-complete.md`:
-
-```markdown
-Complete a Task Master task: $ARGUMENTS
-
-Steps:
-
-1. Review the current task with `task-master show $ARGUMENTS`
-2. Verify all implementation is complete
-3. Run any tests related to this task
-4. Mark as complete: `task-master set-status --id=$ARGUMENTS --status=done`
-5. Show the next available task with `task-master next`
-```
-
-## Tool Allowlist Recommendations
-
-Add to `.claude/settings.json`:
-
-```json
-{
-  "allowedTools": [
-    "Edit",
-    "Bash(task-master *)",
-    "Bash(git commit:*)",
-    "Bash(git add:*)",
-    "Bash(npm run *)",
-    "mcp__task_master_ai__*"
-  ]
-}
-```
-
-## Configuration & Setup
-
-### API Keys Required
-
-At least **one** of these API keys must be configured:
-
-- `ANTHROPIC_API_KEY` (Claude models) - **Recommended**
-- `PERPLEXITY_API_KEY` (Research features) - **Highly recommended**
-- `OPENAI_API_KEY` (GPT models)
-- `GOOGLE_API_KEY` (Gemini models)
-- `MISTRAL_API_KEY` (Mistral models)
-- `OPENROUTER_API_KEY` (Multiple models)
-- `XAI_API_KEY` (Grok models)
-
-An API key is required for any provider used across any of the 3 roles defined in the `models` command.
-
-### Model Configuration
-
-```bash
-# Interactive setup (recommended)
-task-master models --setup
-
-# Set specific models
-task-master models --set-main claude-3-5-sonnet-20241022
-task-master models --set-research perplexity-llama-3.1-sonar-large-128k-online
-task-master models --set-fallback gpt-4o-mini
-```
-
-## Task Structure & IDs
-
-### Task ID Format
-
-- Main tasks: `1`, `2`, `3`, etc.
-- Subtasks: `1.1`, `1.2`, `2.1`, etc.
-- Sub-subtasks: `1.1.1`, `1.1.2`, etc.
-
-### Task Status Values
-
-- `pending` - Ready to work on
-- `in-progress` - Currently being worked on
-- `done` - Completed and verified
-- `deferred` - Postponed
-- `cancelled` - No longer needed
-- `blocked` - Waiting on external factors
-
-### Task Fields
-
-```json
-{
-  "id": "1.2",
-  "title": "Implement user authentication",
-  "description": "Set up JWT-based auth system",
-  "status": "pending",
-  "priority": "high",
-  "dependencies": ["1.1"],
-  "details": "Use bcrypt for hashing, JWT for tokens...",
-  "testStrategy": "Unit tests for auth functions, integration tests for login flow",
-  "subtasks": []
-}
-```
-
-## Claude Code Best Practices with Task Master
-
-### Context Management
-
-- Use `/clear` between different tasks to maintain focus
-- This CLAUDE.md file is automatically loaded for context
-- Use `task-master show <id>` to pull specific task context when needed
-
-### Iterative Implementation
-
-1. `task-master show <subtask-id>` - Understand requirements
-2. Explore codebase and plan implementation
-3. `task-master update-subtask --id=<id> --prompt="detailed plan"` - Log plan
-4. `task-master set-status --id=<id> --status=in-progress` - Start work
-5. Implement code following logged plan
-6. `task-master update-subtask --id=<id> --prompt="what worked/didn't work"` - Log progress
-7. `task-master set-status --id=<id> --status=done` - Complete task
-
-### Complex Workflows with Checklists
-
-For large migrations or multi-step processes:
-
-1. Create a markdown PRD file describing the new changes: `touch task-migration-checklist.md` (prds can be .txt or .md)
-2. Use Taskmaster to parse the new prd with `task-master parse-prd --append` (also available in MCP)
-3. Use Taskmaster to expand the newly generated tasks into subtasks. Consdier using `analyze-complexity` with the correct --to and --from IDs (the new ids) to identify the ideal subtask amounts for each task. Then expand them.
-4. Work through items systematically, checking them off as completed
-5. Use `task-master update-subtask` to log progress on each task/subtask and/or updating/researching them before/during implementation if getting stuck
-
-### Git Integration
-
-Task Master works well with `gh` CLI:
-
-```bash
-# Create PR for completed task
-gh pr create --title "Complete task 1.2: User authentication" --body "Implements JWT auth system as specified in task 1.2"
-
-# Reference task in commits
-git commit -m "feat: implement JWT auth (task 1.2)"
-```
-
-### Parallel Development with Git Worktrees
-
-```bash
-# Create worktrees for parallel task development
-git worktree add ../project-auth feature/auth-system
-git worktree add ../project-api feature/api-refactor
-
-# Run Claude Code in each worktree
-cd ../project-auth && claude    # Terminal 1: Auth work
-cd ../project-api && claude     # Terminal 2: API work
-```
-
-## Troubleshooting
-
-### AI Commands Failing
-
-```bash
-# Check API keys are configured
-cat .env                           # For CLI usage
-
-# Verify model configuration
-task-master models
-
-# Test with different model
-task-master models --set-fallback gpt-4o-mini
-```
-
-### MCP Connection Issues
-
-- Check `.mcp.json` configuration
-- Verify Node.js installation
-- Use `--mcp-debug` flag when starting Claude Code
-- Use CLI as fallback if MCP unavailable
-
-### Task File Sync Issues
-
-```bash
-# Regenerate task files from tasks.json
-task-master generate
-
-# Fix dependency issues
-task-master fix-dependencies
-```
-
-DO NOT RE-INITIALIZE. That will not do anything beyond re-adding the same Taskmaster core files.
-
-## Important Notes
-
-### AI-Powered Operations
-
-These commands make AI calls and may take up to a minute:
-
-- `parse_prd` / `task-master parse-prd`
-- `analyze_project_complexity` / `task-master analyze-complexity`
-- `expand_task` / `task-master expand`
-- `expand_all` / `task-master expand --all`
-- `add_task` / `task-master add-task`
-- `update` / `task-master update`
-- `update_task` / `task-master update-task`
-- `update_subtask` / `task-master update-subtask`
-
-### File Management
-
-- Never manually edit `tasks.json` - use commands instead
-- Never manually edit `.taskmaster/config.json` - use `task-master models`
-- Task markdown files in `tasks/` are auto-generated
-- Run `task-master generate` after manual changes to tasks.json
-
-### Claude Code Session Management
-
-- Use `/clear` frequently to maintain focused context
-- Create custom slash commands for repeated Task Master workflows
-- Configure tool allowlist to streamline permissions
-- Use headless mode for automation: `claude -p "task-master next"`
-
-### Multi-Task Updates
-
-- Use `update --from=<id>` to update multiple future tasks
-- Use `update-task --id=<id>` for single task updates
-- Use `update-subtask --id=<id>` for implementation logging
-
-### Research Mode
-
-- Add `--research` flag for research-based AI enhancement
-- Requires a research model API key like Perplexity (`PERPLEXITY_API_KEY`) in environment
-- Provides more informed task creation and updates
-- Recommended for complex technical tasks
+## Related Documentation
+
+- **[GEMINI.md](gemini.md)** - Project context and detailed workflows
+- **[README.md](README.md)** - Project overview and quick start
+- **[docs/](docs/)** - Comprehensive technical documentation
 
 ---
 
-_This guide ensures Claude Code has immediate access to Task Master's essential functionality for agentic development workflows._
+**Remember**: These are non-negotiable rules. When in doubt, ask for clarification rather than guessing.
+

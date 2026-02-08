@@ -8,12 +8,6 @@ import sys
 import time
 from pathlib import Path
 
-# Add parent directory to Python path for imports (needed for Docker)
-# When running from /app/src/server.py, this ensures /app is on the path
-app_dir = Path(__file__).parent.parent
-if str(app_dir) not in sys.path:
-    sys.path.insert(0, str(app_dir))
-
 import logging
 from contextlib import asynccontextmanager
 from typing import Optional
@@ -38,12 +32,38 @@ from src.exceptions import (
     TimeoutError,
     ValidationError,
 )
+
+# Import PlayerConfig schemas for embed URL responses
+from src.tools.schemas import (
+    PlayerConfig,
+    PlayerConfigUrls,
+    PlayerConfigMetadata,
+)
 from src.fastmcp_setup import (
     create_fastmcp_server,
     log_server_startup_info,
     setup_jinja_templates,
     validate_server_setup,
 )
+
+import asyncio
+from database import get_connection_pool
+
+async def init_db_pool_with_retries(max_retries: int = 5, backoff_seconds: int = 2):
+    """Initialize DB pool with bounded retries (FastMCP best practice)"""
+    for attempt in range(max_retries):
+        try:
+            pool = get_connection_pool()
+            logger.info("✅ Database connection pool initialized")
+            return pool
+        except Exception as e:
+            if attempt < max_retries - 1:
+                wait_time = backoff_seconds * (2 ** attempt)
+                logger.warning(f"⚠️ DB init attempt {attempt + 1}/{max_retries} failed: {e}. Retrying in {wait_time}s...")
+                await asyncio.sleep(wait_time)
+            else:
+                logger.error(f"❌ Database pool initialization failed after {max_retries} attempts: {e}")
+                raise  # Fail fast - let Docker restart the container
 
 # ============================================================================
 # Centralized Exception Import Strategy
@@ -73,6 +93,10 @@ mcp = create_fastmcp_server()
 from src.tasks.handler import register_task_handlers
 register_task_handlers(mcp)
 
+# Register HTTP API routes (search, stream, thumbnail, download, etc.)
+from src.http_api import register_http_api_routes
+register_http_api_routes(mcp)
+
 # Configure Jinja2 templates
 templates = setup_jinja_templates()
 
@@ -88,6 +112,9 @@ async def lifespan(app):
     logger.info(f"🔧 Log Level: {config.log_level}")
     logger.info(f"🔐 Authentication: {'enabled' if config.auth_enabled else 'disabled'}")
     logger.info(f"✅ Health check enabled: {config.enable_healthcheck}")
+
+    # Initialize database connection pool with retries
+    await init_db_pool_with_retries()
 
     yield
 
@@ -135,6 +162,40 @@ def check_database_availability_cached():
     result = check_database_availability()
     _last_db_check = {"time": now, "result": result}
     return result
+
+
+def check_gcs_health():
+    """Import and call GCS health check from storage module."""
+    try:
+        from src.storage.gcs_client import check_gcs_health as _check_gcs_health
+        return _check_gcs_health()
+    except ImportError as e:
+        return {
+            "available": False,
+            "configured": False,
+            "bucket_name": None,
+            "response_time_ms": None,
+            "error": f"GCS module not available: {e}"
+        }
+
+
+def check_cloud_tasks_health():
+    """
+    Check Cloud Tasks connectivity and configuration.
+    
+    Note: Cloud Tasks is optional and may not be configured in all environments.
+    Returns a stub response indicating Cloud Tasks is not yet implemented.
+    """
+    # Cloud Tasks health check not yet implemented
+    # Return a stub that indicates it's not configured
+    return {
+        "available": False,
+        "configured": False,
+        "queue_name": None,
+        "location": None,
+        "response_time_ms": None,
+        "error": "Cloud Tasks health check not yet implemented"
+    }
 
 
 @mcp.tool()
@@ -471,7 +532,7 @@ async def process_audio_complete(source: dict, options: dict = None) -> dict:
 
 
 @mcp.tool()
-async def get_audio_metadata(audioId: str) -> dict:
+async def get_audio_metadata(audio_id: str) -> dict:
     """
     Retrieve metadata for a previously processed audio track.
 
@@ -479,15 +540,15 @@ async def get_audio_metadata(audioId: str) -> dict:
     previously processed and stored in the system.
 
     Args:
-        audioId: UUID of the audio track to retrieve
+        audio_id: UUID of the audio track to retrieve
 
     Returns:
         dict: Success response with complete metadata and resource URIs,
               or error response if track not found
 
     Example:
-        >>> result = await get_audio_metadata(audioId="550e8400-e29b-41d4-a716-446655440000")
-        >>> print(result["metadata"]["Product"]["Title"])
+        >>> result = await get_audio_metadata(audio_id="550e8400-e29b-41d4-a716-446655440000")
+        >>> print(result["metadata"]["product"]["title"])
         "Hey Jude"
     """
     from src.error_utils import handle_tool_error
@@ -495,11 +556,11 @@ async def get_audio_metadata(audioId: str) -> dict:
 
     try:
         # Call the async function
-        return await get_metadata_func({"audioId": audioId})
+        return await get_metadata_func({"audio_id": audio_id})
     except Exception as e:
         # Log and return error response
         error_response = handle_tool_error(e, "get_audio_metadata")
-        logger.error(f"Get audio metadata failed for {audioId}: {error_response}")
+        logger.error(f"Get audio metadata failed for {audio_id}: {error_response}")
         return error_response
 
 
@@ -509,8 +570,8 @@ async def search_library(
     filters: dict = None,
     limit: int = 20,
     offset: int = 0,
-    sortBy: str = "relevance",
-    sortOrder: str = "desc",
+    sort_by: str = "relevance",
+    sort_order: str = "desc",
 ) -> dict:
     """
     Search across all processed audio in the library.
@@ -524,8 +585,8 @@ async def search_library(
             Example: {"genre": ["Rock"], "year": {"min": 1960, "max": 1970}}
         limit: Maximum results to return (1-100, default: 20)
         offset: Number of results to skip (default: 0, max: 10000)
-        sortBy: Field to sort by (relevance, title, artist, year, duration, created_at)
-        sortOrder: Sort order (asc or desc, default: desc)
+        sort_by: Field to sort by (relevance, title, artist, year, duration, created_at)
+        sort_order: Sort order (asc or desc, default: desc)
 
     Returns:
         dict: Success response with search results, relevance scores, and pagination info,
@@ -550,8 +611,8 @@ async def search_library(
             "filters": filters,
             "limit": limit,
             "offset": offset,
-            "sortBy": sortBy,
-            "sortOrder": sortOrder,
+            "sort_by": sort_by,
+            "sort_order": sort_order,
         }
 
         # Call the async function
@@ -569,7 +630,7 @@ async def search_library(
 
 
 @mcp.tool()
-async def delete_audio(audioId: str) -> dict:
+async def delete_audio(audio_id: str) -> dict:
     """
     Delete a previously processed audio track.
 
@@ -577,14 +638,14 @@ async def delete_audio(audioId: str) -> dict:
     GCS files are left in place for lifecycle management.
 
     Args:
-        audioId: UUID of the audio track to delete
+        audio_id: UUID of the audio track to delete
 
     Returns:
         dict: Success response with deletion confirmation,
               or error response if track not found or deletion fails
 
     Example:
-        >>> result = await delete_audio(audioId="550e8400-e29b-41d4-a716-446655440000")
+        >>> result = await delete_audio(audio_id="550e8400-e29b-41d4-a716-446655440000")
         >>> print(result["deleted"])
         True
     """
@@ -593,11 +654,537 @@ async def delete_audio(audioId: str) -> dict:
 
     try:
         # Call the async function
-        return await delete_func({"audioId": audioId})
+        return await delete_func({"audio_id": audio_id})
     except Exception as e:
         # Log and return error response
         error_response = handle_tool_error(e, "delete_audio")
-        logger.error(f"Delete audio failed for ID '{audioId}': {error_response}")
+        logger.error(f"Delete audio failed for ID '{audio_id}': {error_response}")
+        return error_response
+
+
+# ============================================================================
+# Update Metadata Tool
+# ============================================================================
+
+
+@mcp.tool()
+async def update_metadata(audio_id: str, metadata: dict) -> dict:
+    """
+    Update metadata for a previously processed audio track.
+
+    Uses JSON Merge Patch semantics:
+    - Omit a field → leave unchanged
+    - Provide a value → update it
+
+    Editable fields: artist, title, album, genre, year,
+                     composer, publisher, record_label, isrc, original_filename
+
+    Args:
+        audio_id: UUID of the audio track to update
+        metadata: Dict with fields to update (omit fields to leave unchanged)
+            - artist: Track artist name (max 500 chars)
+            - title: Track title (max 500 chars, cannot be empty)
+            - album: Album name (max 500 chars)
+            - genre: Music genre (max 100 chars)
+            - year: Release year (1800-2100)
+            - composer: Composer name (max 500 chars)
+            - publisher: Publisher name (max 500 chars)
+            - record_label: Record label name (max 500 chars)
+            - isrc: ISRC code (max 20 chars)
+            - original_filename: Download filename override (max 500 chars)
+
+    Returns:
+        dict: {success, audio_id, updated_fields, metadata} on success,
+              or {success: false, error, message} on failure
+
+    Example:
+        >>> result = await update_metadata(
+        ...     audio_id="550e8400-e29b-41d4-a716-446655440000",
+        ...     metadata={"artist": "The Beatles", "year": 1968}
+        ... )
+        >>> print(result["updated_fields"])
+        ["artist", "year"]
+    """
+    from src.error_utils import handle_tool_error
+    from src.tools.update_tools import update_metadata as update_func
+
+    try:
+        return await update_func({"audio_id": audio_id, "metadata": metadata})
+    except Exception as e:
+        error_response = handle_tool_error(e, "update_metadata")
+        logger.error(f"Update metadata failed for ID '{audio_id}': {error_response}")
+        return error_response
+
+
+# ============================================================================
+# Album Tools
+# ============================================================================
+
+
+@mcp.tool()
+async def get_album(album_id: str) -> dict:
+    """
+    Retrieve an album by ID with all tracks.
+
+    Args:
+        album_id: UUID of the album
+
+    Returns:
+        dict: Album details including ordered track list
+    """
+    from src.error_utils import handle_tool_error
+    from src.services import album_service
+
+    try:
+        return await album_service.get_album(album_id)
+    except Exception as e:
+        error_response = handle_tool_error(e, "get_album")
+        logger.error(f"Get album failed for {album_id}: {error_response}")
+        return error_response
+
+
+@mcp.tool()
+async def create_album(
+    name: str,
+    description: str = None,
+    status: str = "project",
+    cover_art_gcs_path: str = None,
+    owner_id: str = None,
+) -> dict:
+    """
+    Create a new album (project/album hybrid).
+
+    Args:
+        name: Album name
+        description: Album description or notes
+        status: Lifecycle status (project, draft, released). Default: project
+        cover_art_gcs_path: GCS path to cover art image
+        owner_id: UUID of the album owner
+
+    Returns:
+        dict: Created album details
+    """
+    from src.error_utils import handle_tool_error
+    from src.services import album_service
+
+    try:
+        data = {"name": name, "status": status}
+        if description is not None:
+            data["description"] = description
+        if cover_art_gcs_path is not None:
+            data["cover_art_gcs_path"] = cover_art_gcs_path
+        if owner_id is not None:
+            data["owner_id"] = owner_id
+        return await album_service.create_album(data)
+    except Exception as e:
+        error_response = handle_tool_error(e, "create_album")
+        logger.error(f"Create album failed: {error_response}")
+        return error_response
+
+
+@mcp.tool()
+async def update_album(album_id: str, updates: dict) -> dict:
+    """
+    Update album metadata.
+
+    Args:
+        album_id: UUID of the album
+        updates: Dict with fields to update (name, description, status, cover_art_gcs_path)
+
+    Returns:
+        dict: Updated album details
+    """
+    from src.error_utils import handle_tool_error
+    from src.services import album_service
+
+    try:
+        return await album_service.update_album(album_id, updates)
+    except Exception as e:
+        error_response = handle_tool_error(e, "update_album")
+        logger.error(f"Update album failed for {album_id}: {error_response}")
+        return error_response
+
+
+@mcp.tool()
+async def delete_album(album_id: str) -> dict:
+    """
+    Delete an album.
+
+    Args:
+        album_id: UUID of the album to delete
+
+    Returns:
+        dict: Deletion confirmation
+    """
+    from src.error_utils import handle_tool_error
+    from src.services import album_service
+
+    try:
+        result = await album_service.delete_album(album_id)
+        return {"success": True, "deleted": result, "album_id": album_id}
+    except Exception as e:
+        error_response = handle_tool_error(e, "delete_album")
+        logger.error(f"Delete album failed for {album_id}: {error_response}")
+        return error_response
+
+
+@mcp.tool()
+async def search_albums(
+    query: str, status: str = None, limit: int = 20, offset: int = 0
+) -> dict:
+    """
+    Search albums by name.
+
+    Args:
+        query: Search query string
+        status: Optional status filter (project, draft, released)
+        limit: Max results (1-100, default 20)
+        offset: Results to skip (default 0)
+
+    Returns:
+        dict: Search results with pagination info
+    """
+    from src.error_utils import handle_tool_error
+    from src.services import album_service
+
+    try:
+        return await album_service.search_albums(query, limit=limit, offset=offset, status=status)
+    except Exception as e:
+        error_response = handle_tool_error(e, "search_albums")
+        logger.error(f"Search albums failed for '{query}': {error_response}")
+        return error_response
+
+
+@mcp.tool()
+async def add_track_to_album(
+    album_id: str, audio_track_id: str, position: int = None, disc_number: int = 1
+) -> dict:
+    """
+    Add a track to an album.
+
+    Args:
+        album_id: UUID of the album
+        audio_track_id: UUID of the audio track to add
+        position: Track position (auto-assigned if omitted)
+        disc_number: Disc number (default 1)
+
+    Returns:
+        dict: Created album_track record
+    """
+    from src.error_utils import handle_tool_error
+    from src.services import album_service
+
+    try:
+        return await album_service.add_track_to_album(
+            album_id, audio_track_id, position, disc_number
+        )
+    except Exception as e:
+        error_response = handle_tool_error(e, "add_track_to_album")
+        logger.error(f"Add track to album failed: {error_response}")
+        return error_response
+
+
+@mcp.tool()
+async def remove_track_from_album(album_id: str, audio_track_id: str) -> dict:
+    """
+    Remove a track from an album.
+
+    Args:
+        album_id: UUID of the album
+        audio_track_id: UUID of the audio track to remove
+
+    Returns:
+        dict: Removal confirmation
+    """
+    from src.error_utils import handle_tool_error
+    from src.services import album_service
+
+    try:
+        result = await album_service.remove_track_from_album(album_id, audio_track_id)
+        return {"success": True, "removed": result, "album_id": album_id, "audio_track_id": audio_track_id}
+    except Exception as e:
+        error_response = handle_tool_error(e, "remove_track_from_album")
+        logger.error(f"Remove track from album failed: {error_response}")
+        return error_response
+
+
+@mcp.tool()
+async def reorder_album_tracks(album_id: str, track_order: list) -> dict:
+    """
+    Reorder tracks in an album.
+
+    Args:
+        album_id: UUID of the album
+        track_order: Ordered list of audio_track_ids in desired order
+
+    Returns:
+        dict: Reorder result with count
+    """
+    from src.error_utils import handle_tool_error
+    from src.services import album_service
+
+    try:
+        return await album_service.reorder_album_tracks(album_id, track_order)
+    except Exception as e:
+        error_response = handle_tool_error(e, "reorder_album_tracks")
+        logger.error(f"Reorder album tracks failed for {album_id}: {error_response}")
+        return error_response
+
+
+# ============================================================================
+# Playlist Tools
+# ============================================================================
+
+
+@mcp.tool()
+async def get_playlist(playlist_id: str) -> dict:
+    """
+    Retrieve a playlist by ID with tracks and collaborators.
+
+    Args:
+        playlist_id: UUID of the playlist
+
+    Returns:
+        dict: Playlist details including tracks and collaborators
+    """
+    from src.error_utils import handle_tool_error
+    from src.services import playlist_service
+
+    try:
+        return await playlist_service.get_playlist(playlist_id)
+    except Exception as e:
+        error_response = handle_tool_error(e, "get_playlist")
+        logger.error(f"Get playlist failed for {playlist_id}: {error_response}")
+        return error_response
+
+
+@mcp.tool()
+async def create_playlist(
+    name: str,
+    description: str = None,
+    is_public: bool = False,
+    owner_id: str = None,
+) -> dict:
+    """
+    Create a new playlist.
+
+    Args:
+        name: Playlist name
+        description: Playlist description
+        is_public: Whether playlist is publicly visible (default False)
+        owner_id: UUID of the playlist owner
+
+    Returns:
+        dict: Created playlist details
+    """
+    from src.error_utils import handle_tool_error
+    from src.services import playlist_service
+
+    try:
+        data = {"name": name, "is_public": is_public}
+        if description is not None:
+            data["description"] = description
+        if owner_id is not None:
+            data["owner_id"] = owner_id
+        return await playlist_service.create_playlist(data)
+    except Exception as e:
+        error_response = handle_tool_error(e, "create_playlist")
+        logger.error(f"Create playlist failed: {error_response}")
+        return error_response
+
+
+@mcp.tool()
+async def update_playlist(playlist_id: str, updates: dict) -> dict:
+    """
+    Update playlist metadata.
+
+    Args:
+        playlist_id: UUID of the playlist
+        updates: Dict with fields to update (name, description, is_public)
+
+    Returns:
+        dict: Updated playlist details
+    """
+    from src.error_utils import handle_tool_error
+    from src.services import playlist_service
+
+    try:
+        return await playlist_service.update_playlist(playlist_id, updates)
+    except Exception as e:
+        error_response = handle_tool_error(e, "update_playlist")
+        logger.error(f"Update playlist failed for {playlist_id}: {error_response}")
+        return error_response
+
+
+@mcp.tool()
+async def delete_playlist(playlist_id: str) -> dict:
+    """
+    Delete a playlist.
+
+    Args:
+        playlist_id: UUID of the playlist to delete
+
+    Returns:
+        dict: Deletion confirmation
+    """
+    from src.error_utils import handle_tool_error
+    from src.services import playlist_service
+
+    try:
+        result = await playlist_service.delete_playlist(playlist_id)
+        return {"success": True, "deleted": result, "playlist_id": playlist_id}
+    except Exception as e:
+        error_response = handle_tool_error(e, "delete_playlist")
+        logger.error(f"Delete playlist failed for {playlist_id}: {error_response}")
+        return error_response
+
+
+@mcp.tool()
+async def search_playlists(query: str, limit: int = 20, offset: int = 0) -> dict:
+    """
+    Search playlists by name.
+
+    Args:
+        query: Search query string
+        limit: Max results (1-100, default 20)
+        offset: Results to skip (default 0)
+
+    Returns:
+        dict: Search results with pagination info
+    """
+    from src.error_utils import handle_tool_error
+    from src.services import playlist_service
+
+    try:
+        return await playlist_service.search_playlists(query, limit=limit, offset=offset)
+    except Exception as e:
+        error_response = handle_tool_error(e, "search_playlists")
+        logger.error(f"Search playlists failed for '{query}': {error_response}")
+        return error_response
+
+
+@mcp.tool()
+async def add_track_to_playlist(
+    playlist_id: str, audio_track_id: str, position: int = None
+) -> dict:
+    """
+    Add a track to a playlist.
+
+    Args:
+        playlist_id: UUID of the playlist
+        audio_track_id: UUID of the audio track to add
+        position: Track position (auto-assigned if omitted)
+
+    Returns:
+        dict: Created playlist_track record
+    """
+    from src.error_utils import handle_tool_error
+    from src.services import playlist_service
+
+    try:
+        return await playlist_service.add_track_to_playlist(
+            playlist_id, audio_track_id, position
+        )
+    except Exception as e:
+        error_response = handle_tool_error(e, "add_track_to_playlist")
+        logger.error(f"Add track to playlist failed: {error_response}")
+        return error_response
+
+
+@mcp.tool()
+async def remove_track_from_playlist(playlist_id: str, audio_track_id: str) -> dict:
+    """
+    Remove a track from a playlist.
+
+    Args:
+        playlist_id: UUID of the playlist
+        audio_track_id: UUID of the audio track to remove
+
+    Returns:
+        dict: Removal confirmation
+    """
+    from src.error_utils import handle_tool_error
+    from src.services import playlist_service
+
+    try:
+        result = await playlist_service.remove_track_from_playlist(playlist_id, audio_track_id)
+        return {"success": True, "removed": result, "playlist_id": playlist_id, "audio_track_id": audio_track_id}
+    except Exception as e:
+        error_response = handle_tool_error(e, "remove_track_from_playlist")
+        logger.error(f"Remove track from playlist failed: {error_response}")
+        return error_response
+
+
+@mcp.tool()
+async def reorder_playlist_tracks(playlist_id: str, track_order: list) -> dict:
+    """
+    Reorder tracks in a playlist.
+
+    Args:
+        playlist_id: UUID of the playlist
+        track_order: Ordered list of audio_track_ids in desired order
+
+    Returns:
+        dict: Reorder result with count
+    """
+    from src.error_utils import handle_tool_error
+    from src.services import playlist_service
+
+    try:
+        return await playlist_service.reorder_playlist_tracks(playlist_id, track_order)
+    except Exception as e:
+        error_response = handle_tool_error(e, "reorder_playlist_tracks")
+        logger.error(f"Reorder playlist tracks failed for {playlist_id}: {error_response}")
+        return error_response
+
+
+@mcp.tool()
+async def add_playlist_collaborator(
+    playlist_id: str, user_id: str, role: str = "viewer"
+) -> dict:
+    """
+    Add or update a collaborator on a playlist.
+
+    Args:
+        playlist_id: UUID of the playlist
+        user_id: UUID of the user to add
+        role: Collaboration role (viewer, editor, admin). Default: viewer
+
+    Returns:
+        dict: Collaborator record
+    """
+    from src.error_utils import handle_tool_error
+    from src.services import playlist_service
+
+    try:
+        return await playlist_service.add_collaborator(playlist_id, user_id, role)
+    except Exception as e:
+        error_response = handle_tool_error(e, "add_playlist_collaborator")
+        logger.error(f"Add collaborator failed: {error_response}")
+        return error_response
+
+
+@mcp.tool()
+async def remove_playlist_collaborator(playlist_id: str, user_id: str) -> dict:
+    """
+    Remove a collaborator from a playlist.
+
+    Args:
+        playlist_id: UUID of the playlist
+        user_id: UUID of the collaborator to remove
+
+    Returns:
+        dict: Removal confirmation
+    """
+    from src.error_utils import handle_tool_error
+    from src.services import playlist_service
+
+    try:
+        result = await playlist_service.remove_collaborator(playlist_id, user_id)
+        return {"success": True, "removed": result, "playlist_id": playlist_id, "user_id": user_id}
+    except Exception as e:
+        error_response = handle_tool_error(e, "remove_playlist_collaborator")
+        logger.error(f"Remove collaborator failed: {error_response}")
         return error_response
 
 
@@ -606,8 +1193,8 @@ async def delete_audio(audioId: str) -> dict:
 # ============================================================================
 
 
-@mcp.resource("music-library://audio/{audioId}/stream")
-async def audio_stream_resource(audioId: str) -> str:
+@mcp.resource("music-library://audio/{audio_id}/stream")
+async def audio_stream_resource(audio_id: str) -> str:
     """
     MCP resource for streaming audio files.
 
@@ -616,10 +1203,10 @@ async def audio_stream_resource(audioId: str) -> str:
     - Proper Content-Type headers
     - Caching for performance
 
-    URI Format: music-library://audio/{audioId}/stream
+    URI Format: music-library://audio/{audio_id}/stream
 
     Args:
-        audioId: Audio file identifier
+        audio_id: Audio file identifier
 
     Returns:
         str: MCP resource response with signed streaming URL
@@ -630,21 +1217,21 @@ async def audio_stream_resource(audioId: str) -> str:
     """
     from src.resources.audio_stream import get_audio_stream_resource
 
-    uri = f"music-library://audio/{audioId}/stream"
+    uri = f"music-library://audio/{audio_id}/stream"
     return await get_audio_stream_resource(uri)
 
 
-@mcp.resource("music-library://audio/{audioId}/metadata")
-async def metadata_resource(audioId: str) -> str:
+@mcp.resource("music-library://audio/{audio_id}/metadata")
+async def metadata_resource(audio_id: str) -> str:
     """
     MCP resource for audio metadata.
 
     Returns complete metadata as JSON including Product and Format information.
 
-    URI Format: music-library://audio/{audioId}/metadata
+    URI Format: music-library://audio/{audio_id}/metadata
 
     Args:
-        audioId: Audio file identifier
+        audio_id: Audio file identifier
 
     Returns:
         str: MCP resource response with JSON metadata
@@ -655,21 +1242,21 @@ async def metadata_resource(audioId: str) -> str:
     """
     from src.resources.metadata import get_metadata_resource
 
-    uri = f"music-library://audio/{audioId}/metadata"
+    uri = f"music-library://audio/{audio_id}/metadata"
     return await get_metadata_resource(uri)
 
 
-@mcp.resource("music-library://audio/{audioId}/thumbnail")
-async def thumbnail_resource(audioId: str) -> str:
+@mcp.resource("music-library://audio/{audio_id}/thumbnail")
+async def thumbnail_resource(audio_id: str) -> str:
     """
     MCP resource for audio thumbnails/artwork.
 
     Returns a signed GCS URL for thumbnail image with caching.
 
-    URI Format: music-library://audio/{audioId}/thumbnail
+    URI Format: music-library://audio/{audio_id}/thumbnail
 
     Args:
-        audioId: Audio file identifier
+        audio_id: Audio file identifier
 
     Returns:
         str: MCP resource response with signed image URL
@@ -680,7 +1267,7 @@ async def thumbnail_resource(audioId: str) -> str:
     """
     from src.resources.thumbnail import get_thumbnail_resource
 
-    uri = f"music-library://audio/{audioId}/thumbnail"
+    uri = f"music-library://audio/{audio_id}/thumbnail"
     return await get_thumbnail_resource(uri)
 
 
@@ -811,60 +1398,12 @@ def detect_platform(request) -> str:
     return 'generic'
 
 
-async def get_waveform_context(audio_id: str) -> dict:
-    """
-    Get waveform context for audio track (used by waveform embed endpoints).
-
-    Retrieves waveform metadata and generates signed URL if available.
-
-    Args:
-        audio_id: UUID of the audio track
-
-    Returns:
-        dict: Waveform context with keys:
-            - waveform_url: Signed URL to waveform SVG (or None)
-            - waveform_available: Boolean indicating if waveform exists
-            - waveform_generated_at: ISO timestamp when waveform was generated (or None)
-    """
-    try:
-        # Import required functions
-        from database.operations import get_waveform_metadata
-        from src.storage.waveform_storage import get_waveform_signed_url
-
-        # Get waveform metadata
-        metadata = get_waveform_metadata(audio_id)
-
-        if metadata and metadata.get('waveform_gcs_path'):
-            try:
-                # Generate signed URL for waveform
-                waveform_url = get_waveform_signed_url(audio_id)
-                logger.debug(f"Waveform URL generated for audio_id: {audio_id}")
-                return {
-                    'waveform_url': waveform_url,
-                    'waveform_available': True,
-                    'waveform_generated_at': metadata.get('waveform_generated_at')
-                }
-            except Exception as e:
-                logger.warning(f"Failed to generate waveform signed URL for {audio_id}: {e}")
-                # Continue with waveform_available=False
-
-    except Exception as e:
-        logger.warning(f"Error retrieving waveform context for {audio_id}: {e}")
-
-    # Return empty context if waveform unavailable
-    return {
-        'waveform_url': None,
-        'waveform_available': False,
-        'waveform_generated_at': None
-    }
-
-
 # ============================================================================
 # Task 10: HTML5 Audio Player Embed Page
 # ============================================================================
 
 
-@mcp.custom_route("/embed/{audioId}", methods=["GET"])
+@mcp.custom_route("/embed/{audio_id}", methods=["GET"])
 async def embed_page(request):
     """
     Serve HTML5 audio player embed page.
@@ -893,10 +1432,10 @@ async def embed_page(request):
     from database import get_audio_metadata_by_id
     from src.resources.cache import get_cache
 
-    # Extract audioId from path parameters
-    audioId = request.path_params["audioId"]
-    logger.info(f"[EMBED_TEST] Embed endpoint called for audioId: {audioId}")
-    logger.info(f"Embed page requested for audio ID: {audioId}")
+    # Extract audio_id from path parameters
+    audio_id = request.path_params["audio_id"]
+    logger.info(f"[EMBED_TEST] Embed endpoint called for audio_id: {audio_id}")
+    logger.info(f"Embed page requested for audio ID: {audio_id}")
 
     # Detect platform for platform-specific optimizations
     platform = detect_platform(request)
@@ -926,16 +1465,16 @@ async def embed_page(request):
 
     try:
         # Get metadata from database
-        metadata = get_audio_metadata_by_id(audioId)
+        metadata = get_audio_metadata_by_id(audio_id)
     except ValidationError as e:
-        logger.warning(f"Invalid audio ID format for embed: {audioId} - {e}")
+        logger.warning(f"Invalid audio ID format for embed: {audio_id} - {e}")
         return HTMLResponse(
             content="<h1>Invalid Audio ID</h1><p>The audio ID format is invalid.</p>",
             status_code=400,
         )
 
     if not metadata:
-        logger.warning(f"Audio track not found: {audioId}")
+        logger.warning(f"Audio track not found: {audio_id}")
         return HTMLResponse(
             content="<h1>Audio Not Found</h1><p>The requested audio track could not be found.</p>",
             status_code=404,
@@ -973,7 +1512,7 @@ async def embed_page(request):
         logger.info(f"[EMBED_FIX] Thumbnail path does not need correction: {thumbnail_path}")
 
     if not audio_path:
-        logger.error(f"No audio path for {audioId}")
+        logger.error(f"No audio path for {audio_id}")
         return HTMLResponse(
             content="<h1>Error</h1><p>Audio file not available.</p>", status_code=500
         )
@@ -1010,18 +1549,18 @@ async def embed_page(request):
 
     # Format metadata for template
     template_metadata = {
-        "Product": {
-            "Title": metadata.get("title", "Untitled"),
-            "Artist": metadata.get("artist", "Unknown Artist"),
-            "Album": metadata.get("album"),
-            "Year": metadata.get("year"),
+        "product": {
+            "title": metadata.get("title", "Untitled"),
+            "artist": metadata.get("artist", "Unknown Artist"),
+            "album": metadata.get("album", ""),  # Ensure album is always a string
+            "year": metadata.get("year"),
         },
-        "Format": {
-            "Duration": metadata.get("duration", 0.0),
-            "Channels": metadata.get("channels", 2),
-            "SampleRate": metadata.get("sample_rate", 44100),
-            "Bitrate": metadata.get("bitrate", 0),
-            "Format": metadata.get("format", "MP3"),
+        "format": {
+            "duration": metadata.get("duration", 0.0),
+            "channels": metadata.get("channels", 2),
+            "sample_rate": metadata.get("sample_rate", 44100),
+            "bitrate": metadata.get("bitrate", 0),
+            "format": metadata.get("format", "MP3"),
         },
     }
 
@@ -1064,7 +1603,8 @@ async def embed_page(request):
             # Get waveform context for minimal waveform template
             # Note: get_waveform_context handles exceptions gracefully and returns default context
             logger.info("Getting waveform context for minimal template rendering")
-            waveform_context = await get_waveform_context(audioId)
+            from src.tools.embed_tools import get_waveform_context
+            waveform_context = await get_waveform_context(audio_id)
             logger.info(f"Waveform context retrieved: available={waveform_context.get('waveform_available', False)}")
             
             # Always use minimal waveform template when requested, even if waveform data isn't available yet
@@ -1078,7 +1618,7 @@ async def embed_page(request):
                 "embed-waveform-minimal.html",
                 {
                     "request": mock_request,
-                    "audio_id": audioId,
+                    "audio_id": audio_id,
                     "metadata": template_metadata,
                     "stream_url": stream_url,
                     "thumbnail_url": thumbnail_url,
@@ -1096,7 +1636,7 @@ async def embed_page(request):
             # Get waveform context for waveform template
             # Note: get_waveform_context handles exceptions gracefully and returns default context
             logger.info("Getting waveform context for template rendering")
-            waveform_context = await get_waveform_context(audioId)
+            waveform_context = await get_waveform_context(audio_id)
             logger.info(f"Waveform context retrieved: available={waveform_context.get('waveform_available', False)}")
             
             # Always use waveform template when requested, even if waveform data isn't available yet
@@ -1110,7 +1650,7 @@ async def embed_page(request):
                 "embed-waveform.html",
                 {
                     "request": mock_request,
-                    "audio_id": audioId,
+                    "audio_id": audio_id,
                     "metadata": template_metadata,
                     "stream_url": stream_url,
                     "thumbnail_url": thumbnail_url,
@@ -1130,7 +1670,7 @@ async def embed_page(request):
                 "embed.html",
                 {
                     "request": mock_request,
-                    "audio_id": audioId,
+                    "audio_id": audio_id,
                     "metadata": template_metadata,
                     "stream_url": stream_url,
                     "thumbnail_url": thumbnail_url,
@@ -1158,7 +1698,7 @@ async def embed_page(request):
 # Waveform Player Embed Endpoints
 # ============================================================================
 
-@mcp.custom_route("/embed/{audioId}/waveform/mobile", methods=["GET"])
+@mcp.custom_route("/embed/{audio_id}/waveform/mobile", methods=["GET"])
 async def embed_waveform_mobile(request):
     """
     Serve waveform player embed page optimized for mobile devices.
@@ -1180,36 +1720,36 @@ async def embed_waveform_mobile(request):
     from database import get_audio_metadata_by_id
     from src.resources.cache import get_cache
 
-    # Extract audioId from path parameters
-    audioId = request.path_params["audioId"]
-    logger.info(f"Waveform mobile embed requested for audio ID: {audioId}")
+    # Extract audio_id from path parameters
+    audio_id = request.path_params["audio_id"]
+    logger.info(f"Waveform mobile embed requested for audio ID: {audio_id}")
 
     try:
         # Get metadata from database
-        metadata = get_audio_metadata_by_id(audioId)
+        metadata = get_audio_metadata_by_id(audio_id)
     except ValidationError as e:
-        logger.warning(f"Invalid audio ID format for waveform mobile embed: {audioId} - {e}")
+        logger.warning(f"Invalid audio ID format for waveform mobile embed: {audio_id} - {e}")
         return HTMLResponse(
             content="<h1>Invalid Audio ID</h1><p>The audio ID format is invalid.</p>",
             status_code=400,
         )
 
     if not metadata:
-        logger.warning(f"Audio track not found for waveform mobile embed: {audioId}")
+        logger.warning(f"Audio track not found for waveform mobile embed: {audio_id}")
         return HTMLResponse(
             content="<h1>Audio Not Found</h1><p>The requested audio track could not be found.</p>",
             status_code=404,
         )
 
     # Get waveform context
-    waveform_context = await get_waveform_context(audioId)
+    waveform_context = await get_waveform_context(audio_id)
 
     # Get GCS paths
     audio_path = metadata.get("audio_gcs_path")
     thumbnail_path = metadata.get("thumbnail_gcs_path")
 
     if not audio_path:
-        logger.error(f"No audio path for waveform mobile embed {audioId}")
+        logger.error(f"No audio path for waveform mobile embed {audio_id}")
         return HTMLResponse(
             content="<h1>Error</h1><p>Audio file not available.</p>", status_code=500
         )
@@ -1235,18 +1775,18 @@ async def embed_waveform_mobile(request):
 
     # Format metadata for template
     template_metadata = {
-        "Product": {
-            "Title": metadata.get("title", "Untitled"),
-            "Artist": metadata.get("artist", "Unknown Artist"),
-            "Album": metadata.get("album"),
-            "Year": metadata.get("year"),
+        "product": {
+            "title": metadata.get("title", "Untitled"),
+            "artist": metadata.get("artist", "Unknown Artist"),
+            "album": metadata.get("album", ""),  # Ensure album is always a string
+            "year": metadata.get("year"),
         },
-        "Format": {
-            "Duration": metadata.get("duration", 0.0),
-            "Channels": metadata.get("channels", 2),
-            "SampleRate": metadata.get("sample_rate", 44100),
-            "Bitrate": metadata.get("bitrate", 0),
-            "Format": metadata.get("format", "MP3"),
+        "format": {
+            "duration": metadata.get("duration", 0.0),
+            "channels": metadata.get("channels", 2),
+            "sample_rate": metadata.get("sample_rate", 44100),
+            "bitrate": metadata.get("bitrate", 0),
+            "format": metadata.get("format", "MP3"),
         },
     }
 
@@ -1286,7 +1826,7 @@ async def embed_waveform_mobile(request):
             "embed-waveform.html",
             {
                 "request": mock_request,
-                "audio_id": audioId,
+                "audio_id": audio_id,
                 "metadata": template_metadata,
                 "stream_url": stream_url,
                 "thumbnail_url": thumbnail_url,
@@ -1315,7 +1855,7 @@ async def embed_waveform_mobile(request):
         )
 
 
-@mcp.custom_route("/embed/{audioId}/waveform/desktop", methods=["GET"])
+@mcp.custom_route("/embed/{audio_id}/waveform/desktop", methods=["GET"])
 async def embed_waveform_desktop(request):
     """
     Serve waveform player embed page optimized for desktop devices.
@@ -1337,36 +1877,36 @@ async def embed_waveform_desktop(request):
     from database import get_audio_metadata_by_id
     from src.resources.cache import get_cache
 
-    # Extract audioId from path parameters
-    audioId = request.path_params["audioId"]
-    logger.info(f"Waveform desktop embed requested for audio ID: {audioId}")
+    # Extract audio_id from path parameters
+    audio_id = request.path_params["audio_id"]
+    logger.info(f"Waveform desktop embed requested for audio ID: {audio_id}")
 
     try:
         # Get metadata from database
-        metadata = get_audio_metadata_by_id(audioId)
+        metadata = get_audio_metadata_by_id(audio_id)
     except ValidationError as e:
-        logger.warning(f"Invalid audio ID format for waveform desktop embed: {audioId} - {e}")
+        logger.warning(f"Invalid audio ID format for waveform desktop embed: {audio_id} - {e}")
         return HTMLResponse(
             content="<h1>Invalid Audio ID</h1><p>The audio ID format is invalid.</p>",
             status_code=400,
         )
 
     if not metadata:
-        logger.warning(f"Audio track not found for waveform desktop embed: {audioId}")
+        logger.warning(f"Audio track not found for waveform desktop embed: {audio_id}")
         return HTMLResponse(
             content="<h1>Audio Not Found</h1><p>The requested audio track could not be found.</p>",
             status_code=404,
         )
 
     # Get waveform context
-    waveform_context = await get_waveform_context(audioId)
+    waveform_context = await get_waveform_context(audio_id)
 
     # Get GCS paths
     audio_path = metadata.get("audio_gcs_path")
     thumbnail_path = metadata.get("thumbnail_gcs_path")
 
     if not audio_path:
-        logger.error(f"No audio path for waveform desktop embed {audioId}")
+        logger.error(f"No audio path for waveform desktop embed {audio_id}")
         return HTMLResponse(
             content="<h1>Error</h1><p>Audio file not available.</p>", status_code=500
         )
@@ -1392,18 +1932,18 @@ async def embed_waveform_desktop(request):
 
     # Format metadata for template
     template_metadata = {
-        "Product": {
-            "Title": metadata.get("title", "Untitled"),
-            "Artist": metadata.get("artist", "Unknown Artist"),
-            "Album": metadata.get("album"),
-            "Year": metadata.get("year"),
+        "product": {
+            "title": metadata.get("title", "Untitled"),
+            "artist": metadata.get("artist", "Unknown Artist"),
+            "album": metadata.get("album", ""),  # Ensure album is always a string
+            "year": metadata.get("year"),
         },
-        "Format": {
-            "Duration": metadata.get("duration", 0.0),
-            "Channels": metadata.get("channels", 2),
-            "SampleRate": metadata.get("sample_rate", 44100),
-            "Bitrate": metadata.get("bitrate", 0),
-            "Format": metadata.get("format", "MP3"),
+        "format": {
+            "duration": metadata.get("duration", 0.0),
+            "channels": metadata.get("channels", 2),
+            "sample_rate": metadata.get("sample_rate", 44100),
+            "bitrate": metadata.get("bitrate", 0),
+            "format": metadata.get("format", "MP3"),
         },
     }
 
@@ -1443,7 +1983,7 @@ async def embed_waveform_desktop(request):
             "embed-waveform.html",
             {
                 "request": mock_request,
-                "audio_id": audioId,
+                "audio_id": audio_id,
                 "metadata": template_metadata,
                 "stream_url": stream_url,
                 "thumbnail_url": thumbnail_url,
@@ -1472,7 +2012,7 @@ async def embed_waveform_desktop(request):
         )
 
 
-@mcp.custom_route("/embed/{audioId}/waveform", methods=["GET"])
+@mcp.custom_route("/embed/{audio_id}/waveform", methods=["GET"])
 async def embed_waveform_auto(request):
     """
     Serve waveform player embed page with automatic device detection.
@@ -1489,9 +2029,9 @@ async def embed_waveform_auto(request):
     # Detect device type
     device_type = detect_device_type(request)
 
-    # Extract audioId
-    audioId = request.path_params["audioId"]
-    logger.info(f"Waveform auto embed requested for audio ID: {audioId} (detected device: {device_type})")
+    # Extract audio_id
+    audio_id = request.path_params["audio_id"]
+    logger.info(f"Waveform auto embed requested for audio ID: {audio_id} (detected device: {device_type})")
 
     # Route to appropriate endpoint based on device type
     if device_type == "mobile":
@@ -1507,90 +2047,12 @@ async def embed_waveform_auto(request):
 # ============================================================================
 
 @mcp.tool()
-async def get_embed_url(audioId: str, template: str = "standard", device: Optional[str] = None) -> dict:
+async def get_embed_url(audio_id: str, template: str = "standard", device: Optional[str] = None) -> dict:
     """
     Generate embed URL for audio track with template selection.
-
-    Returns embed URL with template and device-specific endpoint selection.
-
-    Args:
-        audioId: UUID of the audio track
-        template: Template type ("standard" or "waveform")
-        device: Device type override ("mobile", "desktop", or None for auto-detection)
-
-    Returns:
-        dict: Embed information including URL, template type, and device detection
-
-    Example:
-        >>> result = await get_embed_url("550e8400-e29b-41d4-a716-446655440000", "waveform")
-        >>> print(result["embedUrl"])
-        "https://example.com/embed/550e8400-e29b-41d4-a716-446655440000/waveform"
     """
-    try:
-        # Validate audioId exists
-        from database import get_audio_metadata_by_id
-        metadata = get_audio_metadata_by_id(audioId)
-        if not metadata:
-            return {
-                "success": False,
-                "error": "RESOURCE_NOT_FOUND",
-                "message": f"Audio track with ID '{audioId}' was not found",
-                "audioId": audioId
-            }
-
-        # Build base embed URL
-        base_url = f"{config.embed_base_url}/embed/{audioId}"
-
-        # Determine template endpoint
-        if template == "waveform":
-            embed_url = f"{base_url}/waveform"
-            # Add device-specific endpoint if specified
-            if device == "mobile":
-                embed_url = f"{base_url}/waveform/mobile"
-            elif device == "desktop":
-                embed_url = f"{base_url}/waveform/desktop"
-        else:
-            embed_url = base_url
-
-        # Check waveform availability (for waveform template)
-        waveform_available = False
-        if template == "waveform":
-            try:
-                waveform_context = await get_waveform_context(audioId)
-                waveform_available = waveform_context.get("waveform_available", False)
-            except Exception as e:
-                logger.warning(f"Error checking waveform availability: {e}")
-
-        return {
-            "success": True,
-            "audioId": audioId,
-            "embedUrl": embed_url,
-            "template": template,
-            "device": device or "auto",
-            "waveformAvailable": waveform_available,
-            "metadata": {
-                "title": metadata.get("title", "Untitled"),
-                "artist": metadata.get("artist", "Unknown Artist"),
-                "duration": metadata.get("duration", 0),
-                "format": metadata.get("format", "MP3")
-            }
-        }
-
-    except ValidationError as e:
-        return {
-            "success": False,
-            "error": "VALIDATION_ERROR",
-            "message": f"Invalid audio ID format: {str(e)}",
-            "audioId": audioId
-        }
-    except Exception as e:
-        logger.error(f"Error generating embed URL for {audioId}: {e}")
-        return {
-            "success": False,
-            "error": "INTERNAL_ERROR",
-            "message": "Failed to generate embed URL",
-            "audioId": audioId
-        }
+    from src.tools.embed_tools import get_embed_url_logic
+    return await get_embed_url_logic(audio_id, template, device)
 
 
 @mcp.tool()
@@ -1617,7 +2079,7 @@ async def list_embed_templates() -> dict:
                     "id": "standard",
                     "name": "Standard Player",
                     "description": "Basic audio player with progress bar and standard controls",
-                    "endpoint": "/embed/{audioId}",
+                    "endpoint": "/embed/{audio_id}",
                     "features": ["progress-bar", "volume-control", "keyboard-shortcuts"],
                     "deviceSupport": ["mobile", "desktop"],
                     "interactive": True
@@ -1626,20 +2088,20 @@ async def list_embed_templates() -> dict:
                     "id": "waveform",
                     "name": "Waveform Player",
                     "description": "Interactive waveform visualization with click-to-seek",
-                    "endpoint": "/embed/{audioId}/waveform",
+                    "endpoint": "/embed/{audio_id}/waveform",
                     "features": ["waveform-visualization", "click-to-seek", "progress-overlay", "volume-control", "keyboard-shortcuts"],
                     "deviceSupport": ["mobile", "desktop"],
                     "interactive": True,
                     "deviceVariants": [
                         {
                             "device": "mobile",
-                            "endpoint": "/embed/{audioId}/waveform/mobile",
+                            "endpoint": "/embed/{audio_id}/waveform/mobile",
                             "description": "Mobile-optimized waveform player (static display)",
                             "interactive": False
                         },
                         {
                             "device": "desktop",
-                            "endpoint": "/embed/{audioId}/waveform/desktop",
+                            "endpoint": "/embed/{audio_id}/waveform/desktop",
                             "description": "Desktop-optimized waveform player (interactive)",
                             "interactive": True
                         }
@@ -1657,72 +2119,6 @@ async def list_embed_templates() -> dict:
             "error": "INTERNAL_ERROR",
             "message": "Failed to retrieve template information"
         }
-
-
-@mcp.tool()
-async def check_waveform_availability(audioId: str) -> dict:
-    """
-    Check if waveform is available for an audio track.
-
-    Verifies waveform generation status and provides access information
-    if the waveform exists.
-
-    Args:
-        audioId: UUID of the audio track
-
-    Returns:
-        dict: Waveform availability and access information
-
-    Example:
-        >>> result = await check_waveform_availability("550e8400-e29b-41d4-a716-446655440000")
-        >>> if result["waveformAvailable"]:
-        ...     print(f"Waveform generated at: {result['generatedAt']}")
-    """
-    try:
-        # Get waveform context
-        waveform_context = await get_waveform_context(audioId)
-
-        # Validate audioId exists
-        from database import get_audio_metadata_by_id
-        metadata = get_audio_metadata_by_id(audioId)
-        if not metadata:
-            return {
-                "success": False,
-                "error": "RESOURCE_NOT_FOUND",
-                "message": f"Audio track with ID '{audioId}' was not found",
-                "audioId": audioId
-            }
-
-        return {
-            "success": True,
-            "audioId": audioId,
-            "waveformAvailable": waveform_context.get("waveform_available", False),
-            "waveformUrl": waveform_context.get("waveform_url"),
-            "generatedAt": waveform_context.get("waveform_generated_at"),
-            "metadata": {
-                "title": metadata.get("title", "Untitled"),
-                "artist": metadata.get("artist", "Unknown Artist"),
-                "duration": metadata.get("duration", 0),
-                "format": metadata.get("format", "MP3")
-            }
-        }
-
-    except ValidationError as e:
-        return {
-            "success": False,
-            "error": "VALIDATION_ERROR",
-            "message": f"Invalid audio ID format: {str(e)}",
-            "audioId": audioId
-        }
-    except Exception as e:
-        logger.error(f"Error checking waveform availability for {audioId}: {e}")
-        return {
-            "success": False,
-            "error": "INTERNAL_ERROR",
-            "message": "Failed to check waveform availability",
-            "audioId": audioId
-        }
-
 
 @mcp.custom_route("/oembed", methods=["GET"])
 async def oembed_endpoint(request):
@@ -1844,7 +2240,7 @@ async def oembed_endpoint(request):
         # Format metadata
         title = metadata.get("title", "Untitled")
         artist = metadata.get("artist", "Unknown Artist")
-        album = metadata.get("album")
+        album = metadata.get("album", "")  # Ensure album is always a string
 
         # Build description
         description = f"{artist}"
@@ -1966,57 +2362,341 @@ async def oembed_discovery(request):
 # ============================================================================
 
 
-@mcp.custom_route("/api/tracks/{audioId}", methods=["DELETE"])
-async def delete_track(request):
+@mcp.tool()
+def download_audio(input_data: dict) -> dict:
     """
-    Delete a track via HTTP API.
+    Download audio track in specified format with conversion.
 
-    This endpoint provides HTTP access to the delete_audio MCP tool.
+    Downloads an audio track, converts it to the requested format with metadata
+    and artwork embedding, and returns a temporary download URL.
 
     Args:
-        request: Starlette Request object with path parameters
+        input_data: Dictionary containing:
+            - audioId: UUID of the audio track (required)
+            - format: Target format (mp3, wav, flac, aac, ogg) (required)
+            - preset: Quality preset (optional, defaults to 'high')
 
     Returns:
-        JSONResponse: Success (204) or error response
+        Dictionary containing:
+            - success: Boolean indicating success
+            - downloadUrl: Temporary signed URL for download (expires in 15 minutes)
+            - format: Target format used
+            - quality: Quality description (e.g., "320kbps")
+            - originalFormat: Source format of the track
+            - fileSize: File size in bytes
+            - filename: Generated download filename
+            - expiresIn: URL expiration time in seconds
+            - error: Error message if operation failed
+            - errorCode: Error code for programmatic handling
+
+    Example:
+        >>> result = await mcp.call("download_audio", {
+        ...     "audioId": "550e8400-e29b-41d4-a716-446655440000",
+        ...     "format": "mp3",
+        ...     "preset": "high"
+        ... })
+        >>> print(result["downloadUrl"])
+        https://storage.googleapis.com/bucket/temp/...
     """
-    from starlette.responses import JSONResponse
-    from src.tools.query_tools import delete_audio as delete_func
+    from src.tools.download_tool import download_audio as download_audio_func
+    return download_audio_func(input_data)
 
-    # Extract audioId from path parameters
-    audioId = request.path_params["audioId"]
-    logger.info(f"DELETE /api/tracks/{audioId} - Delete track request")
 
-    try:
-        # Call the delete function
-        result = await delete_func({"audioId": audioId})
+# ============================================================================
+# MCP Prompts
+# ============================================================================
 
-        # Check if it was successful
-        if result.get("success"):
-            logger.info(f"Successfully deleted track: {audioId}")
-            # Return 204 No Content for successful deletion
-            return JSONResponse({}, status_code=204)
-        else:
-            # Return error with appropriate status code
-            error_code = result.get("error", "UNKNOWN_ERROR")
-            if error_code == "RESOURCE_NOT_FOUND":
-                status_code = 404
-            elif error_code == "INVALID_QUERY":
-                status_code = 400
-            else:
-                status_code = 500
+@mcp.prompt(name="ingest_from_url", description="Guide through audio ingestion workflow")
+def ingest_from_url(audio_url: str = "https://example.com/audio.mp3") -> list[dict]:
+    """
+    Provide guidance for ingesting audio content from a URL.
 
-            logger.warning(f"Delete failed for track {audioId}: {result.get('message', 'Unknown error')}")
-            return JSONResponse(result, status_code=status_code)
+    This prompt helps users understand the complete audio ingestion workflow,
+    including metadata extraction, storage, and embed URL generation.
+    """
+    return [
+        {
+            "role": "user",
+            "content": {
+                "type": "text",
+                "text": f"""## Audio Ingestion Workflow
 
-    except Exception as e:
-        logger.exception(f"Unexpected error deleting track {audioId}: {e}")
-        error_response = {
-            "success": False,
-            "error": "INTERNAL_ERROR",
-            "message": "Internal server error during deletion",
-            "details": {"exception_type": type(e).__name__}
+**Step 1: Prepare Your Audio URL**
+- Ensure the URL is publicly accessible and stable
+- Supported formats: MP3, FLAC, WAV, M4A, OGG, AAC
+- Maximum file size: 100MB (configurable)
+
+**Step 2: Use the process_audio_complete Tool**
+```json
+{{
+  "source": {{
+    "type": "http_url",
+    "url": "{audio_url}",
+    "headers": {{
+      "Authorization": "Bearer your-token-if-needed"
+    }}
+  }},
+  "options": {{
+    "max_size_mb": 100,
+    "timeout": 300,
+    "validate_format": true
+  }}
+}}
+```
+
+**Step 3: What Happens Next**
+1. Audio file is downloaded and validated
+2. Metadata is extracted (artist, title, album, genre, etc.)
+3. Audio and artwork are uploaded to Google Cloud Storage
+4. Complete metadata is saved to the database
+5. Embed URLs are generated for sharing
+
+**Step 4: Use the Results**
+- **audio_id**: Unique identifier for the track
+- **embed_url**: Ready-to-use player embed URL
+- **metadata**: Complete track information for display
+
+**Example Success Response:**
+```json
+{{
+  "audio_id": "550e8400-e29b-41d4-a716-446655440000",
+  "metadata": {{
+    "product": {{
+      "artist": "Extracted Artist Name",
+      "title": "Extracted Track Title",
+      "album": "Extracted Album Name"
+    }}
+  }},
+  "resources": {{
+    "embed_url": "https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000"
+  }}
+}}
+```
+
+**Troubleshooting:**
+- If download fails: Check URL accessibility and network connectivity
+- If format unsupported: Verify file format and codec compatibility
+- If size exceeded: Reduce file size or increase max_size_mb limit"""
+            }
         }
-        return JSONResponse(error_response, status_code=500)
+    ]
+
+
+@mcp.prompt(name="search_and_refine", description="Guide through library search with filters")
+def search_and_refine(query: str = "artist name", genre: str = "", year_min: int = 1900, year_max: int = 2025) -> list[dict]:
+    """
+    Provide guidance for searching and refining audio library results.
+
+    This prompt helps users construct effective searches with filters,
+    sorting options, and pagination strategies.
+    """
+    return [
+        {
+            "role": "user",
+            "content": {
+                "type": "text",
+                "text": f"""## Audio Library Search Guide
+
+**Basic Search:**
+```json
+{{
+  "query": "{query}",
+  "limit": 20,
+  "offset": 0
+}}
+```
+
+**Advanced Search with Filters:**
+```json
+{{
+  "query": "{query}",
+  "filters": {{
+    "genre": {f'["{genre}"]' if genre else '["Rock", "Electronic", "Jazz"]'},
+    "year": {{
+      "min": {year_min},
+      "max": {year_max}
+    }},
+    "artist": ["Artist Name"],
+    "album": ["Album Title"]
+  }},
+  "limit": 10,
+  "sort_by": "relevance",
+  "sort_order": "desc"
+}}
+```
+
+**Search Strategies:**
+
+1. **Text Search**: Searches across title, artist, album, genre, composer, publisher
+2. **Genre Filtering**: Use exact genre names (case-sensitive)
+3. **Year Range**: Filter by release year range
+4. **Artist/Album**: Exact or partial matches
+
+**Sorting Options:**
+- `relevance`: Best matches first (recommended)
+- `title`: Alphabetical by track title
+- `artist`: Alphabetical by artist name
+- `year`: Chronological by release year
+- `created_at`: Most recently added first
+
+**Pagination:**
+- Use `limit` (1-100) to control page size
+- Use `offset` to navigate through results
+- Check `total` in response for total matches
+
+**Search Tips:**
+- Use specific terms for better results
+- Combine filters for precise targeting
+- Start broad, then refine with filters
+- Use artist names for focused searches
+
+**Example Response Structure:**
+```json
+{{
+  "results": [
+    {{
+      "audio_id": "uuid-here",
+      "metadata": {{
+        "product": {{
+          "title": "Track Title",
+          "artist": "Artist Name",
+          "album": "Album Name",
+          "genre": ["Genre"],
+          "year": 2023
+        }}
+      }},
+      "score": 0.95,
+      "resources": {{
+        "embed_url": "https://loist.io/embed/uuid-here"
+      }}
+    }}
+  ],
+  "total": 42,
+  "limit": 10,
+  "offset": 0
+}}
+```"""
+            }
+        }
+    ]
+
+
+@mcp.prompt(name="batch_edit_metadata", description="Guide through multi-track metadata updates")
+def batch_edit_metadata(search_query: str = "artist name", update_field: str = "genre", update_value: str = "New Genre") -> list[dict]:
+    """
+    Provide guidance for batch editing metadata across multiple tracks.
+
+    This prompt helps users perform bulk metadata updates by demonstrating
+    the search-and-update workflow pattern.
+    """
+    return [
+        {
+            "role": "user",
+            "content": {
+                "type": "text",
+                "text": f"""## Batch Metadata Editing Workflow
+
+**Step 1: Search for Tracks to Update**
+```json
+{{
+  "query": "{search_query}",
+  "limit": 50,
+  "sort_by": "relevance"
+}}
+```
+
+**Step 2: Review Results**
+- Check the returned tracks match your intended updates
+- Note the `audio_id` values for tracks you want to update
+- Verify the current metadata values
+
+**Step 3: Update Individual Tracks**
+For each track you want to update:
+```json
+{{
+  "audio_id": "track-uuid-here",
+  "metadata": {{
+    "{update_field}": "{update_value}"
+  }}
+}}
+```
+
+**Common Batch Update Scenarios:**
+
+**Scenario 1: Fix Artist Name**
+```json
+{{
+  "audio_id": "uuid-here",
+  "metadata": {{
+    "artist": "Corrected Artist Name"
+  }}
+}}
+```
+
+**Scenario 2: Update Genre Classification**
+```json
+{{
+  "audio_id": "uuid-here",
+  "metadata": {{
+    "genre": "{update_value}"
+  }}
+}}
+```
+
+**Scenario 3: Add Missing Album Information**
+```json
+{{
+  "audio_id": "uuid-here",
+  "metadata": {{
+    "album": "Album Title"
+  }}
+}}
+```
+
+**Scenario 4: Correct Release Year**
+```json
+{{
+  "audio_id": "uuid-here",
+  "metadata": {{
+    "year": 2023
+  }}
+}}
+```
+
+**Step 4: Verify Updates**
+After updating, search again to confirm changes:
+```json
+{{
+  "query": "{search_query}",
+  "limit": 10
+}}
+```
+
+**JSON Merge Patch Semantics:**
+- **Omit a field** → leave unchanged
+- **Provide a value** → update to new value
+- **Set to null** → remove field (if supported)
+
+**Validation Rules:**
+- `title`: Cannot be empty if provided
+- `year`: Must be 1800-2100 if provided
+- `genre`: Max 100 characters
+- Other fields: Max 500 characters
+
+**Best Practices:**
+1. **Test on one track first** before batch updates
+2. **Use specific search queries** to target exact tracks
+3. **Verify changes** after updates
+4. **Work in small batches** (10-20 tracks) for safety
+5. **Keep backups** of important metadata changes
+
+**Error Handling:**
+- `RESOURCE_NOT_FOUND`: Track doesn't exist
+- `VALIDATION_ERROR`: Invalid data provided
+- `DATABASE_ERROR`: Database operation failed"""
+            }
+        }
+    ]
 
 
 def create_mcp_tools():

@@ -12,7 +12,7 @@ The server features a modern, scalable architecture with:
 
 - **Repository Pattern**: Clean data access abstraction with dependency injection
 - **Unified Exception Framework**: Comprehensive error handling with automatic recovery strategies
-- **Advanced Metadata Extraction**: ID3 tags, BWF metadata, XMP data, and intelligent filename parsing
+- **Advanced Metadata Extraction**: ID3 tags, BWF metadata, XMP data, intelligent filename parsing, and composer→artist fallback
 - **Performance Optimizations**: 75-80% faster database operations with batch processing
 - **Comprehensive Testing**: 85%+ test coverage with automated performance validation
 - **Clean FastMCP Integration**: Zero workarounds for exception serialization
@@ -108,6 +108,134 @@ The server implements a layered architecture with clear separation of concerns:
 └─────────────────┘
 ```
 
+## Protocol and API Access
+
+The server provides two primary methods of interaction: the canonical MCP JSON-RPC protocol for core tooling and standard HTTP endpoints for operational monitoring and convenience wrappers.
+
+> For a detailed explanation of the design philosophy, see the new [MCP Server Architecture](docs/mcp-architecture.md) document.
+
+### Canonical Protocol: MCP JSON-RPC
+
+The canonical and recommended way to interact with the server's core business logic is through the **MCP JSON-RPC protocol**. This is designed for agentic workflows and programmatic tool use. Communication happens over the configured transport (stdio, HTTP, or SSE).
+
+You interact with the server by sending JSON-RPC 2.0 requests to the `/mcp` endpoint (in HTTP/SSE mode) using two main methods:
+
+-   `tools/list`: To discover all available core business tools.
+-   `tools/call`: To execute a specific tool with arguments.
+
+#### Core Business Tools (via MCP)
+
+These are the primary tools available through the MCP protocol:
+- `process_audio_complete`
+- `get_audio_metadata`
+- `update_metadata`
+- `delete_audio`
+- `search_library`
+- `download_audio`
+- `get_embed_url`
+
+#### Usage Examples
+
+Here are some `curl` examples for interacting with the MCP server over HTTP.
+
+##### List Available Tools
+
+```bash
+curl -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
+```
+
+##### Call a Tool: `process_audio_complete`
+
+```bash
+curl -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc":"2.0",
+    "id":2,
+    "method":"tools/call",
+    "params":{
+      "name":"process_audio_complete",
+      "arguments":{"source":{"type":"http_url","url":"https://example.com/track.mp3"}}
+    }
+  }'
+```
+
+##### Call a Tool: `search_library`
+
+```bash
+curl -X POST http://localhost:8080/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc":"2.0",
+    "id":3,
+    "method":"tools/call",
+    "params":{
+      "name":"search_library",
+      "arguments":{"query":"rock"}
+    }
+  }'
+```
+
+### Operational & REST Endpoints (HTTP-Only)
+
+For operational monitoring and simple REST-based access, the server exposes standard HTTP endpoints. These are **not** MCP tools and should be accessed directly.
+
+#### Operational Endpoints
+-   **`GET /health/ready`**, **`/health/live`**: Return the health status of the server. Essential for Cloud Run and other container orchestration platforms.
+-   **`get_waveform_metrics_tool`**: Provides metrics on waveform generation.
+-   **`get_circuit_breaker_status`**: Shows the status of internal circuit breakers.
+
+#### REST API Endpoints
+
+For convenience, especially for web frontends, a set of RESTful endpoints are provided as wrappers around some MCP tool functionality.
+
+- `GET /api/tracks/{audioId}` - Get track metadata
+- `GET /api/search?q=<query>` - Search tracks with filters
+- `GET /api/tracks/{audioId}/stream` - Get signed streaming URL
+- `GET /api/tracks/{audioId}/thumbnail` - Get signed thumbnail URL
+
+## A2A Agent-to-Agent Protocol
+
+The server implements the **A2A (Agent-to-Agent) v0.3 specification** for agent discovery and task coordination, enabling other AI agents to discover and interact with this music processing service programmatically.
+
+### Agent Discovery
+
+Agents can discover this service's capabilities through the standard A2A discovery endpoint:
+
+```bash
+# Get agent card with capabilities and skills
+curl https://a2a-staging-{PROJECT_ID}.us-central1.run.app/.well-known/agent-card.json
+```
+
+### Key Features
+
+- **Agent Card**: A2A v0.3 compliant discovery document with 6 core skills
+- **JSON-RPC API**: Standard protocol for agent-to-agent task coordination
+- **Async Task Processing**: Background audio processing with status polling
+- **Shared Business Logic**: Same processing pipeline used by MCP and A2A interfaces
+
+### Core Skills
+
+The agent exposes these capabilities for other agents:
+
+- `process_audio_complete` - Full audio processing with metadata extraction
+- `search_library` - Advanced text search with filters
+- `get_audio_metadata` - Retrieve complete track metadata
+- `update_metadata` - Edit metadata fields
+- `delete_audio` - Remove tracks from library
+- `get_embed_url` - Generate embeddable player URLs
+
+### Environment Endpoints
+
+**Staging**: `https://a2a-staging-{PROJECT_ID}.us-central1.run.app`  
+**Production**: `https://a2a-prod-{PROJECT_ID}.us-central1.run.app`
+
+### Integration Guide
+
+📚 **[Complete A2A Integration Guide](docs/a2a-integration-guide.md)** - Step-by-step integration instructions, JSON-RPC examples, authentication details, and troubleshooting.
+
 ### Key Architectural Improvements
 
 #### Repository Pattern Implementation
@@ -179,32 +307,57 @@ The project follows a structured development workflow with comprehensive testing
 
 ### Testing Strategy
 
-The project implements a multi-layer testing approach:
+The project implements a multi-layer testing approach with comprehensive pytest infrastructure.
 
-#### Unit Testing
-```bash
-# Run all unit tests
-pytest tests/test_*.py -v
+📚 **[Complete Testing Setup Guide](docs/testing-setup.md)** - Detailed testing documentation and setup instructions.
 
-# Run with coverage
-pytest --cov=src --cov-report=html
-```
+#### Quick Start
 
-#### Integration Testing
-```bash
-# Database integration tests
-pytest tests/test_*_integration.py -v
+1. **Start all services**:
+   ```bash
+   docker-compose up -d
+   ```
 
-# Performance benchmarks
-pytest tests/test_database_operations_integration.py::TestBatchOperations -v
-```
+2. **Run tests** (always inside Docker):
+   ```bash
+   docker-compose exec mcp-server pytest tests/ -v
+   ```
+
+> ⚠️ **IMPORTANT**: Always run tests inside Docker. The local venv is outdated.
 
 #### Test Categories
+
+- **Unit Tests**: `docker-compose exec mcp-server pytest tests/ -m unit -v`
+- **Integration Tests**: `docker-compose exec mcp-server pytest tests/ -m integration -v`
+- **Database Tests**: `docker-compose exec mcp-server pytest tests/ -m requires_db -v`
+- **GCS Tests**: `docker-compose exec mcp-server pytest tests/ -m requires_gcs -v`
+
+#### Test Execution
+
+**Important**: Tests run **inside Docker** with correct dependencies and PYTHONPATH configuration.
+
+```bash
+# All tests
+docker-compose exec mcp-server pytest tests/ -v
+
+# Unit tests only (fast, no database)
+docker-compose exec mcp-server pytest tests/ -m unit -v
+
+# Integration tests (requires database)
+docker-compose exec mcp-server pytest tests/ -m integration -v
+
+# With coverage
+docker-compose exec mcp-server pytest tests/ --cov=src --cov-report=term-missing
+```
+
+#### Test Infrastructure
+
 - **85%+ Coverage**: Comprehensive unit and integration tests
 - **Performance Testing**: Automated regression detection
 - **Exception Testing**: Unified framework validation
 - **Repository Testing**: Dependency injection and mocking
 - **Full-Text Search Testing**: Index validation, query accuracy, performance, and relevance testing
+- **Auto-Markers**: Automatic test categorization based on file/function patterns
 
 #### Security Scanning
 ```bash
@@ -236,17 +389,17 @@ Comprehensive documentation is available in the `docs/` directory:
 ### Key Development Commands
 
 ```bash
-# Run full test suite
-pytest
+# Run full test suite (inside Docker)
+docker-compose exec mcp-server pytest tests/ -v
 
 # Run with performance monitoring
-pytest --durations=10
+docker-compose exec mcp-server pytest tests/ --durations=10
 
 # Run database integration tests
-pytest tests/test_database_operations_integration.py
+docker-compose exec mcp-server pytest tests/test_database_operations_integration.py -v
 
 # Generate coverage report
-pytest --cov=src --cov-report=html && open htmlcov/index.html
+docker-compose exec mcp-server pytest tests/ --cov=src --cov-report=term-missing
 
 # Run security scanning
 ./scripts/security-scan.sh
@@ -489,6 +642,14 @@ SERVER_PORT=8080
 - ✅ **Pagination & Sorting**: Cursor-based pagination with stable ordering
 - ✅ **Timezone-Aware Processing**: User timezone support in process_audio_complete
 
+#### Audio Track Management (Full CRUD)
+- ✅ **Create**: `process_audio_complete` - Ingest audio from URLs with metadata extraction
+- ✅ **Read**: `get_audio_metadata` - Retrieve complete track metadata by ID
+- ✅ **Update**: `update_metadata` - Partial updates with JSON Merge Patch semantics
+- ✅ **Delete**: `delete_audio` - Remove tracks from the library
+- ✅ **Search**: `search_library` - Full-text search with advanced filtering
+- ✅ **Download**: HTTP API + `download_audio` MCP tool - On-the-fly format conversion (MP3, WAV, FLAC, AAC, OGG) with metadata/artwork embedding
+
 #### Security & Configuration
 - ✅ Bearer token authentication (SimpleBearerAuth)
 - ✅ CORS configuration for iframe embedding
@@ -575,6 +736,34 @@ await process_audio_complete({
 });
 ```
 
+### Metadata Editing
+
+The `update_metadata` tool supports partial updates using JSON Merge Patch semantics:
+
+```javascript
+// Update specific fields (omitted fields remain unchanged)
+await update_metadata({
+  "audioId": "550e8400-e29b-41d4-a716-446655440000",
+  "metadata": {
+    "artist": "The Beatles",
+    "year": 1968,
+    "genre": "Rock"
+  }
+});
+```
+
+**Editable Fields:**
+- Product metadata: `artist`, `title`, `album`, `genre`, `year`
+- XMP metadata: `composer`, `publisher`, `record_label`, `isrc`
+
+**Metadata Processing:**
+- **Composer→Artist Fallback**: When artist field is blank, composer automatically fills artist for better UX with classical music and film scores
+
+**Behavior:**
+- Omit a field → remains unchanged
+- Provide a value → updates to new value
+- Database triggers automatically update `search_vector` and `updated_at`
+
 ### Planned Features
 
 - 🔄 Advanced OAuth providers (GitHub, Google, etc.)
@@ -584,6 +773,21 @@ await process_audio_complete({
 - 🔄 Docker containerization
 - 🔄 PostgreSQL integration
 - 🔄 Google Cloud Storage integration
+
+### Future Scope
+
+#### A2A Push Notification Config Store Migration
+
+**Current State**: The A2A Phase 2 implementation uses a custom `PushConfigStore` class with raw SQL for managing push notification configurations.
+
+**Future Enhancement**: Migrate to the A2A SDK's built-in `DatabasePushNotificationConfigStore` which provides:
+- SQLAlchemy ORM models (instead of raw SQL)
+- Encryption support via `cryptography.fernet` for sensitive configuration data
+- Better alignment with SDK patterns and best practices
+
+**Status**: Current custom implementation works correctly for MVP. Migration is a future improvement for enhanced security and SDK alignment.
+
+**Related Documentation**: See archived code reviews in `docs/archive/a2a-code-reviews/` for detailed implementation analysis.
 
 ## Docker
 
@@ -632,6 +836,7 @@ docker run --rm -p 8080:8080 \
 ### Using Docker Compose
 
 For local development with hot reload:
+
 
 ```bash
 docker-compose up
@@ -775,6 +980,7 @@ Production/Staging Deployment
 - [Pre-PR Testing Guide](docs/pre-pr-testing-guide.md) - Local testing before pull requests
 - [Cloud Run Deployment](docs/cloud-run-deployment.md) - Production deployment details
 - [Security Scanning](docs/security-scanning.md) - Security scanning and vulnerability management
+- [Product Roadmap](docs/roadmap.md) - Future enhancements and planned features
 
 ### Running Workflows
 
@@ -794,18 +1000,20 @@ uv pip install -e ".[dev]"
 
 ### Running Tests
 
+> ⚠️ **IMPORTANT**: Always run tests inside Docker. The local venv is outdated.
+
 ```bash
-# Install testing dependencies first (if not already installed)
-pip install pytest pytest-asyncio pytest-mock pytest-cov
+# Start services first
+docker-compose up -d
 
 # Run all tests
-pytest tests/
+docker-compose exec mcp-server pytest tests/ -v
 
 # Run tests with coverage report
-pytest --cov=src --cov-report=html
+docker-compose exec mcp-server pytest tests/ --cov=src --cov-report=term-missing
 
 # Run specific test file
-pytest tests/test_process_audio_complete.py
+docker-compose exec mcp-server pytest tests/test_process_audio_complete.py -v
 ```
 
 ### Code Quality & Static Analysis
@@ -1164,58 +1372,7 @@ Access-Control-Allow-Methods: GET, POST, OPTIONS
 Access-Control-Allow-Headers: Authorization, Content-Type, Range, ...
 ```
 
-## API Documentation
 
-### Health Check
-
-**Tool:** `health_check`
-
-Returns the current status of the server.
-
-**Returns:**
-```json
-{
-  "status": "healthy",
-  "service": "Music Library MCP",
-  "version": "0.1.0"
-}
-```
-
-## HTTP REST API
-
-The MCP server exposes HTTP REST API endpoints for direct frontend integration when running in HTTP transport mode.
-
-### Quick Start
-
-```bash
-# Start server in HTTP mode
-docker-compose up
-
-# Server available at http://localhost:8080
-# MCP endpoint: http://localhost:8080/mcp
-# REST API: http://localhost:8080/api/*
-```
-
-### Available Endpoints
-
-- `GET /api/tracks/{audioId}` - Get track metadata
-- `GET /api/search?q=<query>` - Search tracks with filters
-- `GET /api/tracks/{audioId}/stream` - Get signed streaming URL
-- `GET /api/tracks/{audioId}/thumbnail` - Get signed thumbnail URL
-
-### Example Usage
-
-```javascript
-// Search for tracks
-const response = await fetch('/api/search?q=beatles&limit=10');
-const result = await response.json();
-
-// Get track metadata
-const track = await fetch('/api/tracks/550e8400-e29b-41d4-a716-446655440000');
-const trackData = await track.json();
-```
-
-📚 **Complete API Documentation**: See [`docs/query-tools-api.md`](docs/query-tools-api.md#http-rest-api-endpoints)
 
 ## Multi-User SaaS Support
 

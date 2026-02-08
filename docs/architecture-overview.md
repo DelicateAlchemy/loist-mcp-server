@@ -8,63 +8,55 @@ The Music Library MCP Server implements a modern, scalable architecture using Fa
 
 ```mermaid
 graph TB
-    A[FastMCP Server] --> B[MCP Tools]
-    A --> C[MCP Resources]
-    A --> D[HTTP Handlers]
+    subgraph "Protocol Layer"
+        A[FastMCP Server]
+        B[MCP Tools & HTTP API]
+    end
 
-    B --> E[Audio Processing Tools]
-    B --> F[Query Tools]
+    subgraph "Service Layer"
+        S[Services]
+    end
+    
+    subgraph "Data Access Layer"
+        J[Repository Layer]
+    end
+    
+    subgraph "Infrastructure"
+        L[PostgreSQL]
+        M[Google Cloud Storage]
+    end
 
-    C --> G[Metadata Resources]
-    C --> H[Audio Stream Resources]
-    C --> I[Thumbnail Resources]
-
-    E --> J[Repository Layer]
-    F --> J
-    G --> J
-    H --> J
-    I --> J
-
-    J --> K[Database Layer]
-    K --> L[PostgreSQL]
-    K --> M[Google Cloud Storage]
-    M --> Q[IAM SignBlob API]
-    Q --> R[Service Account Impersonation]
-
-    A --> N[Exception Framework]
-    J --> N
-    K --> N
-
-    N --> O[Recovery Strategies]
-    N --> P[Structured Logging]
+    A --> B
+    B --> S
+    S --> J
+    J --> L
+    J --> M
 ```
 
 ### Layer Architecture
 
-#### 1. Protocol Layer (FastMCP)
-- **FastMCP Integration**: Clean MCP server setup without workarounds
-- **Transport Support**: stdio, HTTP, and SSE transports
-- **Tool Registration**: Dynamic MCP tool registration
-- **Resource Management**: MCP resource handlers
+#### 1. Protocol Layer (FastMCP & HTTP)
+- **FastMCP Integration**: Clean MCP server setup for tools and resources.
+- **HTTP API**: A RESTful interface for web clients, built on top of FastMCP's custom routing.
+- **Transport Support**: stdio, HTTP, and SSE transports.
 
-#### 2. Business Logic Layer
-- **Repository Pattern**: Clean data access abstraction
-- **Service Layer**: Business logic separation (future enhancement)
-- **Exception Framework**: Unified error handling and recovery
-- **Configuration Management**: Environment-based configuration
+#### 2. Service Layer
+- **Separation of Concerns**: Contains all business logic, decoupled from the protocol and data access layers.
+- **`audio_service`**: Handles logic for metadata retrieval, search, and track management.
+- **`album_service`**: Album CRUD, track management (add/remove/reorder), status progression (project → draft → released).
+- **`playlist_service`**: Playlist CRUD, track management, and collaborator management (add/remove with roles).
+- **`streaming_service`**: Manages the generation of signed URLs for audio and thumbnails, including caching.
+- **`download_service`**: Encapsulates complex logic for audio format conversion and download preparation.
 
 #### 3. Data Access Layer
-- **Repository Abstraction**: `AudioRepositoryInterface` with multiple implementations
-- **Connection Pooling**: Optimized PostgreSQL connection management
-- **Performance Optimizations**: Batch operations and indexing
-- **Migration System**: Schema versioning and deployment
+- **Repository Pattern**: `AudioRepositoryInterface`, `AlbumRepositoryInterface`, `PlaylistRepositoryInterface` provide clean data access abstractions.
+- **Connection Pooling**: Optimized PostgreSQL connection management.
+- **Performance Optimizations**: Batch operations and indexing.
 
 #### 4. Infrastructure Layer
-- **Google Cloud Storage**: Audio file and thumbnail storage with signed URL generation
-- **IAM SignBlob API**: Secure URL signing via service account impersonation
-- **PostgreSQL**: Metadata and search indexing
-- **Health Monitoring**: Comprehensive system health checks
-- **Logging**: Structured logging with context
+- **Google Cloud Storage**: For audio file and thumbnail storage.
+- **PostgreSQL**: For metadata and search indexing.
+- **IAM SignBlob API**: For secure, keyless signed URL generation.
 
 ## Google Cloud Storage Integration
 
@@ -551,9 +543,12 @@ graph TD
 ```
 src/
 ├── exceptions/           # Unified exception framework
-├── repositories/         # Data access abstractions
+├── repositories/         # Data access abstractions (audio, party, work, album, playlist)
+├── services/            # Business logic (audio, album, playlist, party, work, download, streaming)
+├── schemas/             # Pydantic models (album, playlist, party, work, metadata, http_api)
 ├── fastmcp_setup.py     # Clean FastMCP initialization
 ├── server.py            # MCP server and tool registration
+├── http_api.py          # HTTP REST API route registration
 ├── resources/           # MCP resource handlers
 ├── tools/              # MCP tool implementations
 └── config.py           # Configuration management
@@ -646,11 +641,10 @@ def monitor_performance(operation_name):
 
 ### Planned Improvements
 
-1. **Service Layer**: Extract business logic from tools and resources
-2. **Event-Driven Architecture**: Asynchronous processing for long operations
-3. **Caching Layer**: Redis integration for frequently accessed data
-4. **Monitoring Dashboard**: Real-time performance and health monitoring
-5. **Multi-Region Support**: Global deployment with data replication
+1. **Event-Driven Architecture**: Asynchronous processing for long operations
+2. **Caching Layer**: Redis integration for frequently accessed data
+3. **Monitoring Dashboard**: Real-time performance and health monitoring
+4. **Multi-Region Support**: Global deployment with data replication
 
 ### Scalability Considerations
 

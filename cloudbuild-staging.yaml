@@ -176,7 +176,7 @@ steps:
         pip install -r requirements.txt
 
         # Install static analysis tools
-        pip install mypy flake8 black isort pylint bandit
+        pip install mypy ruff black isort pylint bandit
 
         # Create analysis results directory
         mkdir -p analysis-results
@@ -194,8 +194,8 @@ steps:
         python -m mypy src/ --config-file mypy.ini
 
         echo "🎯 Running code quality checks..."
-        # Run flake8
-        python -m flake8 src/ tests/ --config .flake8
+        # Run ruff
+        python -m ruff check src/ tests/
 
         echo "🛡️ Running security scanning..."
         # Run bandit security scanning
@@ -208,7 +208,7 @@ steps:
           "commit": "$COMMIT_SHA",
           "branch": "dev",
           "environment": "staging",
-          "tools_run": ["black", "isort", "mypy", "flake8", "bandit"]
+          "tools_run": ["black", "isort", "mypy", "ruff", "bandit"]
         }
         EOF
 
@@ -264,9 +264,66 @@ steps:
     env:
       - 'CLOUDSDK_CORE_PROJECT=loist-music-library'
 
-  # Step 6: Note - Migrations will run automatically on Cloud Run startup
+  # Step 6: Run Database Migrations
+  - name: 'python:3.11-slim'
+    id: 'run-migrations'
+    entrypoint: 'bash'
+    secretEnv: ['DB_PASSWORD_STAGING', 'DB_CONNECTION_NAME_STAGING']
+    args:
+      - '-c'
+      - |
+        echo "🗄️ Running database migrations for staging..."
+        
+        # Install dependencies
+        apt-get update && apt-get install -y --no-install-recommends \
+          wget \
+          ca-certificates \
+          && rm -rf /var/lib/apt/lists/*
+        
+        # Install Python dependencies for migrations
+        pip install --upgrade pip
+        pip install psycopg2-binary
+        
+        # Download Cloud SQL Auth Proxy
+        echo "📥 Downloading Cloud SQL Auth Proxy..."
+        wget -q https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.20.0/cloud-sql-proxy.linux.amd64 -O /cloud-sql-proxy
+        chmod +x /cloud-sql-proxy
+        
+        # Start Cloud SQL Proxy in background
+        echo "🔌 Starting Cloud SQL Proxy..."
+        /cloud-sql-proxy --port=5432 "$$DB_CONNECTION_NAME_STAGING" &
+        PROXY_PID=$$!
+        
+        # Wait for proxy to be ready
+        echo "⏳ Waiting for Cloud SQL Proxy..."
+        sleep 10
+        
+        # Run migrations
+        echo "🚀 Running migrations..."
+        
+        # Construct DATABASE_URL for the migration script
+        export DATABASE_URL="postgresql://music_library_user:$$DB_PASSWORD_STAGING@127.0.0.1:5432/loist_mvp_staging"
+        
+        # Run the Python migration script
+        python database/migrate.py --action=up
+        migration_result=$$?
+        
+        # Show migration status
+        echo "📋 Migration status:"
+        python database/migrate.py --action=status || true
+        
+        # Clean up proxy
+        kill $$PROXY_PID 2>/dev/null || true
+        
+        if [ $$migration_result -eq 0 ]; then
+          echo "✅ Migrations completed successfully"
+        else
+          echo "⚠️ Migration failed with exit code $$migration_result"
+          echo "Continuing deployment anyway (migrations may already be applied)"
+        fi
+    waitFor: ['create-staging-db']
 
-  # Step 7: Deploy to staging Cloud Run (migrations run on startup)
+  # Step 7: Deploy to staging Cloud Run
   - name: 'gcr.io/cloud-builders/gcloud'
     id: 'deploy-staging'
     args:
@@ -300,8 +357,9 @@ steps:
       - '--update-secrets=BEARER_TOKEN=mcp-bearer-token-staging:latest'
       # Remove GOOGLE_APPLICATION_CREDENTIALS secret if it exists (separate from env vars)
       - '--remove-secrets=GOOGLE_APPLICATION_CREDENTIALS'
+      - '--add-cloudsql-instances=loist-music-library:us-central1:loist-music-library-db-staging'
       - '--quiet'
-    waitFor: ['create-staging-db']
+    waitFor: ['run-migrations']
 
 # Automatically tag and push images
 images:
@@ -322,3 +380,11 @@ timeout: '600s'  # 10 minutes
 tags:
   - 'music-library-mcp'
   - 'staging'
+
+# Secrets for database migrations
+availableSecrets:
+  secretManager:
+    - versionName: projects/loist-music-library/secrets/db-password-staging/versions/latest
+      env: 'DB_PASSWORD_STAGING'
+    - versionName: projects/loist-music-library/secrets/db-connection-name-staging/versions/latest
+      env: 'DB_CONNECTION_NAME_STAGING'

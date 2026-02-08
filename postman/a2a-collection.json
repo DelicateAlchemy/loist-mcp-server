@@ -1,0 +1,598 @@
+{
+	"info": {
+		"_postman_id": "loist-music-library-a2a",
+		"name": "Loist Music Library A2A - Regression Suite",
+		"description": "Comprehensive Postman collection for testing A2A v0.3 endpoints. Includes agent discovery, JSON-RPC task operations, and negative test cases.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Agent Discovery",
+			"item": [
+				{
+					"name": "GET /.well-known/agent-card.json",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Agent Card returned 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response is valid JSON\", function () {",
+									"    pm.response.json();",
+									"});",
+									"",
+									"pm.test(\"Agent Card has required fields\", function () {",
+									"    const card = pm.response.json();",
+									"    ",
+									"    pm.expect(card.name).to.be.a('string').and.not.be.empty;",
+									"    pm.expect(card.description).to.be.a('string').and.not.be.empty;",
+									"    pm.expect(card.version).to.be.a('string');",
+									"    pm.expect(card.protocolVersion).to.equal('0.3.0');",
+									"    pm.expect(card.url).to.be.a('string').and.not.be.empty;",
+									"    pm.expect(card.skills).to.be.an('array').and.have.length.of.at.least(1);",
+									"});",
+									"",
+									"pm.test(\"Agent Card has expected skills\", function () {",
+									"    const card = pm.response.json();",
+									"    const skillIds = card.skills.map(skill => skill.id);",
+									"    ",
+									"    pm.expect(skillIds).to.include('process_audio_complete');",
+									"    pm.expect(skillIds).to.include('search_library');",
+									"    pm.expect(skillIds).to.include('get_audio_metadata');",
+									"    pm.expect(skillIds).to.include('update_metadata');",
+									"    pm.expect(skillIds).to.include('delete_audio');",
+									"    pm.expect(skillIds).to.include('get_embed_url');",
+									"});",
+									"",
+									"pm.test(\"Agent Card has valid capabilities\", function () {",
+									"    const card = pm.response.json();",
+									"    ",
+									"    pm.expect(card.capabilities).to.be.an('object');",
+									"    pm.expect(card.capabilities.streaming).to.be.a('boolean');",
+									"    pm.expect(card.capabilities.pushNotifications).to.be.a('boolean');",
+									"    pm.expect(card.capabilities.stateTransitionHistory).to.be.a('boolean');",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/.well-known/agent-card.json",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								".well-known",
+								"agent-card.json"
+							]
+						},
+						"description": "Retrieve the A2A v0.3 Agent Card for agent discovery and capability information."
+					},
+					"response": []
+				},
+				{
+					"name": "GET /.well-known/agent.json (deprecated)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Deprecated endpoint returns acceptable status\", function () {",
+									"    const status = pm.response.code;",
+									"    // Either 200 (supported) or 404 (not supported) is acceptable",
+									"    pm.expect([200, 404]).to.contain(status);",
+									"});",
+									"",
+									"if (pm.response.code === 200) {",
+									"    pm.test(\"Deprecated endpoint returns valid JSON when supported\", function () {",
+									"        pm.response.json();",
+									"    });",
+									"} else if (pm.response.code === 404) {",
+									"    pm.test(\"Deprecated endpoint correctly returns 404 when not supported\", function () {",
+									"        pm.expect(pm.response.code).to.equal(404);",
+									"    });",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/.well-known/agent.json",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								".well-known",
+								"agent.json"
+							]
+						},
+						"description": "Deprecated A2A agent discovery endpoint. May return 404 if not supported."
+					},
+					"response": []
+				}
+			],
+			"description": "Agent discovery endpoints for A2A v0.3 compliance"
+		},
+		{
+			"name": "JSON-RPC Tasks",
+			"item": [
+				{
+					"name": "POST / - message/send",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"message/send returned 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response is valid JSON\", function () {",
+									"    pm.response.json();",
+									"});",
+									"",
+									"pm.test(\"Response follows JSON-RPC 2.0\", function () {",
+									"    const response = pm.response.json();",
+									"    ",
+									"    pm.expect(response.jsonrpc).to.equal('2.0');",
+									"    pm.expect(response.id).to.exist;",
+									"    pm.expect(response.result).to.exist;",
+									"    pm.expect(response.error).to.be.undefined;",
+									"});",
+									"",
+									"pm.test(\"Task object has required fields\", function () {",
+									"    const response = pm.response.json();",
+									"    const task = response.result;",
+									"    ",
+									"    pm.expect(task.id).to.be.a('string').and.not.be.empty;",
+									"    pm.expect(task.status).to.be.an('object');",
+									"    pm.expect(task.status.state).to.be.a('string');",
+									"    pm.expect(['submitted', 'working', 'completed', 'failed']).to.include(task.status.state);",
+									"    // Task may or may not have createdAt depending on A2A SDK serialization
+    if (task.createdAt) {
+        pm.expect(task.createdAt).to.be.a('string');
+    }",
+									"});",
+									"",
+									"pm.test(\"Task starts in submitted state\", function () {",
+									"    const response = pm.response.json();",
+									"    const task = response.result;",
+									"    ",
+									"    pm.expect(task.status.state).to.equal('submitted');",
+									"});",
+									"",
+									"// Extract task_id for use in subsequent tasks/get requests",
+									"const response = pm.response.json();",
+									"if (response.result && response.result.id) {",
+									"    pm.collectionVariables.set('task_id', response.result.id);",
+									"    console.log('✅ Extracted task_id:', response.result.id);",
+									"} else {",
+									"    console.error('❌ Failed to extract task_id from response');",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": \"{{$randomUUID}}\",\n  \"method\": \"message/send\",\n  \"params\": {\n    \"message\": {\n      \"role\": \"user\",\n      \"parts\": [\n        {\n          \"type\": \"text\",\n          \"text\": \"Process: {{audio_url}}\"\n        }\n      ]\n    }\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								""
+							]
+						},
+						"description": "Create a new audio processing task via A2A message/send JSON-RPC method."
+					},
+					"response": []
+				},
+				{
+					"name": "POST / - tasks/get",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"tasks/get returned 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response is valid JSON\", function () {",
+									"    pm.response.json();",
+									"});",
+									"",
+									"pm.test(\"Response follows JSON-RPC 2.0\", function () {",
+									"    const response = pm.response.json();",
+									"    ",
+									"    pm.expect(response.jsonrpc).to.equal('2.0');",
+									"    pm.expect(response.id).to.exist;",
+									"    pm.expect(response.result).to.exist;",
+									"    pm.expect(response.error).to.be.undefined;",
+									"});",
+									"",
+									"pm.test(\"Task object has required fields\", function () {",
+									"    const response = pm.response.json();",
+									"    const task = response.result;",
+									"    ",
+									"    pm.expect(task.id).to.be.a('string').and.not.be.empty;",
+									"    pm.expect(task.status).to.be.an('object');",
+									"    pm.expect(task.status.state).to.be.a('string');",
+									"    pm.expect(['submitted', 'working', 'completed', 'failed']).to.include(task.status.state);",
+									"    // Task may or may not have createdAt depending on A2A SDK serialization
+    if (task.createdAt) {
+        pm.expect(task.createdAt).to.be.a('string');
+    }",
+									"});",
+									"",
+									"pm.test(\"Task shows state progression\", function () {",
+									"    const response = pm.response.json();",
+									"    const task = response.result;",
+									"    const state = task.status.state;",
+									"    ",
+									"    // Task should have progressed from initial 'submitted' state",
+									"    pm.expect(['working', 'completed', 'failed']).to.include(state);",
+									"    console.log('✅ Task state:', state);",
+									"});",
+									"",
+									"pm.test(\"Completed task has audio metadata\", function () {",
+									"    const response = pm.response.json();",
+									"    const task = response.result;",
+									"    ",
+									"    if (task.status.state === 'completed') {",
+									"        pm.expect(task.metadata).to.be.an('object');",
+									"        pm.expect(task.metadata.audio_track_id).to.be.a('string');",
+									"        pm.expect(task.metadata.processing_result).to.be.an('object');",
+									"        console.log('✅ Completed task has audio_track_id:', task.metadata.audio_track_id);",
+									"    }",
+									"});",
+									"",
+									"pm.test(\"Failed task has error information\", function () {",
+									"    const response = pm.response.json();",
+									"    const task = response.result;",
+									"    ",
+									"    if (task.status.state === 'failed') {",
+									"        pm.expect(task.metadata).to.be.an('object');",
+									"        pm.expect(task.metadata.error).to.be.an('object');",
+									"        pm.expect(task.metadata.error.message).to.be.a('string');",
+									"        console.log('✅ Failed task has error message:', task.metadata.error.message);",
+									"    }",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": \"{{$randomUUID}}\",\n  \"method\": \"tasks/get\",\n  \"params\": {\n    \"id\": \"{{task_id}}\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								""
+							]
+						},
+						"description": "Poll task status via A2A tasks/get JSON-RPC method using task_id from previous tasks/send response."
+					},
+					"response": []
+				}
+			],
+			"description": "JSON-RPC task operations for A2A workflow (send task, get task status)"
+		},
+		{
+			"name": "Negative Test Cases",
+			"item": [
+				{
+					"name": "POST / - Invalid Params",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Invalid params returned 200 with error\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response is valid JSON\", function () {",
+									"    pm.response.json();",
+									"});",
+									"",
+									"pm.test(\"Response is JSON-RPC error object\", function () {",
+									"    const response = pm.response.json();",
+									"    ",
+									"    pm.expect(response.jsonrpc).to.equal('2.0');",
+									"    pm.expect(response.id).to.exist;",
+									"    pm.expect(response.error).to.be.an('object');",
+									"    pm.expect(response.result).to.be.undefined;",
+									"});",
+									"",
+									"pm.test(\"Error has required fields\", function () {",
+									"    const response = pm.response.json();",
+									"    const error = response.error;",
+									"    ",
+									"    pm.expect(error.code).to.be.a('number');",
+									"    pm.expect(error.message).to.be.a('string').and.not.be.empty;",
+									"});",
+									"",
+									"pm.test(\"Error indicates invalid params\", function () {",
+									"    const response = pm.response.json();",
+									"    const error = response.error;",
+									"    ",
+									"    // Server returns -32603 (Internal error) for validation errors",
+									"    pm.expect(error.code).to.equal(-32603);",
+									"    console.log('✅ Error code:', error.code, 'message:', error.message);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": \"{{$randomUUID}}\",\n  \"method\": \"message/send\",\n  \"params\": {}\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								""
+							]
+						},
+						"description": "Test message/send with missing required 'message' parameter. Should return JSON-RPC error object."
+					},
+					"response": []
+				},
+				{
+					"name": "POST / - Unknown Method",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Unknown method returned 200 with error\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response is valid JSON\", function () {",
+									"    pm.response.json();",
+									"});",
+									"",
+									"pm.test(\"Response is JSON-RPC error object\", function () {",
+									"    const response = pm.response.json();",
+									"    ",
+									"    pm.expect(response.jsonrpc).to.equal('2.0');",
+									"    pm.expect(response.id).to.exist;",
+									"    pm.expect(response.error).to.be.an('object');",
+									"    pm.expect(response.result).to.be.undefined;",
+									"});",
+									"",
+									"pm.test(\"Error has required fields\", function () {",
+									"    const response = pm.response.json();",
+									"    const error = response.error;",
+									"    ",
+									"    pm.expect(error.code).to.be.a('number');",
+									"    pm.expect(error.message).to.be.a('string').and.not.be.empty;",
+									"});",
+									"",
+									"pm.test(\"Error indicates method not found\", function () {",
+									"    const response = pm.response.json();",
+									"    const error = response.error;",
+									"    ",
+									"    // -32601 is Method not found error code in JSON-RPC 2.0",
+									"    pm.expect(error.code).to.equal(-32601);",
+									"    console.log('✅ Error code:', error.code, 'message:', error.message);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": \"{{$randomUUID}}\",\n  \"method\": \"tasks/nonexistent\",\n  \"params\": {}\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								""
+							]
+						},
+						"description": "Test with unknown JSON-RPC method. Should return JSON-RPC error object with method not found."
+					},
+					"response": []
+				},
+				{
+					"name": "POST / - Task Not Found",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Task not found returned 200 with error\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response is valid JSON\", function () {",
+									"    pm.response.json();",
+									"});",
+									"",
+									"pm.test(\"Response is JSON-RPC error object\", function () {",
+									"    const response = pm.response.json();",
+									"    ",
+									"    pm.expect(response.jsonrpc).to.equal('2.0');",
+									"    pm.expect(response.id).to.exist;",
+									"    pm.expect(response.error).to.be.an('object');",
+									"    pm.expect(response.result).to.be.undefined;",
+									"});",
+									"",
+									"pm.test(\"Error has required fields\", function () {",
+									"    const response = pm.response.json();",
+									"    const error = response.error;",
+									"    ",
+									"    pm.expect(error.code).to.be.a('number');",
+									"    pm.expect(error.message).to.be.a('string').and.not.be.empty;",
+									"});",
+									"",
+									"pm.test(\"Error indicates task not found\", function () {",
+									"    const response = pm.response.json();",
+									"    const error = response.error;",
+									"    ",
+									"    // Application-specific error code for task not found",
+									"    pm.expect(error.code).to.be.a('number');",
+									"    pm.expect(error.message).to.match(/(not found|not exist)/i);",
+									"    console.log('✅ Error code:', error.code, 'message:', error.message);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": \"{{$randomUUID}}\",\n  \"method\": \"tasks/get\",\n  \"params\": {\n    \"id\": \"nonexistent-task-id\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								""
+							]
+						},
+						"description": "Test tasks/get with non-existent task ID. Should return JSON-RPC error object."
+					},
+					"response": []
+				}
+			],
+			"description": "Negative test cases that should return JSON-RPC error objects (invalid params, unknown method, task not found)"
+		}
+	],
+	"event": [],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8081",
+			"type": "string",
+			"description": "Base URL for A2A server (port 8081 for A2A vs 8080 for MCP)"
+		},
+		{
+			"key": "task_id",
+			"value": "",
+			"type": "string",
+			"description": "Task ID extracted from tasks/send response for use in tasks/get requests"
+		},
+		{
+			"key": "audio_url",
+			"value": "https://www.learningcontainer.com/wp-content/uploads/2020/02/Kalimba.mp3",
+			"type": "string",
+			"description": "Permanent test audio URL for processing requests (Kalimba sample - reliable, doesn't expire)"
+		}
+	]
+}

@@ -1,0 +1,290 @@
+# Testing Workflow Rules
+
+**Critical rules for AI agents writing and running tests in this codebase.**
+
+## Test Execution Environment
+
+### ALWAYS Use Docker for Test Execution
+
+**For all testing, ALWAYS run pytest inside the Docker container**:
+```bash
+# Start services
+docker-compose up -d
+
+# Run tests inside container
+docker-compose exec mcp-server pytest tests/ -v
+```
+
+**NEVER use a local venv for testing**:
+- The local venv is outdated and has incorrect dependencies
+- Docker container has all dependencies properly configured
+- `PYTHONPATH=/app` is set correctly in Docker
+
+### Quick Commands
+
+```bash
+# All tests
+docker-compose exec mcp-server pytest tests/ -v
+
+# Unit tests only
+docker-compose exec mcp-server pytest tests/ -m unit -v
+
+# Specific test file
+docker-compose exec mcp-server pytest tests/test_exceptions.py -v
+
+# With coverage
+docker-compose exec mcp-server pytest tests/ --cov=src --cov-report=term-missing -v
+
+# Collect only (verify imports work)
+docker-compose exec mcp-server pytest tests/ --collect-only
+```
+
+## Writing Tests
+
+### Test File Location
+
+- **ALL tests go in `tests/` directory** - never in `src/` or project root
+- **Unit tests**: `tests/unit/test_*.py` (fast, isolated, no external dependencies)
+- **Integration tests**: `tests/integration/test_*.py` (component interactions)
+- **General tests**: `tests/test_*.py` (mixed categories)
+
+### Import Style (CRITICAL)
+
+**ALWAYS use standard imports from the `src` package**:
+
+```python
+# ✅ DO: Standard imports (PYTHONPATH=/app makes these work)
+from src.exceptions import MusicLibraryError, ValidationError
+from src.server import mcp
+from src.config import Config
+
+# ❌ DON'T: sys.path manipulation (breaks import resolution)
+import sys
+sys.path.insert(0, 'src')
+from server import mcp  # WRONG
+
+# ❌ DON'T: Relative imports from non-package directories
+from ..src.config import Config  # WRONG
+```
+
+### Test Structure Template
+
+```python
+"""Test module for [feature].
+
+Tests should be placed in the tests/ directory, not in src/ or project root.
+"""
+import pytest
+from unittest.mock import Mock, patch
+
+# Standard imports from src package
+from src.exceptions import ValidationError
+from src.services.metadata_service import MetadataService
+
+
+class TestFeatureName:
+    """Tests for [feature]."""
+    
+    def test_expected_behavior(self):
+        """Test that [expected behavior] works."""
+        # Arrange
+        input_data = {"key": "value"}
+        
+        # Act
+        result = function_under_test(input_data)
+        
+        # Assert
+        assert result is not None
+    
+    def test_error_handling(self):
+        """Test that errors are handled correctly."""
+        with pytest.raises(ValidationError):
+            function_under_test(invalid_input)
+
+
+# Async test pattern
+@pytest.mark.asyncio
+async def test_async_functionality():
+    """Test async functionality."""
+    result = await async_function()
+    assert result is not None
+```
+
+### Test Markers (Auto-Assigned)
+
+**DON'T manually add markers** - `conftest.py` auto-assigns based on:
+- **File path patterns**: Database tests (`test_database_*.py`, `test_*_integration.py`)
+- **Function name patterns**: GCS tests (functions with `gcs` in name)
+- **Patterns**: Slow tests (functions with `performance`, `stress`, `load` in name)
+
+**DO use markers** for explicit categorization when needed:
+- `@pytest.mark.unit` - Fast, isolated tests
+- `@pytest.mark.integration` - Component interaction tests
+- `@pytest.mark.slow` - Long-running tests (>1 second)
+- `@pytest.mark.requires_db` - Tests requiring database (auto-assigned)
+- `@pytest.mark.requires_gcs` - Tests requiring GCS (auto-assigned)
+
+## Configuration
+
+### Single Source of Truth: `pyproject.toml`
+
+All pytest configuration is in `pyproject.toml` (NOT `pytest.ini`):
+
+```toml
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+pythonpath = ["."]  # Single dot, array format for importlib mode
+addopts = "-v --tb=short --strict-markers --disable-warnings --import-mode=importlib"
+asyncio_mode = "auto"
+```
+
+**Key settings**:
+- `pythonpath = ["."]` - Array format required for `--import-mode=importlib`
+- `testpaths = ["tests"]` - Tests only from tests/ directory
+- `--import-mode=importlib` - Modern import mode (PEP 451)
+
+### Docker Environment
+
+Docker services set `PYTHONPATH=/app`:
+- **NEVER** use `PYTHONPATH=/app/src:/app` (breaks package resolution)
+- **NEVER** add `/app/src` separately (causes double imports)
+- The `src` directory is a package, accessed as `from src.module import ...`
+
+## Database Tests
+
+**REQUIREMENTS**:
+- Docker Compose services running: `docker-compose up -d`
+- Tests automatically connect to PostgreSQL service
+
+**PATTERNS**:
+```python
+@pytest.fixture
+def db_pool():
+    """Fixture to create a test database pool."""
+    if not is_db_configured():
+        pytest.skip("Database not configured")
+    # ... create pool ...
+    yield pool
+    # ... cleanup ...
+```
+
+## Troubleshooting
+
+### Import Errors
+
+**Problem**: `ModuleNotFoundError` when running tests
+
+**Solutions**:
+1. Verify you're running in Docker: `docker-compose exec mcp-server pytest ...`
+2. Check container is healthy: `docker-compose ps`
+3. Rebuild container if needed: `docker-compose up -d --build`
+4. Verify imports work: `docker-compose exec mcp-server python -c "from src.server import mcp"`
+
+### Circular Import Errors
+
+**Problem**: `ImportError: cannot import name 'X' from partially initialized module`
+
+**Cause**: Usually a module name conflict (e.g., `src/exceptions.py` AND `src/exceptions/`)
+
+**Solutions**:
+1. Check for file/package name conflicts in `src/`
+2. Ensure no `sys.path` manipulation in the failing module
+3. Use `--import-mode=importlib` (already configured in pyproject.toml)
+
+### Container Restart Loop
+
+**Problem**: mcp-server container keeps restarting
+
+**Solutions**:
+1. Check logs: `docker-compose logs mcp-server`
+2. Rebuild after code changes: `docker-compose up -d --build`
+3. Verify healthcheck passes: 
+   ```bash
+   docker-compose exec mcp-server python -c "from src.server import mcp; print('OK')"
+   ```
+
+### Tests Not Collected
+
+**Problem**: `pytest tests/ --collect-only` shows 0 items
+
+**Solutions**:
+1. Check test files are in `tests/` directory (not root or src/)
+2. Check test file names match `test_*.py`
+3. Check test function names match `test_*`
+4. Verify tests directory is mounted: `docker-compose exec mcp-server ls tests/`
+
+## Common Anti-Patterns to Avoid
+
+### ❌ DON'T: sys.path Manipulation
+
+```python
+# ❌ NEVER do this
+import sys
+import os
+sys.path.insert(0, os.path.dirname(__file__))
+sys.path.append('/app/src')
+```
+
+### ❌ DON'T: Put Tests in Wrong Locations
+
+```python
+# ❌ WRONG: Tests in src/
+src/test_my_feature.py
+
+# ❌ WRONG: Tests in project root
+test_my_feature.py
+
+# ✅ CORRECT: Tests in tests/
+tests/test_my_feature.py
+tests/unit/test_my_feature.py
+```
+
+### ❌ DON'T: Use Local venv
+
+```bash
+# ❌ WRONG: Using local venv
+source venv/bin/activate
+pytest tests/ -v
+
+# ✅ CORRECT: Using Docker
+docker-compose exec mcp-server pytest tests/ -v
+```
+
+### ❌ DON'T: Hardcode PYTHONPATH in Test Files
+
+```python
+# ❌ NEVER do this
+import os
+os.environ['PYTHONPATH'] = '/app/src:/app'
+```
+
+## Quick Reference
+
+```bash
+# Start services
+docker-compose up -d
+
+# Run all tests
+docker-compose exec mcp-server pytest tests/ -v
+
+# Run unit tests only
+docker-compose exec mcp-server pytest tests/ -m unit -v
+
+# Run with coverage
+docker-compose exec mcp-server pytest tests/ --cov=src --cov-report=html -v
+
+# Check container health
+docker-compose ps
+docker-compose logs mcp-server
+
+# Rebuild after changes
+docker-compose up -d --build
+```
+
+---
+
+**Remember**: Tests run **inside Docker**, always import from `src.*`, never manipulate `sys.path`.

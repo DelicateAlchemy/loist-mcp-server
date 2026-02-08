@@ -8,9 +8,6 @@ import os
 import json
 from pathlib import Path
 
-# Add src to path
-sys.path.insert(0, 'src')
-
 from src.tools.process_audio import process_audio_complete_sync
 
 def test_mp3_blob_url():
