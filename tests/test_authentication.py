@@ -344,11 +344,35 @@ class TestConfigurationValidation:
     def test_gcs_not_configured_without_env(self):
         """Test is_gcs_configured returns False without environment."""
         from src.config import ServerConfig
-        
+
         config = ServerConfig()
-        
+
         # Should not be configured without environment variables
         assert config.is_gcs_configured is False
+
+    @patch.dict(os.environ, {
+        'GCS_BUCKET_NAME': 'test-bucket',
+        'GCS_PROJECT_ID': 'test-project',
+        'K_SERVICE': 'loist-mcp',  # Cloud Run sets this; no key file needed
+    }, clear=True)
+    def test_gcs_configured_on_cloud_run_via_managed_identity(self):
+        """Cloud Run ADC (no GOOGLE_APPLICATION_CREDENTIALS) must be accepted."""
+        from src.config import ServerConfig
+
+        config = ServerConfig()
+        assert config.is_gcs_configured is True
+
+    @patch.dict(os.environ, {
+        'GCS_BUCKET_NAME': 'test-bucket',
+        'GCS_PROJECT_ID': 'test-project',
+        'GAE_SERVICE': 'default',  # App Engine managed identity
+    }, clear=True)
+    def test_gcs_configured_on_app_engine_via_managed_identity(self):
+        """App Engine ADC must also be accepted."""
+        from src.config import ServerConfig
+
+        config = ServerConfig()
+        assert config.is_gcs_configured is True
 
 
 if __name__ == "__main__":
