@@ -77,6 +77,7 @@ redirects to short-lived signed Google Cloud Storage URLs — just follow them
 | `INVALID_QUERY` | 400 | Bad search parameters (missing/empty `q`, limit out of range) |
 | `UNAUTHORIZED` | 401 | Missing/invalid bearer token (once auth is enabled) |
 | `TRACK_NOT_FOUND` | 404 | No track with that ID |
+| `RESOURCE_NOT_FOUND` | 404 | No party/work with that ID (publishing endpoints) |
 | `CONVERSION_FAILED` | 500 | Audio format conversion failed |
 | `SEARCH_FAILED` | 500 | Search backend error |
 | `INTERNAL_ERROR` | 500 | Anything else unexpected |
@@ -155,6 +156,54 @@ inside search results.
 }
 ```
 
+### Party
+
+A person or organization involved in publishing: writer, publisher, artist,
+or label. Returned by the `/api/v1/parties/*` endpoints; `GET` by ID also
+includes an involvement summary (works written/published, recordings).
+
+```jsonc
+{
+  "success": true,
+  "id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "name": "John Lennon",
+  "party_type": "person",              // "person" | "organization"
+  "legal_name": "John Winston Ono Lennon",  // nullable
+  "ipi_cae_number": null,              // CAE/IPI identifier, nullable
+  "isni": null,                        // ISNI identifier, nullable
+  "society_affiliation": "PRS",        // PRO affiliation, nullable
+  "email": null,                       // nullable
+  "notes": null                        // nullable
+}
+```
+
+### Work
+
+A musical composition (distinct from a recording/track). `GET` by ID returns
+the work with its writers, publishers, alternative titles, linked recordings,
+and split warnings (e.g. splits that don't sum to 100%).
+
+```jsonc
+{
+  "success": true,
+  "id": "9b2f3c44-1d26-4b5a-8f0e-2a7d93c1e001",
+  "title": "Imagine",
+  "iswc": "T-010.140.236-1",           // nullable
+  "language": "en",                    // ISO 639-1, nullable
+  "status": "draft",                   // workflow status
+  "writers": [
+    {
+      "party_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+      "split_percentage": 100.0,       // nullable
+      "split_status": "confirmed"      // "proposed" | "confirmed" | "disputed" | "unknown"
+    }
+  ],
+  "publishers": [ /* same shape as writers */ ],
+  "recordings": [ /* linked tracks */ ],
+  "warnings": []                       // split-validation warnings
+}
+```
+
 ## 6. Endpoints
 
 ### `GET /api/v1/tracks/{audioId}`
@@ -188,6 +237,43 @@ pending state. Errors: `CONVERSION_FAILED` (500), `CONVERSION_TIMEOUT` (504).
 Deletes the track and its stored files. `204` on success, `404` if unknown.
 **Irreversible — wireframes should include a confirm step.**
 
+### Publishing: parties & works
+
+All under the same auth boundary and error envelope as the track endpoints.
+
+#### `POST /api/v1/parties`
+Create a party. Body: `{"name": "..."}` (required) plus any optional Party
+fields above. Returns the created Party with `201`.
+
+#### `GET /api/v1/parties/search?q=lennon&limit=20&offset=0`
+Search parties by name. Same pagination shape as library search (`results` /
+`total` / `has_more`), but note `total` reflects the returned page and
+`has_more` is estimated from page size — there is no exact global count yet.
+
+#### `GET /api/v1/parties/{partyId}`
+Party detail with involvement summary. `404 RESOURCE_NOT_FOUND` if unknown.
+
+#### `GET /api/v1/works/search?q=imagine&limit=20&offset=0`
+Search works by title. Same pagination caveat as party search.
+
+#### `GET /api/v1/works/{workId}`
+Work detail — the full Work entity above, including writers, publishers,
+recordings, and split warnings.
+
+#### `PUT /api/v1/works/{workId}/writers`
+**Batch replace** of all writers on the work (not a partial update — send the
+complete list). Body:
+`{"writers": [{"party_id": "...", "split_percentage": 50.0, "split_status": "confirmed", "notes": null}]}`.
+Returns `{"success": true, "work_id": "...", "replaced_count": 2}`.
+
+#### `PUT /api/v1/works/{workId}/publishers`
+Same contract as `/writers`, with a `"publishers"` array.
+
+#### `POST /api/v1/tracks/{audioId}/artists`
+Link a party as an artist on a recording. Body:
+`{"party_id": "...", "is_primary": true, "notes": null}` (`party_id`
+required). Returns the created link with `201`.
+
 ## 7. Embed player (separate from the REST API)
 
 Each track has a hosted embed player at `url_embed_link`
@@ -205,6 +291,8 @@ Available via REST **today** — safe to wireframe against:
 - In-browser playback (stream endpoint) and embeds
 - Download in multiple formats
 - Delete track
+- Publishing data: parties and works (search, detail, writer/publisher
+  splits, artist↔recording links) — see the Publishing endpoints above
 
 **Coming to the REST API** (status per `docs/rest-api-expansion-plan.md`;
 flag wireframes that depend on these so backend work can be sequenced):
@@ -212,9 +300,6 @@ flag wireframes that depend on these so backend work can be sequenced):
 - Upload / ingestion — genuinely missing; will be a GCS signed-URL flow with
   async processing + job polling (LOI-45). Design for a pending state.
 - Metadata editing — `PATCH /api/v1/tracks/{audioId}` planned (LOI-46).
-- Parties (people/organizations) and Works (compositions, writers/publishers,
-  artist↔recording links) — REST routes already exist on `origin/dev`; being
-  brought under `/api/v1` + this guide's conventions (LOI-44).
 - Albums & playlists — full REST surface exists on `main` (not yet on `dev`);
   landing via LOI-43/LOI-47.
 - Player/waveform data as JSON — decided with the embed rework
@@ -225,6 +310,10 @@ discovery done yet).
 
 ## 9. Changelog
 
+- **July 2026 (LOI-44):** Publishing endpoints (parties, works,
+  writer/publisher splits, artist links) moved from `/api/*` to `/api/v1/*`
+  and converted to the standard error envelope. `PUT` added to CORS allowed
+  methods. Parties/works documented in this guide.
 - **July 2026 (LOI-38):** All endpoints moved from `/api/*` to `/api/v1/*`
   (clean cutover — old paths now 404). Error envelope standardized. CORS fixed
   and verified for browser use. Bearer-token auth scaffolded (off by default).
