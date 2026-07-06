@@ -53,7 +53,9 @@ class _SignedURLCache:
                 expiration_minutes=url_expiration_minutes
             )
             
-            cache_ttl = url_expiration_minutes * 60 * 0.9
+            # Cache for 90% of the URL lifetime so we never serve an expired
+            # URL, capped by the configured default TTL.
+            cache_ttl = min(url_expiration_minutes * 60 * 0.9, self.default_ttl)
             self.cache[gcs_path] = signed_url
             self.expiry[gcs_path] = current_time + cache_ttl
             
