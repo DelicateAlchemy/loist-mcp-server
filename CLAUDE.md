@@ -76,3 +76,9 @@ Markers (auto-assigned via root `conftest.py`): `unit`, `requires_db`, `requires
 - Imports: `from src.module import ...` (not bare `from module`).
 - Config: all settings in `src/config.py` via `pydantic_settings.BaseSettings`.
 - Database: raw SQL in `database/operations.py`, migrations in `database/migrations/`.
+
+## Branching
+
+- `dev` is the integration branch: all feature branches are cut from `origin/dev` and PR back into `dev`. Staging deploys track `dev`.
+- `main` is the release branch: it only receives merges **from** `dev` (release promotion). Never commit or merge features directly to `main` — that caused a months-long main/dev divergence (LOI-43).
+- Always `git fetch origin` and branch from `origin/dev`, not a local `dev`, which may be stale.

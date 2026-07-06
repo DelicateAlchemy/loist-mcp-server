@@ -10,6 +10,9 @@ from typing import Dict, Any
 import re
 import json
 
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).parent.parent.parent))
 from database import get_audio_metadata_by_id
 from src.exceptions import ResourceNotFoundError, ValidationError
 
