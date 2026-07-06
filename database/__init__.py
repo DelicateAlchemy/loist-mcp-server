@@ -32,6 +32,18 @@ from .operations import (
     mark_as_processing,
     delete_audio_track,
     update_audio_metadata,
+    # Song Publishing Operations
+    create_party,
+    get_party_by_id,
+    search_parties,
+    create_work,
+    get_work_by_id,
+    search_works,
+    replace_work_writers,
+    replace_work_publishers,
+    calculate_split_warnings,
+    link_artist_to_recording,
+    unlink_artist_from_recording,
 )
 from .utils import check_database_availability
 
@@ -60,5 +72,17 @@ __all__ = [
     "mark_as_processing",
     "delete_audio_track",
     "update_audio_metadata",
+    # Song Publishing Operations
+    "create_party",
+    "get_party_by_id",
+    "search_parties",
+    "create_work",
+    "get_work_by_id",
+    "search_works",
+    "replace_work_writers",
+    "replace_work_publishers",
+    "calculate_split_warnings",
+    "link_artist_to_recording",
+    "unlink_artist_from_recording",
 ]
 

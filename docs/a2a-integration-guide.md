@@ -18,7 +18,7 @@ The Loist Music Library A2A service enables other AI agents to discover and inte
 All A2A integration starts with discovering the agent's capabilities through the standard discovery endpoint:
 
 ```bash
-curl https://a2a-staging-{PROJECT_ID}.us-central1.run.app/.well-known/agent-card.json
+curl https://a2a-staging-7de5nxpr4q-uc.a.run.app/.well-known/agent-card.json
 ```
 
 **Response Format**:
@@ -28,10 +28,10 @@ curl https://a2a-staging-{PROJECT_ID}.us-central1.run.app/.well-known/agent-card
   "description": "Audio processing and metadata extraction service",
   "version": "1.0.0",
   "protocolVersion": "0.3.0",
-  "url": "https://a2a-staging-{PROJECT_ID}.us-central1.run.app",
+  "url": "https://a2a-staging-7de5nxpr4q-uc.a.run.app",
   "capabilities": {
-    "streaming": false,
-    "pushNotifications": false,
+    "streaming": true,
+    "pushNotifications": true,
     "stateTransitionHistory": true
   },
   "defaultInputModes": ["application/json", "text/plain"],
@@ -88,16 +88,18 @@ curl https://a2a-staging-{PROJECT_ID}.us-central1.run.app/.well-known/agent-card
 ## Environment Endpoints
 
 ### Staging Environment
-- **URL**: `https://a2a-staging-{PROJECT_ID}.us-central1.run.app`
+- **URL**: `https://a2a-staging-7de5nxpr4q-uc.a.run.app`
 - **Purpose**: Integration testing and QA
 - **Features**: All capabilities available
 - **Auto-deploy**: Triggered by pushes to `dev` branch
+- **Status**: ✅ Deployed and operational
 
 ### Production Environment
-- **URL**: `https://a2a-prod-{PROJECT_ID}.us-central1.run.app`
+- **URL**: `https://a2a-prod-{PROJECT_ID}.us-central1.run.app` (not yet deployed)
 - **Purpose**: Live production usage
 - **Features**: All capabilities available
 - **Auto-deploy**: Triggered by pushes to `main` branch
+- **Status**: ⚠️ Not yet deployed (trigger configured, awaiting first push to `main`)
 
 ## Authentication
 
@@ -106,7 +108,7 @@ curl https://a2a-staging-{PROJECT_ID}.us-central1.run.app/.well-known/agent-card
 When authentication is enabled in future releases:
 ```bash
 curl -H "Authorization: Bearer your-token-here" \
-  https://a2a-staging-{PROJECT_ID}.us-central1.run.app/.well-known/agent-card.json
+  https://a2a-staging-7de5nxpr4q-uc.a.run.app/.well-known/agent-card.json
 ```
 
 ## JSON-RPC API
@@ -126,7 +128,7 @@ Accept: application/json
 Submit audio processing tasks using the `message/send` method (note: this is `message/send`, not `tasks/send`):
 
 ```bash
-curl -X POST https://a2a-staging-{PROJECT_ID}.us-central1.run.app/ \
+curl -X POST https://a2a-staging-7de5nxpr4q-uc.a.run.app/ \
   -H "Content-Type: application/json" \
   -H "Accept: application/json" \
   -d '{
@@ -168,7 +170,7 @@ curl -X POST https://a2a-staging-{PROJECT_ID}.us-central1.run.app/ \
 Check task progress using the `tasks/get` method:
 
 ```bash
-curl -X POST https://a2a-staging-{PROJECT_ID}.us-central1.run.app/ \
+curl -X POST https://a2a-staging-7de5nxpr4q-uc.a.run.app/ \
   -H "Content-Type: application/json" \
   -H "Accept: application/json" \
   -d '{
@@ -176,7 +178,7 @@ curl -X POST https://a2a-staging-{PROJECT_ID}.us-central1.run.app/ \
     "id": "req-456",
     "method": "tasks/get",
     "params": {
-      "taskId": "task-uuid-here"
+      "id": "task-uuid-here"
     }
   }'
 ```
@@ -287,7 +289,7 @@ Processing failures include detailed error information:
 
 ```bash
 # Get agent capabilities
-AGENT_CARD=$(curl -s https://a2a-staging-{PROJECT_ID}.us-central1.run.app/.well-known/agent-card.json)
+AGENT_CARD=$(curl -s https://a2a-staging-7de5nxpr4q-uc.a.run.app/.well-known/agent-card.json)
 
 # Verify required skills are available
 echo $AGENT_CARD | jq '.skills[].id'
@@ -297,7 +299,7 @@ echo $AGENT_CARD | jq '.skills[].id'
 
 ```bash
 # Submit audio URL for processing
-RESPONSE=$(curl -s -X POST https://a2a-staging-{PROJECT_ID}.us-central1.run.app/ \
+RESPONSE=$(curl -s -X POST https://a2a-staging-7de5nxpr4q-uc.a.run.app/ \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -325,13 +327,13 @@ TASK_ID=$(echo $RESPONSE | jq -r '.result.id')
 ```bash
 # Poll until completion (with exponential backoff)
 while true; do
-  STATUS=$(curl -s -X POST https://a2a-staging-{PROJECT_ID}.us-central1.run.app/ \
+  STATUS=$(curl -s -X POST https://a2a-staging-7de5nxpr4q-uc.a.run.app/ \
     -H "Content-Type: application/json" \
     -d "{
       \"jsonrpc\": \"2.0\",
       \"id\": \"status-001\",
       \"method\": \"tasks/get\",
-      \"params\": {\"taskId\": \"$TASK_ID\"}
+      \"params\": {\"id\": \"$TASK_ID\"}
     }")
 
   STATE=$(echo $STATUS | jq -r '.result.status.state')
@@ -424,13 +426,13 @@ curl: (6) Could not resolve host
 **Debugging**:
 ```bash
 # Check detailed error in task metadata
-curl -X POST https://a2a-staging-{PROJECT_ID}.us-central1.run.app/ \
+curl -X POST https://a2a-staging-7de5nxpr4q-uc.a.run.app/ \
   -H "Content-Type: application/json" \
   -d "{
     \"jsonrpc\": \"2.0\",
     \"id\": \"debug\",
     \"method\": \"tasks/get\",
-    \"params\": {\"taskId\": \"$TASK_ID\"}
+    \"params\": {\"id\": \"$TASK_ID\"}
   }" | jq '.result.metadata.error'
 ```
 

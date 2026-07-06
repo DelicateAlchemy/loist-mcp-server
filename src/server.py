@@ -1648,6 +1648,362 @@ async def list_embed_templates() -> dict:
             "message": "Failed to retrieve template information"
         }
 
+# ============================================================================
+# Song Publishing Tools (SP-4)
+# ============================================================================
+
+
+@mcp.tool()
+async def create_party(name: str, party_type: str = "person", legal_name: str = None,
+                       ipi_cae_number: str = None, isni: str = None,
+                       society_affiliation: str = None, email: str = None,
+                       notes: str = None) -> dict:
+    """
+    Create a new party (person or organization) for song publishing.
+
+    A party represents a writer, publisher, artist, or label involved in
+    music rights. Creating a party is the first step before assigning them
+    as writers or publishers on a work.
+
+    Args:
+        name: Display name for the party (required)
+        party_type: Type of party - "person" or "organization" (default: "person")
+        legal_name: Legal/contract name if different from display name
+        ipi_cae_number: CAE/IPI number (unique identifier for collecting societies)
+        isni: ISNI (International Standard Name Identifier)
+        society_affiliation: PRO affiliation (e.g., ASCAP, BMI, PRS)
+        email: Contact email address
+        notes: Freeform notes about this party
+
+    Returns:
+        dict: Created party with id, name, party_type, and timestamps
+
+    Example:
+        >>> result = await create_party(
+        ...     name="John Lennon",
+        ...     party_type="person",
+        ...     ipi_cae_number="00000000297",
+        ...     society_affiliation="PRS"
+        ... )
+        >>> print(result["id"])
+        "550e8400-e29b-41d4-a716-446655440000"
+    """
+    from src.error_utils import handle_tool_error
+    from src.services.party_service import create_party as create_party_func
+
+    try:
+        party_data = {"name": name, "party_type": party_type}
+        if legal_name is not None:
+            party_data["legal_name"] = legal_name
+        if ipi_cae_number is not None:
+            party_data["ipi_cae_number"] = ipi_cae_number
+        if isni is not None:
+            party_data["isni"] = isni
+        if society_affiliation is not None:
+            party_data["society_affiliation"] = society_affiliation
+        if email is not None:
+            party_data["email"] = email
+        if notes is not None:
+            party_data["notes"] = notes
+
+        result = await create_party_func(party_data)
+        return {"success": True, **result}
+    except Exception as e:
+        error_response = handle_tool_error(e, "create_party")
+        logger.error(f"Create party failed: {error_response}")
+        return error_response
+
+
+@mcp.tool()
+async def search_parties(query: str, limit: int = 20, offset: int = 0) -> dict:
+    """
+    Search for parties (writers, publishers, artists) by name.
+
+    Uses case-insensitive partial matching (ILIKE) to find parties.
+    Search before creating a new party to avoid duplicates.
+
+    Args:
+        query: Search string to match against party names (1-500 characters)
+        limit: Maximum results to return (1-100, default: 20)
+        offset: Number of results to skip for pagination (default: 0)
+
+    Returns:
+        dict: Search results with pagination info:
+            - results: List of matching parties
+            - total: Number of results returned
+            - limit: Requested limit
+            - offset: Requested offset
+            - has_more: Whether more results may exist
+
+    Example:
+        >>> result = await search_parties(query="lennon", limit=10)
+        >>> print(f"Found {result['total']} results")
+    """
+    from src.error_utils import handle_tool_error
+    from src.services.party_service import search_parties as search_parties_func
+
+    try:
+        result = await search_parties_func(query, limit=limit, offset=offset)
+        return {"success": True, **result}
+    except Exception as e:
+        error_response = handle_tool_error(e, "search_parties")
+        logger.error(f"Search parties failed for query '{query}': {error_response}")
+        return error_response
+
+
+@mcp.tool()
+async def get_party(party_id: str) -> dict:
+    """
+    Get detailed information about a party including their involvement.
+
+    Returns the party's profile data plus a summary of all works they are
+    involved in as a writer, publisher, or recording artist.
+
+    Args:
+        party_id: UUID of the party to retrieve
+
+    Returns:
+        dict: Party details including:
+            - id, name, party_type, legal_name, ipi_cae_number, isni
+            - society_affiliation, email, notes
+            - involvement: works as writer, publisher, and recordings as artist
+
+    Example:
+        >>> result = await get_party(party_id="550e8400-e29b-41d4-a716-446655440000")
+        >>> print(result["name"])
+        "John Lennon"
+    """
+    from src.error_utils import handle_tool_error
+    from src.services.party_service import get_party as get_party_func
+
+    try:
+        result = await get_party_func(party_id)
+        return {"success": True, **result}
+    except Exception as e:
+        error_response = handle_tool_error(e, "get_party")
+        logger.error(f"Get party failed for {party_id}: {error_response}")
+        return error_response
+
+
+@mcp.tool()
+async def get_work(work_id: str) -> dict:
+    """
+    Get detailed information about a work (composition) with all relations.
+
+    Returns the work's metadata plus all writers, publishers, alternative titles,
+    linked recordings, and split warnings. Split warnings flag issues like
+    incomplete splits or disputed percentages.
+
+    Args:
+        work_id: UUID of the work to retrieve
+
+    Returns:
+        dict: Work details including:
+            - id, title, iswc, status, language, notes
+            - writers: List of writers with split percentages
+            - publishers: List of publishers with split percentages
+            - alternative_titles: Title variations/translations
+            - recordings: Linked audio tracks
+            - warnings: Split validation warnings (e.g., "Writer splits only add up to 80%")
+
+    Example:
+        >>> result = await get_work(work_id="550e8400-e29b-41d4-a716-446655440000")
+        >>> print(result["title"])
+        "Imagine"
+        >>> print(result["warnings"])
+        ["Writer splits add up to 80% (less than 100%)"]
+    """
+    from src.error_utils import handle_tool_error
+    from src.services.work_service import get_work as get_work_func
+
+    try:
+        result = await get_work_func(work_id)
+        return {"success": True, **result}
+    except Exception as e:
+        error_response = handle_tool_error(e, "get_work")
+        logger.error(f"Get work failed for {work_id}: {error_response}")
+        return error_response
+
+
+@mcp.tool()
+async def search_works(query: str, limit: int = 20, offset: int = 0) -> dict:
+    """
+    Search for works (compositions) by title.
+
+    Uses case-insensitive partial matching (ILIKE) to find works.
+
+    Args:
+        query: Search string to match against work titles (1-500 characters)
+        limit: Maximum results to return (1-100, default: 20)
+        offset: Number of results to skip for pagination (default: 0)
+
+    Returns:
+        dict: Search results with pagination info:
+            - results: List of matching works
+            - total: Number of results returned
+            - limit: Requested limit
+            - offset: Requested offset
+            - has_more: Whether more results may exist
+
+    Example:
+        >>> result = await search_works(query="imagine", limit=10)
+        >>> print(f"Found {result['total']} results")
+    """
+    from src.error_utils import handle_tool_error
+    from src.services.work_service import search_works as search_works_func
+
+    try:
+        result = await search_works_func(query, limit=limit, offset=offset)
+        return {"success": True, **result}
+    except Exception as e:
+        error_response = handle_tool_error(e, "search_works")
+        logger.error(f"Search works failed for query '{query}': {error_response}")
+        return error_response
+
+
+@mcp.tool()
+async def update_work_writers(work_id: str, writers: list) -> dict:
+    """
+    Replace all writers on a work (batch update).
+
+    This tool uses a replace-all pattern: provide the complete list of writers
+    you want on the work. Any existing writers not in the list will be removed.
+
+    To add a writer: include existing writers + the new one.
+    To remove a writer: exclude them from the list.
+    To update a split: change the values for that writer.
+    To clear all writers: pass an empty list.
+
+    Args:
+        work_id: UUID of the work to update
+        writers: List of writer dictionaries, each containing:
+            - party_id: str (required) - UUID of the party
+            - split_percentage: float (optional) - Ownership percentage (0-200, null = unknown)
+            - split_status: str (required) - "proposed", "confirmed", "disputed", or "unknown"
+            - notes: str (optional) - Negotiation notes
+
+    Returns:
+        dict: Update result with replaced_count and work_id
+
+    Example:
+        >>> result = await update_work_writers(
+        ...     work_id="work-uuid-here",
+        ...     writers=[
+        ...         {"party_id": "writer-1-uuid", "split_percentage": 50.0, "split_status": "confirmed"},
+        ...         {"party_id": "writer-2-uuid", "split_percentage": 50.0, "split_status": "proposed"}
+        ...     ]
+        ... )
+        >>> print(result["replaced_count"])
+        2
+    """
+    from src.error_utils import handle_tool_error
+    from src.services.work_service import update_work_writers as update_writers_func
+
+    try:
+        result = await update_writers_func(work_id, writers)
+        return {"success": True, **result}
+    except Exception as e:
+        error_response = handle_tool_error(e, "update_work_writers")
+        logger.error(f"Update work writers failed for {work_id}: {error_response}")
+        return error_response
+
+
+@mcp.tool()
+async def update_work_publishers(work_id: str, publishers: list) -> dict:
+    """
+    Replace all publishers on a work (batch update).
+
+    This tool uses a replace-all pattern: provide the complete list of publishers
+    you want on the work. Any existing publishers not in the list will be removed.
+
+    To add a publisher: include existing publishers + the new one.
+    To remove a publisher: exclude them from the list.
+    To update a split: change the values for that publisher.
+    To clear all publishers: pass an empty list.
+
+    Args:
+        work_id: UUID of the work to update
+        publishers: List of publisher dictionaries, each containing:
+            - party_id: str (required) - UUID of the party
+            - split_percentage: float (optional) - Ownership percentage (0-200, null = unknown)
+            - split_status: str (required) - "proposed", "confirmed", "disputed", or "unknown"
+            - notes: str (optional) - Negotiation notes
+
+    Returns:
+        dict: Update result with replaced_count and work_id
+
+    Example:
+        >>> result = await update_work_publishers(
+        ...     work_id="work-uuid-here",
+        ...     publishers=[
+        ...         {"party_id": "publisher-uuid", "split_percentage": 100.0, "split_status": "confirmed"}
+        ...     ]
+        ... )
+        >>> print(result["replaced_count"])
+        1
+    """
+    from src.error_utils import handle_tool_error
+    from src.services.work_service import update_work_publishers as update_publishers_func
+
+    try:
+        result = await update_publishers_func(work_id, publishers)
+        return {"success": True, **result}
+    except Exception as e:
+        error_response = handle_tool_error(e, "update_work_publishers")
+        logger.error(f"Update work publishers failed for {work_id}: {error_response}")
+        return error_response
+
+
+@mcp.tool()
+async def link_artist_to_recording(audio_track_id: str, party_id: str,
+                                    is_primary: bool = True, notes: str = None) -> dict:
+    """
+    Link a party as an artist on a recording (audio track).
+
+    This creates an association between a party and an audio track,
+    identifying the party as a performing artist on that recording.
+
+    Args:
+        audio_track_id: UUID of the audio track
+        party_id: UUID of the party to link as an artist
+        is_primary: Whether this is the primary/featured artist (default: True)
+        notes: Optional notes about the artist's role
+
+    Returns:
+        dict: Link result with audio_track_id, party_id, and is_primary
+
+    Example:
+        >>> result = await link_artist_to_recording(
+        ...     audio_track_id="track-uuid",
+        ...     party_id="artist-uuid",
+        ...     is_primary=True
+        ... )
+        >>> print(result["success"])
+        True
+    """
+    from src.error_utils import handle_tool_error
+    from src.repositories import get_audio_repository
+
+    try:
+        repo = get_audio_repository()
+        result = repo.link_artist_to_recording(
+            audio_track_id=audio_track_id,
+            party_id=party_id,
+            is_primary=is_primary,
+            notes=notes,
+        )
+        return {"success": True, **result}
+    except Exception as e:
+        error_response = handle_tool_error(e, "link_artist_to_recording")
+        logger.error(f"Link artist to recording failed for track {audio_track_id}: {error_response}")
+        return error_response
+
+
+# ============================================================================
+# oEmbed Endpoints
+# ============================================================================
+
+
 @mcp.custom_route("/oembed", methods=["GET"])
 async def oembed_endpoint(request):
     """

@@ -151,10 +151,20 @@ class ServerConfig(BaseSettings):
     @property
     def is_gcs_configured(self) -> bool:
         """Check if GCS is properly configured"""
+        has_explicit_creds = bool(
+            self.gcs_credentials_path or os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+        )
+        # Cloud Run / GCE / App Engine provide credentials via metadata server (ADC);
+        # GOOGLE_APPLICATION_CREDENTIALS is not set in those environments.
+        has_managed_identity = bool(
+            os.getenv("K_SERVICE") or       # Cloud Run
+            os.getenv("GAE_SERVICE") or     # App Engine
+            os.getenv("GCE_METADATA_HOST")  # Compute Engine
+        )
         return bool(
-            self.gcs_bucket_name and 
+            self.gcs_bucket_name and
             self.gcs_project_id and
-            (self.gcs_credentials_path or os.getenv("GOOGLE_APPLICATION_CREDENTIALS"))
+            (has_explicit_creds or has_managed_identity)
         )
     
     @property

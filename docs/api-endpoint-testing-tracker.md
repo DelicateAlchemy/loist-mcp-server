@@ -75,6 +75,14 @@
 | `/api/tracks/{audioId}` | DELETE | ✅ Service Layer | Medium | Uses `audio_service`, verify 204 response |
 | `/api/embed/{audioId}` | GET | Unknown | Low | OEmbed endpoint, verify exists |
 | `/oembed` | GET | ✅ Implemented | Low | OEmbed provider endpoint |
+| `/api/parties` | POST | ✅ Implemented | Medium | Song publishing: create party |
+| `/api/parties/search` | GET | ✅ Implemented | Medium | Song publishing: search parties |
+| `/api/parties/{partyId}` | GET | ✅ Implemented | Medium | Song publishing: get party details |
+| `/api/works/{workId}` | GET | ✅ Implemented | Medium | Song publishing: get work with warnings |
+| `/api/works/search` | GET | ✅ Implemented | Medium | Song publishing: search works |
+| `/api/works/{workId}/writers` | PUT | ✅ Implemented | Medium | Song publishing: batch replace writers |
+| `/api/works/{workId}/publishers` | PUT | ✅ Implemented | Medium | Song publishing: batch replace publishers |
+| `/api/tracks/{audioId}/artists` | POST | ✅ Implemented | Medium | Song publishing: link artist to recording |
 
 ### Current Implementation Notes
 

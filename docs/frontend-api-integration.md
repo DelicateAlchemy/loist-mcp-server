@@ -400,6 +400,138 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
 
 ---
 
+### Song Publishing Endpoints
+
+#### 9. Create Party
+```http
+POST /api/parties
+Content-Type: application/json
+
+{
+  "name": "John Lennon",
+  "party_type": "person",
+  "ipi_cae_number": "00000000297",
+  "society_affiliation": "PRS",
+  "email": "john@example.com",
+  "notes": "Songwriter"
+}
+```
+
+**Required Fields**: `name`
+**Optional Fields**: `party_type` (default: "person"), `legal_name`, `ipi_cae_number`, `isni`, `society_affiliation`, `email`, `notes`
+
+**Response**: `201 Created` with party data including generated `id`
+
+**Status Codes**: `201` (created), `400` (validation error), `500` (error)
+
+---
+
+#### 10. Search Parties
+```http
+GET /api/parties/search?q=lennon&limit=20&offset=0
+```
+
+**Query Parameters**:
+- `q` (string, required): Search query (case-insensitive partial match)
+- `limit` (integer, optional): Max results 1-100 (default: 20)
+- `offset` (integer, optional): Pagination offset (default: 0)
+
+**Response**: `200 OK` with `results`, `total`, `limit`, `offset`, `has_more`
+
+---
+
+#### 11. Get Party
+```http
+GET /api/parties/{partyId}
+```
+
+**Response**: `200 OK` with party details and involvement summary (works as writer, publisher, recordings as artist)
+
+**Status Codes**: `200` (success), `400` (invalid ID), `404` (not found), `500` (error)
+
+---
+
+#### 12. Get Work
+```http
+GET /api/works/{workId}
+```
+
+**Response**: `200 OK` with work details including `writers`, `publishers`, `alternative_titles`, `recordings`, and `warnings` (split validation)
+
+**Status Codes**: `200` (success), `400` (invalid ID), `404` (not found), `500` (error)
+
+---
+
+#### 13. Search Works
+```http
+GET /api/works/search?q=imagine&limit=20&offset=0
+```
+
+**Query Parameters**:
+- `q` (string, required): Search query (case-insensitive partial match on title)
+- `limit` (integer, optional): Max results 1-100 (default: 20)
+- `offset` (integer, optional): Pagination offset (default: 0)
+
+**Response**: `200 OK` with `results`, `total`, `limit`, `offset`, `has_more`
+
+---
+
+#### 14. Update Work Writers (Batch Replace)
+```http
+PUT /api/works/{workId}/writers
+Content-Type: application/json
+
+{
+  "writers": [
+    {"party_id": "uuid-1", "split_percentage": 50.0, "split_status": "confirmed"},
+    {"party_id": "uuid-2", "split_percentage": 50.0, "split_status": "proposed"}
+  ]
+}
+```
+
+Replaces all writers on the work. Omit a writer to remove them. Pass empty array to clear all.
+
+**Status Codes**: `200` (success), `400` (validation error), `404` (work not found), `500` (error)
+
+---
+
+#### 15. Update Work Publishers (Batch Replace)
+```http
+PUT /api/works/{workId}/publishers
+Content-Type: application/json
+
+{
+  "publishers": [
+    {"party_id": "uuid-1", "split_percentage": 100.0, "split_status": "confirmed"}
+  ]
+}
+```
+
+Same pattern as writers. Replaces all publishers on the work.
+
+**Status Codes**: `200` (success), `400` (validation error), `404` (work not found), `500` (error)
+
+---
+
+#### 16. Link Artist to Recording
+```http
+POST /api/tracks/{audioId}/artists
+Content-Type: application/json
+
+{
+  "party_id": "uuid-of-artist",
+  "is_primary": true,
+  "notes": "Lead vocalist"
+}
+```
+
+**Required Fields**: `party_id`
+**Optional Fields**: `is_primary` (default: true), `notes`
+
+**Status Codes**: `201` (created), `400` (validation error), `404` (not found), `500` (error)
+
+---
+
 ### Embed Endpoints
 
 #### 9. Embed Player Page

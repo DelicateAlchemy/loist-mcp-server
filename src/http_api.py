@@ -319,3 +319,328 @@ def register_http_api_routes(mcp: FastMCP) -> None:
 
 
 __all__ = ["register_http_api_routes", "error_response", "API_V1_PREFIX"]
+    # ====================================================================
+    # Song Publishing API Endpoints
+    # ====================================================================
+
+    @mcp.custom_route("/api/parties", methods=["POST"])
+    async def create_party_endpoint(request: Request) -> Response:
+        """
+        Create a new party (person or organization).
+
+        POST /api/parties
+        Body: {"name": "...", "party_type": "person"|"organization", ...}
+        """
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse({
+                "success": False,
+                "error": ErrorCode.VALIDATION_ERROR,
+                "message": "Invalid JSON body"
+            }, status_code=400)
+
+        if not body.get("name"):
+            return JSONResponse({
+                "success": False,
+                "error": ErrorCode.VALIDATION_ERROR,
+                "message": "Field 'name' is required"
+            }, status_code=400)
+
+        try:
+            result = await party_service.create_party(body)
+            return JSONResponse({"success": True, **result}, status_code=201)
+        except ValidationError as e:
+            return JSONResponse({"success": False, "error": ErrorCode.VALIDATION_ERROR, "message": str(e)}, status_code=400)
+        except Exception as e:
+            logger.exception(f"Failed to create party: {e}")
+            return JSONResponse({"success": False, "message": "Internal server error"}, status_code=500)
+
+
+    @mcp.custom_route("/api/parties/search", methods=["GET"])
+    async def search_parties_endpoint(request: Request) -> Response:
+        """
+        Search parties by name.
+
+        GET /api/parties/search?q=lennon&limit=20&offset=0
+        """
+        query = request.query_params.get("q", "").strip()
+        if not query:
+            return JSONResponse({
+                "success": False,
+                "error": ErrorCode.VALIDATION_ERROR,
+                "message": "Query parameter 'q' is required"
+            }, status_code=400)
+
+        try:
+            limit = int(request.query_params.get("limit", 20))
+            offset = int(request.query_params.get("offset", 0))
+        except ValueError:
+            return JSONResponse({
+                "success": False,
+                "error": ErrorCode.VALIDATION_ERROR,
+                "message": "Parameters 'limit' and 'offset' must be integers"
+            }, status_code=400)
+
+        limit = max(1, min(limit, 100))
+        offset = max(0, offset)
+
+        try:
+            result = await party_service.search_parties(query, limit=limit, offset=offset)
+            return JSONResponse({"success": True, **result})
+        except Exception as e:
+            logger.exception(f"Party search failed for '{query}': {e}")
+            return JSONResponse({"success": False, "message": "Internal server error"}, status_code=500)
+
+
+    @mcp.custom_route("/api/parties/{partyId}", methods=["GET"])
+    async def get_party_endpoint(request: Request) -> Response:
+        """
+        Get party details with involvement summary.
+
+        GET /api/parties/{partyId}
+        """
+        party_id = request.path_params.get("partyId")
+        try:
+            party_id = validate_uuid_path(party_id)
+        except ValidationError as e:
+            return JSONResponse({
+                "success": False,
+                "error": ErrorCode.VALIDATION_ERROR,
+                "message": str(e)
+            }, status_code=400)
+
+        try:
+            result = await party_service.get_party(party_id)
+            return JSONResponse({"success": True, **result})
+        except ResourceNotFoundError as e:
+            return JSONResponse({"success": False, "message": str(e)}, status_code=404)
+        except Exception as e:
+            logger.exception(f"Failed to get party {party_id}: {e}")
+            return JSONResponse({"success": False, "message": "Internal server error"}, status_code=500)
+
+
+    @mcp.custom_route("/api/works/search", methods=["GET"])
+    async def search_works_endpoint(request: Request) -> Response:
+        """
+        Search works by title.
+
+        GET /api/works/search?q=imagine&limit=20&offset=0
+        """
+        query = request.query_params.get("q", "").strip()
+        if not query:
+            return JSONResponse({
+                "success": False,
+                "error": ErrorCode.VALIDATION_ERROR,
+                "message": "Query parameter 'q' is required"
+            }, status_code=400)
+
+        try:
+            limit = int(request.query_params.get("limit", 20))
+            offset = int(request.query_params.get("offset", 0))
+        except ValueError:
+            return JSONResponse({
+                "success": False,
+                "error": ErrorCode.VALIDATION_ERROR,
+                "message": "Parameters 'limit' and 'offset' must be integers"
+            }, status_code=400)
+
+        limit = max(1, min(limit, 100))
+        offset = max(0, offset)
+
+        try:
+            result = await work_service.search_works(query, limit=limit, offset=offset)
+            return JSONResponse({"success": True, **result})
+        except Exception as e:
+            logger.exception(f"Work search failed for '{query}': {e}")
+            return JSONResponse({"success": False, "message": "Internal server error"}, status_code=500)
+
+
+    @mcp.custom_route("/api/works/{workId}", methods=["GET"])
+    async def get_work_endpoint(request: Request) -> Response:
+        """
+        Get work details with writers, publishers, recordings, and split warnings.
+
+        GET /api/works/{workId}
+        """
+        work_id = request.path_params.get("workId")
+        try:
+            work_id = validate_uuid_path(work_id)
+        except ValidationError as e:
+            return JSONResponse({
+                "success": False,
+                "error": ErrorCode.VALIDATION_ERROR,
+                "message": str(e)
+            }, status_code=400)
+
+        try:
+            result = await work_service.get_work(work_id)
+            return JSONResponse({"success": True, **result})
+        except ResourceNotFoundError as e:
+            return JSONResponse({"success": False, "message": str(e)}, status_code=404)
+        except Exception as e:
+            logger.exception(f"Failed to get work {work_id}: {e}")
+            return JSONResponse({"success": False, "message": "Internal server error"}, status_code=500)
+
+
+    @mcp.custom_route("/api/works/{workId}/writers", methods=["PUT"])
+    async def update_work_writers_endpoint(request: Request) -> Response:
+        """
+        Replace all writers on a work (batch update).
+
+        PUT /api/works/{workId}/writers
+        Body: {"writers": [{"party_id": "...", "split_percentage": 50.0, "split_status": "confirmed"}, ...]}
+        """
+        work_id = request.path_params.get("workId")
+        try:
+            work_id = validate_uuid_path(work_id)
+        except ValidationError as e:
+            return JSONResponse({
+                "success": False,
+                "error": ErrorCode.VALIDATION_ERROR,
+                "message": str(e)
+            }, status_code=400)
+
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse({
+                "success": False,
+                "error": ErrorCode.VALIDATION_ERROR,
+                "message": "Invalid JSON body"
+            }, status_code=400)
+
+        writers = body.get("writers")
+        if writers is None or not isinstance(writers, list):
+            return JSONResponse({
+                "success": False,
+                "error": ErrorCode.VALIDATION_ERROR,
+                "message": "Field 'writers' is required and must be an array"
+            }, status_code=400)
+
+        try:
+            result = await work_service.update_work_writers(work_id, writers)
+            return JSONResponse({"success": True, **result})
+        except ResourceNotFoundError as e:
+            return JSONResponse({"success": False, "message": str(e)}, status_code=404)
+        except ValidationError as e:
+            return JSONResponse({"success": False, "error": ErrorCode.VALIDATION_ERROR, "message": str(e)}, status_code=400)
+        except Exception as e:
+            logger.exception(f"Failed to update writers for work {work_id}: {e}")
+            return JSONResponse({"success": False, "message": "Internal server error"}, status_code=500)
+
+
+    @mcp.custom_route("/api/works/{workId}/publishers", methods=["PUT"])
+    async def update_work_publishers_endpoint(request: Request) -> Response:
+        """
+        Replace all publishers on a work (batch update).
+
+        PUT /api/works/{workId}/publishers
+        Body: {"publishers": [{"party_id": "...", "split_percentage": 100.0, "split_status": "confirmed"}, ...]}
+        """
+        work_id = request.path_params.get("workId")
+        try:
+            work_id = validate_uuid_path(work_id)
+        except ValidationError as e:
+            return JSONResponse({
+                "success": False,
+                "error": ErrorCode.VALIDATION_ERROR,
+                "message": str(e)
+            }, status_code=400)
+
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse({
+                "success": False,
+                "error": ErrorCode.VALIDATION_ERROR,
+                "message": "Invalid JSON body"
+            }, status_code=400)
+
+        publishers = body.get("publishers")
+        if publishers is None or not isinstance(publishers, list):
+            return JSONResponse({
+                "success": False,
+                "error": ErrorCode.VALIDATION_ERROR,
+                "message": "Field 'publishers' is required and must be an array"
+            }, status_code=400)
+
+        try:
+            result = await work_service.update_work_publishers(work_id, publishers)
+            return JSONResponse({"success": True, **result})
+        except ResourceNotFoundError as e:
+            return JSONResponse({"success": False, "message": str(e)}, status_code=404)
+        except ValidationError as e:
+            return JSONResponse({"success": False, "error": ErrorCode.VALIDATION_ERROR, "message": str(e)}, status_code=400)
+        except Exception as e:
+            logger.exception(f"Failed to update publishers for work {work_id}: {e}")
+            return JSONResponse({"success": False, "message": "Internal server error"}, status_code=500)
+
+
+    @mcp.custom_route("/api/tracks/{audioId}/artists", methods=["POST"])
+    async def link_artist_endpoint(request: Request) -> Response:
+        """
+        Link a party as an artist on a recording.
+
+        POST /api/tracks/{audioId}/artists
+        Body: {"party_id": "...", "is_primary": true, "notes": "..."}
+        """
+        audio_id = request.path_params.get("audioId")
+        try:
+            audio_id = validate_uuid_path(audio_id)
+        except ValidationError as e:
+            return JSONResponse({
+                "success": False,
+                "error": ErrorCode.VALIDATION_ERROR,
+                "message": str(e)
+            }, status_code=400)
+
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse({
+                "success": False,
+                "error": ErrorCode.VALIDATION_ERROR,
+                "message": "Invalid JSON body"
+            }, status_code=400)
+
+        party_id = body.get("party_id")
+        if not party_id:
+            return JSONResponse({
+                "success": False,
+                "error": ErrorCode.VALIDATION_ERROR,
+                "message": "Field 'party_id' is required"
+            }, status_code=400)
+
+        try:
+            party_id = validate_uuid_path(party_id)
+        except ValidationError as e:
+            return JSONResponse({
+                "success": False,
+                "error": ErrorCode.VALIDATION_ERROR,
+                "message": f"Invalid party_id: {e}"
+            }, status_code=400)
+
+        is_primary = body.get("is_primary", True)
+        notes = body.get("notes")
+
+        try:
+            from src.repositories import get_audio_repository
+            repo = get_audio_repository()
+            result = repo.link_artist_to_recording(
+                audio_track_id=audio_id,
+                party_id=party_id,
+                is_primary=is_primary,
+                notes=notes,
+            )
+            return JSONResponse({"success": True, **result}, status_code=201)
+        except ResourceNotFoundError as e:
+            return JSONResponse({"success": False, "message": str(e)}, status_code=404)
+        except ValidationError as e:
+            return JSONResponse({"success": False, "error": ErrorCode.VALIDATION_ERROR, "message": str(e)}, status_code=400)
+        except Exception as e:
+            logger.exception(f"Failed to link artist to track {audio_id}: {e}")
+            return JSONResponse({"success": False, "message": "Internal server error"}, status_code=500)
+
+
+__all__ = ["register_http_api_routes"]

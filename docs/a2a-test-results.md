@@ -12,7 +12,8 @@ The A2A MVP implementation has been comprehensively tested across all major comp
 - ✅ **Integration successful**: A2A server integrates properly with existing MCP infrastructure
 - ✅ **Error handling robust**: Proper JSON-RPC error responses and exception handling
 - ⚠️ **Test infrastructure gaps**: Some unit tests have implementation issues, Postman collection needs updates
-- ⚠️ **Deployment incomplete**: Production services not yet deployed (requires manual Cloud Build trigger setup)
+- ✅ **Staging deployment**: A2A staging fully operational (database connectivity resolved - LOI-30)
+- ⚠️ **Production deployment**: Not yet deployed (trigger configured, awaiting first push to `main`)
 
 ## Test Results by Component
 
@@ -65,8 +66,8 @@ The A2A MVP implementation has been comprehensively tested across all major comp
 **Assessment**: Postman collection created before final API contract was implemented. Needs update to match actual A2A server implementation.
 
 ### 4. Production Smoke Tests
-**Status**: Cannot Execute (Services Not Deployed)
-**Reason**: Cloud Build triggers for A2A services require manual setup in Google Cloud Console
+**Status**: Cannot Execute (Service Not Deployed)
+**Reason**: A2A production service (`a2a-prod`) not yet deployed. Cloud Build trigger configured but requires push to `main` branch.
 
 #### Blocked Tests
 - Agent Card endpoint validation
@@ -74,7 +75,7 @@ The A2A MVP implementation has been comprehensively tested across all major comp
 - End-to-end audio processing workflow
 - Schema validation against A2A v0.3 specification
 
-**Next Steps**: Configure Cloud Build triggers for `a2a-staging` and `a2a-prod` services.
+**Next Steps**: Push to `main` branch to trigger first production deployment.
 
 ### 5. MCP Regression Check
 **Status**: Passing ✅
@@ -109,15 +110,15 @@ Contrary to initial assumptions, streaming and push notifications are **implemen
 ### Actual MVP Gaps (Phase 2 Candidates)
 1. **Authentication**: Currently disabled (`AUTH_ENABLED=false`)
 2. **Custom Domains**: Using Cloud Run URLs; custom domains deferred to post-MVP
-3. **Production Deployment**: ✅ **RESOLVED** - Cloud Build triggers configured (mirror MCP triggers, fire on any push)
+3. **Production Deployment**: ⚠️ **PENDING** - Cloud Build trigger configured, awaiting first push to `main` branch
 4. **Test Infrastructure**: Unit tests and Postman collection need updates
 
 ## Recommendations
 
 ### Immediate Actions
-1. **Update Postman Collection**: Align with actual A2A API contract (`message/send`, `tasks/get`)
+1. **Update Postman Collection**: Align with actual A2A API contract (`message/send`, `tasks/get` with `id` param)
 2. **Fix Unit Tests**: Update mock targets and test fixtures to match implementation
-3. **Deploy Services**: ✅ **DONE** - Cloud Build triggers configured (production trigger active, staging trigger can be created via Cloud Console if needed)
+3. **Deploy Production**: Push to `main` branch to trigger first `a2a-prod` deployment
 
 ### Phase 2 Priorities
 1. **Authentication**: Implement JWT/Bearer token support
@@ -127,6 +128,6 @@ Contrary to initial assumptions, streaming and push notifications are **implemen
 
 ## Conclusion
 
-The A2A MVP demonstrates solid foundational functionality with working task processing, JSON-RPC compliance, and proper integration with the existing MCP infrastructure. The main blockers for production deployment are resolved, and the system is ready for initial production deployment once Cloud Build triggers are configured.
+The A2A MVP demonstrates solid foundational functionality with working task processing, JSON-RPC compliance, and proper integration with the existing MCP infrastructure. Staging is fully operational. Production deployment is ready - trigger configured, awaiting first push to `main` branch.
 
-**Overall Assessment**: ✅ **MVP-Ready** - Core functionality validated, deployment pipeline prepared, ready for production with minor test infrastructure updates.
+**Overall Assessment**: ✅ **MVP-Ready** - Core functionality validated, staging operational, production deployment ready. Minor test infrastructure updates recommended.
