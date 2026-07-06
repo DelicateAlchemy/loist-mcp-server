@@ -300,10 +300,8 @@ flag wireframes that depend on these so backend work can be sequenced):
 - Upload / ingestion — genuinely missing; will be a GCS signed-URL flow with
   async processing + job polling (LOI-45). Design for a pending state.
 - Metadata editing — `PATCH /api/v1/tracks/{audioId}` planned (LOI-46).
-- Albums & playlists — full REST surface merged to `dev` (LOI-43) but still at
-  unversioned `/api/albums*` / `/api/playlists*` paths with pre-envelope error
-  shapes; moves under `/api/v1` + these conventions via LOI-47. Wireframe
-  against the entities, but expect the paths to change.
+- Albums & playlists — full REST surface exists on `main` (not yet on `dev`);
+  landing via LOI-43/LOI-47.
 - Player/waveform data as JSON — decided with the embed rework
   (`docs/embed-architecture-notes.md`, LOI-48), not standalone.
 
