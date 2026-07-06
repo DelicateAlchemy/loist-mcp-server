@@ -16,7 +16,7 @@ from starlette.testclient import TestClient
 from starlette.responses import JSONResponse
 
 # Import the server module to test
-from server import mcp
+from src.server import mcp
 
 
 class TestOEmbedEndpoint:
@@ -26,18 +26,18 @@ class TestOEmbedEndpoint:
         """Set up test client and mock data."""
         self.client = TestClient(mcp.http_app())
         
-        # Mock metadata for testing
+        # Mock metadata for testing (keys match database.get_audio_metadata_by_id)
         self.mock_metadata = {
             "id": "550e8400-e29b-41d4-a716-446655440000",
             "title": "Test Song",
             "artist": "Test Artist",
             "album": "Test Album",
-            "thumbnail_path": "gs://test-bucket/thumbnails/test-thumb.jpg",
-            "audio_path": "gs://test-bucket/audio/test-song.mp3"
+            "thumbnail_gcs_path": "gs://test-bucket/thumbnails/test-thumb.jpg",
+            "audio_gcs_path": "gs://test-bucket/audio/test-song.mp3"
         }
-    
-    @patch('server.get_audio_metadata_by_id')
-    @patch('server.get_cache')
+
+    @patch('database.get_audio_metadata_by_id')
+    @patch('src.resources.cache.get_cache')
     def test_oembed_valid_url(self, mock_get_cache, mock_get_metadata):
         """Test oEmbed endpoint with valid URL."""
         # Mock the database call
@@ -57,7 +57,7 @@ class TestOEmbedEndpoint:
         data = response.json()
         
         assert data["version"] == "1.0"
-        assert data["type"] == "rich"
+        assert data["type"] == "video"  # default type for non-Notion/Coda consumers
         assert data["title"] == "Test Song"
         assert data["author_name"] == "Test Artist"
         assert data["provider_name"] == "Loist Music Library"
@@ -67,54 +67,54 @@ class TestOEmbedEndpoint:
         assert data["width"] == 500
         assert data["height"] == 200
         assert data["thumbnail_url"] == "https://signed-url.com/thumbnail.jpg"
-        assert data["thumbnail_width"] == 600
-        assert data["thumbnail_height"] == 600
+        assert data["thumbnail_width"] == 500
+        assert data["thumbnail_height"] == 500
     
     def test_oembed_invalid_url_missing(self):
         """Test oEmbed endpoint with missing URL parameter."""
         response = self.client.get("/oembed")
-        
+
         assert response.status_code == 400
         data = response.json()
         assert "error" in data
-        assert "Invalid URL parameter" in data["error"]
-    
+        assert "Missing required parameter: url" in data["error"]
+
     def test_oembed_invalid_url_format(self):
         """Test oEmbed endpoint with invalid URL format."""
         url = "https://example.com/not-loist"
         response = self.client.get(f"/oembed?url={url}")
-        
+
         assert response.status_code == 400
         data = response.json()
         assert "error" in data
-        assert "Invalid URL parameter" in data["error"]
-    
+        assert "Invalid URL" in data["error"]
+
     def test_oembed_invalid_uuid(self):
         """Test oEmbed endpoint with invalid UUID in URL."""
         url = "https://loist.io/embed/invalid-uuid"
         response = self.client.get(f"/oembed?url={url}")
-        
+
         assert response.status_code == 400
         data = response.json()
         assert "error" in data
-        assert "Invalid URL format" in data["error"]
-    
-    @patch('server.get_audio_metadata_by_id')
+        assert "Invalid audio ID format" in data["error"]
+
+    @patch('database.get_audio_metadata_by_id')
     def test_oembed_audio_not_found(self, mock_get_metadata):
         """Test oEmbed endpoint when audio is not found."""
         # Mock database call to return None
         mock_get_metadata.return_value = None
-        
+
         url = "https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000"
         response = self.client.get(f"/oembed?url={url}")
-        
+
         assert response.status_code == 404
         data = response.json()
         assert "error" in data
-        assert "Audio not found" in data["error"]
-    
-    @patch('server.get_audio_metadata_by_id')
-    @patch('server.get_cache')
+        assert "Audio track not found" in data["error"]
+
+    @patch('database.get_audio_metadata_by_id')
+    @patch('src.resources.cache.get_cache')
     def test_oembed_maxwidth_maxheight(self, mock_get_cache, mock_get_metadata):
         """Test oEmbed endpoint with maxwidth and maxheight parameters."""
         # Mock the database call
@@ -122,8 +122,9 @@ class TestOEmbedEndpoint:
         
         # Mock the cache
         mock_cache = Mock()
+        mock_cache.get.return_value = "https://signed-url.com/thumbnail.jpg"
         mock_get_cache.return_value = mock_cache
-        
+
         # Test with custom dimensions
         url = "https://loist.io/embed/550e8400-e29b-41d4-a716-446655440000"
         response = self.client.get(f"/oembed?url={url}&maxwidth=300&maxheight=150")
@@ -132,14 +133,14 @@ class TestOEmbedEndpoint:
         data = response.json()
         assert data["width"] == 300
         assert data["height"] == 150
-    
-    @patch('server.get_audio_metadata_by_id')
-    @patch('server.get_cache')
+
+    @patch('database.get_audio_metadata_by_id')
+    @patch('src.resources.cache.get_cache')
     def test_oembed_no_thumbnail(self, mock_get_cache, mock_get_metadata):
         """Test oEmbed endpoint when no thumbnail is available."""
         # Mock metadata without thumbnail
         metadata_no_thumb = self.mock_metadata.copy()
-        metadata_no_thumb.pop("thumbnail_path")
+        metadata_no_thumb.pop("thumbnail_gcs_path")
         mock_get_metadata.return_value = metadata_no_thumb
         
         # Mock the cache
