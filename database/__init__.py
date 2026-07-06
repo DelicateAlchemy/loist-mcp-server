@@ -64,6 +64,10 @@ from .operations import (
     reorder_playlist_tracks,
     add_playlist_collaborator,
     remove_playlist_collaborator,
+    # Upload Operations
+    create_upload,
+    get_upload_by_id,
+    update_upload_status,
 )
 from .utils import check_database_availability
 
@@ -124,5 +128,9 @@ __all__ = [
     "reorder_playlist_tracks",
     "add_playlist_collaborator",
     "remove_playlist_collaborator",
+    # Upload Operations
+    "create_upload",
+    "get_upload_by_id",
+    "update_upload_status",
 ]
 

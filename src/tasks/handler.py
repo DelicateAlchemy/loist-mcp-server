@@ -511,6 +511,59 @@ def register_task_handlers(mcp: FastMCP) -> None:
                 "error": str(e)
             }
 
+    @mcp.custom_route("/tasks/process-upload", methods=["POST"])
+    async def process_upload_task_handler(request):
+        """
+        Handle browser-upload processing tasks from Cloud Tasks (LOI-45).
+
+        Payload: {"type": "process_upload", "uploadId": "<uuid>"}
+
+        Returns 200 for permanently-failed tasks (unknown upload, bad payload)
+        so Cloud Tasks does not retry them; processing errors are recorded on
+        the uploads row by the worker itself, which also returns normally.
+        """
+        from starlette.responses import JSONResponse
+
+        headers = dict(request.headers)
+        if not _validate_cloud_tasks_auth(headers):
+            logger.warning("Unauthorized request to process-upload task handler")
+            return JSONResponse(
+                {"success": False, "error": "UNAUTHORIZED",
+                 "message": "Request not from authorized Cloud Tasks service"},
+                status_code=401,
+            )
+
+        try:
+            payload = json.loads(await request.body())
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON payload for process-upload task: {e}")
+            return JSONResponse(
+                {"success": False, "error": "INVALID_PAYLOAD", "message": str(e)},
+                status_code=200,
+            )
+
+        upload_id = payload.get("uploadId")
+        if not upload_id:
+            logger.error("process-upload task payload missing uploadId")
+            return JSONResponse(
+                {"success": False, "error": "INVALID_PAYLOAD", "message": "uploadId is required"},
+                status_code=200,
+            )
+
+        try:
+            from src.services import upload_service
+
+            record = await upload_service.process_upload(upload_id)
+            return JSONResponse({"success": True, "status": record.get("status")})
+        except Exception as e:
+            # Unknown upload or datastore failure — log and ack (the row, if
+            # any, already reflects the failure; retrying will not help).
+            logger.exception(f"process-upload task failed for {upload_id}: {e}")
+            return JSONResponse(
+                {"success": False, "error": "PROCESSING_ERROR", "message": str(e)},
+                status_code=200,
+            )
+
     @mcp.custom_route("/tasks/waveform", methods=["POST"])
     async def waveform_task_handler(request):
         """

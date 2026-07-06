@@ -5,6 +5,7 @@ This file provides automatic marker assignment based on test file names and func
 eliminating the need to manually add markers to hundreds of test files.
 """
 
+import re
 import pytest
 import os
 from typing import List
@@ -52,10 +53,9 @@ def pytest_collection_modifyitems(config: pytest.Config, items: List[pytest.Item
         ]):
             item.add_marker(pytest.mark.requires_tools)
 
-        # Slow tests - by function name patterns
-        if any(pattern in item.name.lower() for pattern in [
-            'performance', 'stress', 'load', 'concurrent', 'timing'
-        ]):
+        # Slow tests - by function name patterns ('load' must be a standalone
+        # word: 'load_test' yes, 'upload' no)
+        if re.search(r'performance|stress|\bload\b|concurrent|timing', item.name.lower()):
             item.add_marker(pytest.mark.slow)
 
         # Unit tests - everything else that's not marked as integration

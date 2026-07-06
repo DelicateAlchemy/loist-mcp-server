@@ -237,6 +237,59 @@ pending state. Errors: `CONVERSION_FAILED` (500), `CONVERSION_TIMEOUT` (504).
 Deletes the track and its stored files. `204` on success, `404` if unknown.
 **Irreversible — wireframes should include a confirm step.**
 
+### Uploads & ingestion
+
+Adding music is a **three-step flow** — the file goes directly from the
+browser to Google Cloud Storage (Cloud Run caps request bodies at 32 MiB, so
+there is deliberately no multipart endpoint). **Design for a pending state:**
+processing takes seconds to a minute, and the UI should show per-file
+progress (upload) then a spinner/queue state (processing) before the track
+appears in the library.
+
+#### `POST /api/v1/uploads`
+Declare the file and get a signed upload URL. Body:
+`{"filename": "song.mp3", "content_type": "audio/mpeg", "size_bytes": 8388608}`.
+Accepted types: mp3, wav, flac, aac, m4a/mp4, ogg, aiff. Max size 100 MB.
+Returns `201`:
+
+```jsonc
+{
+  "success": true,
+  "upload_id": "0f0e6f1a-...",
+  "signed_put_url": "https://storage.googleapis.com/...",  // valid ~60 min
+  "expires_at": "2026-07-06T13:00:00+00:00",
+  "required_headers": {"Content-Type": "audio/mpeg"}
+}
+```
+
+Then `PUT` the raw file bytes to `signed_put_url` **with exactly that
+`Content-Type` header** (it is baked into the signature). Use
+`XMLHttpRequest`/`fetch` upload progress events for the progress bar.
+
+#### `POST /api/v1/uploads/{uploadId}/process`
+Tell the server the upload finished. The server re-validates the staged
+object (exists, non-empty, within size limit) and dispatches processing.
+Returns `202 {"success": true, "job_id": "...", "status": "pending"}`.
+`400 VALIDATION_ERROR` if the file was never uploaded or fails validation;
+re-`POST` is allowed after a `failed` job (retry).
+
+#### `GET /api/v1/jobs/{jobId}`
+Poll processing status (a sensible interval is 1–2 s):
+
+```jsonc
+{
+  "success": true,
+  "job_id": "0f0e6f1a-...",
+  "status": "processing",   // awaiting_upload | pending | processing | complete | failed
+  "filename": "song.mp3",
+  "audio_id": "550e8400-...",  // present once complete — fetch the Track with it
+  "error": "..."               // present when failed
+}
+```
+
+On `complete`, `GET /api/v1/tracks/{audio_id}` returns the full Track
+entity. `awaiting_upload` means `/process` was never called — a client bug.
+
 ### Publishing: parties & works
 
 All under the same auth boundary and error envelope as the track endpoints.
@@ -291,17 +344,19 @@ Available via REST **today** — safe to wireframe against:
 - In-browser playback (stream endpoint) and embeds
 - Download in multiple formats
 - Delete track
+- Upload / ingestion — three-step signed-URL flow with job polling (see the
+  Uploads section above); design for a pending state
 - Publishing data: parties and works (search, detail, writer/publisher
   splits, artist↔recording links) — see the Publishing endpoints above
 
 **Coming to the REST API** (status per `docs/rest-api-expansion-plan.md`;
 flag wireframes that depend on these so backend work can be sequenced):
 
-- Upload / ingestion — genuinely missing; will be a GCS signed-URL flow with
-  async processing + job polling (LOI-45). Design for a pending state.
 - Metadata editing — `PATCH /api/v1/tracks/{audioId}` planned (LOI-46).
-- Albums & playlists — full REST surface exists on `main` (not yet on `dev`);
-  landing via LOI-43/LOI-47.
+- Albums & playlists — full REST surface merged to `dev` (LOI-43) but still at
+  unversioned `/api/albums*` / `/api/playlists*` paths with pre-envelope error
+  shapes; moves under `/api/v1` + these conventions via LOI-47. Wireframe
+  against the entities, but expect the paths to change.
 - Player/waveform data as JSON — decided with the embed rework
   (`docs/embed-architecture-notes.md`, LOI-48), not standalone.
 
@@ -310,6 +365,9 @@ discovery done yet).
 
 ## 9. Changelog
 
+- **July 2026 (LOI-45):** Browser upload & ingestion flow added:
+  `POST /api/v1/uploads` (signed PUT URL) → direct-to-GCS upload →
+  `POST /api/v1/uploads/{id}/process` → `GET /api/v1/jobs/{id}` polling.
 - **July 2026 (LOI-44):** Publishing endpoints (parties, works,
   writer/publisher splits, artist links) moved from `/api/*` to `/api/v1/*`
   and converted to the standard error envelope. `PUT` added to CORS allowed
