@@ -206,18 +206,22 @@ Available via REST **today** — safe to wireframe against:
 - Download in multiple formats
 - Delete track
 
-**Not yet in the REST API** (exists as MCP tools only; needs new REST
-endpoints — flag wireframes that depend on these so backend work can be
-scheduled):
+**Coming to the REST API** (status per `docs/rest-api-expansion-plan.md`;
+flag wireframes that depend on these so backend work can be sequenced):
 
-- Upload / ingestion (`process_audio_complete` MCP tool)
-- Metadata editing (`update_metadata`)
-- Parties (people/organizations): create/get/search
-- Works (compositions): get/search, writers/publishers, artist↔recording links
-- Waveform data as JSON (`get_waveform_metrics_tool`)
+- Upload / ingestion — genuinely missing; will be a GCS signed-URL flow with
+  async processing + job polling (LOI-45). Design for a pending state.
+- Metadata editing — `PATCH /api/v1/tracks/{audioId}` planned (LOI-46).
+- Parties (people/organizations) and Works (compositions, writers/publishers,
+  artist↔recording links) — REST routes already exist on `origin/dev`; being
+  brought under `/api/v1` + this guide's conventions (LOI-44).
+- Albums & playlists — full REST surface exists on `main` (not yet on `dev`);
+  landing via LOI-43/LOI-47.
+- Player/waveform data as JSON — decided with the embed rework
+  (`docs/embed-architecture-notes.md`, LOI-48), not standalone.
 
-Not built anywhere: user accounts, playlists, favorites, multi-tenancy
-(LOI-5, no discovery done yet).
+Not built anywhere: user accounts, favorites, multi-tenancy (LOI-5, no
+discovery done yet).
 
 ## 9. Changelog
 
