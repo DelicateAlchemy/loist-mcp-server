@@ -40,6 +40,8 @@ from src.schemas.http_api import (
 from src.services import audio_service
 from src.services import streaming_service
 from src.services import download_service
+from src.services import party_service
+from src.services import work_service
 
 from src.converter import (
     ConversionError,
@@ -318,7 +320,6 @@ def register_http_api_routes(mcp: FastMCP) -> None:
             return error_response(ErrorCode.INTERNAL_ERROR, "Internal server error", 500)
 
 
-__all__ = ["register_http_api_routes", "error_response", "API_V1_PREFIX"]
     # ====================================================================
     # Song Publishing API Endpoints
     # ====================================================================
@@ -643,4 +644,4 @@ __all__ = ["register_http_api_routes", "error_response", "API_V1_PREFIX"]
             return JSONResponse({"success": False, "message": "Internal server error"}, status_code=500)
 
 
-__all__ = ["register_http_api_routes"]
+__all__ = ["register_http_api_routes", "error_response", "API_V1_PREFIX"]
