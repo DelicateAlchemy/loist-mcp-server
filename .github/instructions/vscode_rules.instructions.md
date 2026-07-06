@@ -1,6 +1,12 @@
 ---
+<<<<<<<< HEAD:.github/instructions/vscode_rules.instructions.md
 description: Guidelines for creating and maintaining VS Code rules to ensure consistency and effectiveness.
 applyTo: ".github/instructions/*.instructions.md"
+========
+description: Guidelines for creating and maintaining Trae rules to ensure consistency and effectiveness.
+globs: .trae/rules/*.md
+alwaysApply: true
+>>>>>>>> origin/main:.trae/rules/trae_rules.md
 ---
 
 - **Required Rule Structure:**
@@ -18,7 +24,11 @@ applyTo: ".github/instructions/*.instructions.md"
 
 - **File References:**
   - Use `[filename](mdc:path/to/file)` ([filename](mdc:filename)) to reference files
+<<<<<<<< HEAD:.github/instructions/vscode_rules.instructions.md
   - Example: [prisma.instructions.md](.github/instructions/prisma.instructions.md) for rule references
+========
+  - Example: [prisma.md](.trae/rules/prisma.md) for rule references
+>>>>>>>> origin/main:.trae/rules/trae_rules.md
   - Example: [schema.prisma](mdc:prisma/schema.prisma) for code references
 
 - **Code Examples:**

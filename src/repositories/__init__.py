@@ -1,7 +1,7 @@
 """
 Repository Module
 
-Provides clean data access abstraction for audio, party, and work operations.
+Provides clean data access abstraction for audio, party, work, album, and playlist operations.
 """
 
 from .audio_repository import (
@@ -27,6 +27,18 @@ from .work_repository import (
     get_work_repository,
     set_work_repository,
 )
+from .album_repository import (
+    AlbumRepositoryInterface,
+    PostgresAlbumRepository,
+    get_album_repository,
+    set_album_repository,
+)
+from .playlist_repository import (
+    PlaylistRepositoryInterface,
+    PostgresPlaylistRepository,
+    get_playlist_repository,
+    set_playlist_repository,
+)
 
 __all__ = [
     # Audio repository
@@ -49,4 +61,14 @@ __all__ = [
     "PostgresWorkRepository",
     "get_work_repository",
     "set_work_repository",
+    # Album repository
+    "AlbumRepositoryInterface",
+    "PostgresAlbumRepository",
+    "get_album_repository",
+    "set_album_repository",
+    # Playlist repository
+    "PlaylistRepositoryInterface",
+    "PostgresPlaylistRepository",
+    "get_playlist_repository",
+    "set_playlist_repository",
 ]

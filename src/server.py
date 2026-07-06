@@ -182,7 +182,7 @@ def check_gcs_health():
 def check_cloud_tasks_health():
     """
     Check Cloud Tasks connectivity and configuration.
-    
+
     Note: Cloud Tasks is optional and may not be configured in all environments.
     Returns a stub response indicating Cloud Tasks is not yet implemented.
     """
@@ -1018,7 +1018,7 @@ async def embed_page(request):
     # Fix for staging environment: correct bucket name if database contains old paths
     try:
         from src.config import config
-        logger.info(f"[EMBED_FIX] Config imported successfully")
+        logger.info("[EMBED_FIX] Config imported successfully")
     except Exception as config_error:
         logger.error(f"[EMBED_FIX] Failed to import config: {config_error}")
         # Continue without config-based fixes
@@ -1056,7 +1056,7 @@ async def embed_page(request):
 
     try:
         stream_url = cache.get(audio_path, url_expiration_minutes=15)
-        logger.info(f"[EMBED_DEBUG] Successfully generated signed URL")
+        logger.info("[EMBED_DEBUG] Successfully generated signed URL")
     except Exception as e:
         logger.error(f"[EMBED_DEBUG] Failed to generate signed URL for audio: {e}")
         logger.error(f"[EMBED_DEBUG] Exception type: {type(e).__name__}")
@@ -1134,7 +1134,7 @@ async def embed_page(request):
             from src.tools.embed_tools import get_waveform_context
             waveform_context = await get_waveform_context(audio_id)
             logger.info(f"Waveform context retrieved: available={waveform_context.get('waveform_available', False)}")
-            
+
             # Always use minimal waveform template when requested, even if waveform data isn't available yet
             # The template will handle missing waveform data gracefully
             device_type = detect_device_type(request)
@@ -1166,7 +1166,7 @@ async def embed_page(request):
             logger.info("Getting waveform context for template rendering")
             waveform_context = await get_waveform_context(audio_id)
             logger.info(f"Waveform context retrieved: available={waveform_context.get('waveform_available', False)}")
-            
+
             # Always use waveform template when requested, even if waveform data isn't available yet
             # The template will handle missing waveform data gracefully
             device_type = detect_device_type(request)
@@ -2000,6 +2000,478 @@ async def link_artist_to_recording(audio_track_id: str, party_id: str,
 
 
 # ============================================================================
+# Album Tools
+# ============================================================================
+
+
+@mcp.tool()
+async def get_album(album_id: str) -> dict:
+    """
+    Retrieve an album by ID with all tracks.
+
+    Args:
+        album_id: UUID of the album
+
+    Returns:
+        dict: Album details including ordered track list
+    """
+    from src.error_utils import handle_tool_error
+    from src.services import album_service
+
+    try:
+        return await album_service.get_album(album_id)
+    except Exception as e:
+        error_response = handle_tool_error(e, "get_album")
+        logger.error(f"Get album failed for {album_id}: {error_response}")
+        return error_response
+
+
+@mcp.tool()
+async def create_album(
+    name: str,
+    description: str = None,
+    status: str = "project",
+    cover_art_gcs_path: str = None,
+    owner_id: str = None,
+) -> dict:
+    """
+    Create a new album (project/album hybrid).
+
+    Args:
+        name: Album name
+        description: Album description or notes
+        status: Lifecycle status (project, draft, released). Default: project
+        cover_art_gcs_path: GCS path to cover art image
+        owner_id: UUID of the album owner
+
+    Returns:
+        dict: Created album details
+    """
+    from src.error_utils import handle_tool_error
+    from src.services import album_service
+
+    try:
+        data = {"name": name, "status": status}
+        if description is not None:
+            data["description"] = description
+        if cover_art_gcs_path is not None:
+            data["cover_art_gcs_path"] = cover_art_gcs_path
+        if owner_id is not None:
+            data["owner_id"] = owner_id
+        return await album_service.create_album(data)
+    except Exception as e:
+        error_response = handle_tool_error(e, "create_album")
+        logger.error(f"Create album failed: {error_response}")
+        return error_response
+
+
+@mcp.tool()
+async def update_album(album_id: str, updates: dict) -> dict:
+    """
+    Update album metadata.
+
+    Args:
+        album_id: UUID of the album
+        updates: Dict with fields to update (name, description, status, cover_art_gcs_path)
+
+    Returns:
+        dict: Updated album details
+    """
+    from src.error_utils import handle_tool_error
+    from src.services import album_service
+
+    try:
+        return await album_service.update_album(album_id, updates)
+    except Exception as e:
+        error_response = handle_tool_error(e, "update_album")
+        logger.error(f"Update album failed for {album_id}: {error_response}")
+        return error_response
+
+
+@mcp.tool()
+async def delete_album(album_id: str) -> dict:
+    """
+    Delete an album.
+
+    Args:
+        album_id: UUID of the album to delete
+
+    Returns:
+        dict: Deletion confirmation
+    """
+    from src.error_utils import handle_tool_error
+    from src.services import album_service
+
+    try:
+        result = await album_service.delete_album(album_id)
+        return {"success": True, "deleted": result, "album_id": album_id}
+    except Exception as e:
+        error_response = handle_tool_error(e, "delete_album")
+        logger.error(f"Delete album failed for {album_id}: {error_response}")
+        return error_response
+
+
+@mcp.tool()
+async def search_albums(
+    query: str, status: str = None, limit: int = 20, offset: int = 0
+) -> dict:
+    """
+    Search albums by name.
+
+    Args:
+        query: Search query string
+        status: Optional status filter (project, draft, released)
+        limit: Max results (1-100, default 20)
+        offset: Results to skip (default 0)
+
+    Returns:
+        dict: Search results with pagination info
+    """
+    from src.error_utils import handle_tool_error
+    from src.services import album_service
+
+    try:
+        return await album_service.search_albums(query, limit=limit, offset=offset, status=status)
+    except Exception as e:
+        error_response = handle_tool_error(e, "search_albums")
+        logger.error(f"Search albums failed for '{query}': {error_response}")
+        return error_response
+
+
+@mcp.tool()
+async def add_track_to_album(
+    album_id: str, audio_track_id: str, position: int = None, disc_number: int = 1
+) -> dict:
+    """
+    Add a track to an album.
+
+    Args:
+        album_id: UUID of the album
+        audio_track_id: UUID of the audio track to add
+        position: Track position (auto-assigned if omitted)
+        disc_number: Disc number (default 1)
+
+    Returns:
+        dict: Created album_track record
+    """
+    from src.error_utils import handle_tool_error
+    from src.services import album_service
+
+    try:
+        return await album_service.add_track_to_album(
+            album_id, audio_track_id, position, disc_number
+        )
+    except Exception as e:
+        error_response = handle_tool_error(e, "add_track_to_album")
+        logger.error(f"Add track to album failed: {error_response}")
+        return error_response
+
+
+@mcp.tool()
+async def remove_track_from_album(album_id: str, audio_track_id: str) -> dict:
+    """
+    Remove a track from an album.
+
+    Args:
+        album_id: UUID of the album
+        audio_track_id: UUID of the audio track to remove
+
+    Returns:
+        dict: Removal confirmation
+    """
+    from src.error_utils import handle_tool_error
+    from src.services import album_service
+
+    try:
+        result = await album_service.remove_track_from_album(album_id, audio_track_id)
+        return {"success": True, "removed": result, "album_id": album_id, "audio_track_id": audio_track_id}
+    except Exception as e:
+        error_response = handle_tool_error(e, "remove_track_from_album")
+        logger.error(f"Remove track from album failed: {error_response}")
+        return error_response
+
+
+@mcp.tool()
+async def reorder_album_tracks(album_id: str, track_order: list) -> dict:
+    """
+    Reorder tracks in an album.
+
+    Args:
+        album_id: UUID of the album
+        track_order: Ordered list of audio_track_ids in desired order
+
+    Returns:
+        dict: Reorder result with count
+    """
+    from src.error_utils import handle_tool_error
+    from src.services import album_service
+
+    try:
+        return await album_service.reorder_album_tracks(album_id, track_order)
+    except Exception as e:
+        error_response = handle_tool_error(e, "reorder_album_tracks")
+        logger.error(f"Reorder album tracks failed for {album_id}: {error_response}")
+        return error_response
+
+
+# ============================================================================
+# Playlist Tools
+# ============================================================================
+
+
+@mcp.tool()
+async def get_playlist(playlist_id: str) -> dict:
+    """
+    Retrieve a playlist by ID with tracks and collaborators.
+
+    Args:
+        playlist_id: UUID of the playlist
+
+    Returns:
+        dict: Playlist details including tracks and collaborators
+    """
+    from src.error_utils import handle_tool_error
+    from src.services import playlist_service
+
+    try:
+        return await playlist_service.get_playlist(playlist_id)
+    except Exception as e:
+        error_response = handle_tool_error(e, "get_playlist")
+        logger.error(f"Get playlist failed for {playlist_id}: {error_response}")
+        return error_response
+
+
+@mcp.tool()
+async def create_playlist(
+    name: str,
+    description: str = None,
+    is_public: bool = False,
+    owner_id: str = None,
+) -> dict:
+    """
+    Create a new playlist.
+
+    Args:
+        name: Playlist name
+        description: Playlist description
+        is_public: Whether playlist is publicly visible (default False)
+        owner_id: UUID of the playlist owner
+
+    Returns:
+        dict: Created playlist details
+    """
+    from src.error_utils import handle_tool_error
+    from src.services import playlist_service
+
+    try:
+        data = {"name": name, "is_public": is_public}
+        if description is not None:
+            data["description"] = description
+        if owner_id is not None:
+            data["owner_id"] = owner_id
+        return await playlist_service.create_playlist(data)
+    except Exception as e:
+        error_response = handle_tool_error(e, "create_playlist")
+        logger.error(f"Create playlist failed: {error_response}")
+        return error_response
+
+
+@mcp.tool()
+async def update_playlist(playlist_id: str, updates: dict) -> dict:
+    """
+    Update playlist metadata.
+
+    Args:
+        playlist_id: UUID of the playlist
+        updates: Dict with fields to update (name, description, is_public)
+
+    Returns:
+        dict: Updated playlist details
+    """
+    from src.error_utils import handle_tool_error
+    from src.services import playlist_service
+
+    try:
+        return await playlist_service.update_playlist(playlist_id, updates)
+    except Exception as e:
+        error_response = handle_tool_error(e, "update_playlist")
+        logger.error(f"Update playlist failed for {playlist_id}: {error_response}")
+        return error_response
+
+
+@mcp.tool()
+async def delete_playlist(playlist_id: str) -> dict:
+    """
+    Delete a playlist.
+
+    Args:
+        playlist_id: UUID of the playlist to delete
+
+    Returns:
+        dict: Deletion confirmation
+    """
+    from src.error_utils import handle_tool_error
+    from src.services import playlist_service
+
+    try:
+        result = await playlist_service.delete_playlist(playlist_id)
+        return {"success": True, "deleted": result, "playlist_id": playlist_id}
+    except Exception as e:
+        error_response = handle_tool_error(e, "delete_playlist")
+        logger.error(f"Delete playlist failed for {playlist_id}: {error_response}")
+        return error_response
+
+
+@mcp.tool()
+async def search_playlists(query: str, limit: int = 20, offset: int = 0) -> dict:
+    """
+    Search playlists by name.
+
+    Args:
+        query: Search query string
+        limit: Max results (1-100, default 20)
+        offset: Results to skip (default 0)
+
+    Returns:
+        dict: Search results with pagination info
+    """
+    from src.error_utils import handle_tool_error
+    from src.services import playlist_service
+
+    try:
+        return await playlist_service.search_playlists(query, limit=limit, offset=offset)
+    except Exception as e:
+        error_response = handle_tool_error(e, "search_playlists")
+        logger.error(f"Search playlists failed for '{query}': {error_response}")
+        return error_response
+
+
+@mcp.tool()
+async def add_track_to_playlist(
+    playlist_id: str, audio_track_id: str, position: int = None
+) -> dict:
+    """
+    Add a track to a playlist.
+
+    Args:
+        playlist_id: UUID of the playlist
+        audio_track_id: UUID of the audio track to add
+        position: Track position (auto-assigned if omitted)
+
+    Returns:
+        dict: Created playlist_track record
+    """
+    from src.error_utils import handle_tool_error
+    from src.services import playlist_service
+
+    try:
+        return await playlist_service.add_track_to_playlist(
+            playlist_id, audio_track_id, position
+        )
+    except Exception as e:
+        error_response = handle_tool_error(e, "add_track_to_playlist")
+        logger.error(f"Add track to playlist failed: {error_response}")
+        return error_response
+
+
+@mcp.tool()
+async def remove_track_from_playlist(playlist_id: str, audio_track_id: str) -> dict:
+    """
+    Remove a track from a playlist.
+
+    Args:
+        playlist_id: UUID of the playlist
+        audio_track_id: UUID of the audio track to remove
+
+    Returns:
+        dict: Removal confirmation
+    """
+    from src.error_utils import handle_tool_error
+    from src.services import playlist_service
+
+    try:
+        result = await playlist_service.remove_track_from_playlist(playlist_id, audio_track_id)
+        return {"success": True, "removed": result, "playlist_id": playlist_id, "audio_track_id": audio_track_id}
+    except Exception as e:
+        error_response = handle_tool_error(e, "remove_track_from_playlist")
+        logger.error(f"Remove track from playlist failed: {error_response}")
+        return error_response
+
+
+@mcp.tool()
+async def reorder_playlist_tracks(playlist_id: str, track_order: list) -> dict:
+    """
+    Reorder tracks in a playlist.
+
+    Args:
+        playlist_id: UUID of the playlist
+        track_order: Ordered list of audio_track_ids in desired order
+
+    Returns:
+        dict: Reorder result with count
+    """
+    from src.error_utils import handle_tool_error
+    from src.services import playlist_service
+
+    try:
+        return await playlist_service.reorder_playlist_tracks(playlist_id, track_order)
+    except Exception as e:
+        error_response = handle_tool_error(e, "reorder_playlist_tracks")
+        logger.error(f"Reorder playlist tracks failed for {playlist_id}: {error_response}")
+        return error_response
+
+
+@mcp.tool()
+async def add_playlist_collaborator(
+    playlist_id: str, user_id: str, role: str = "viewer"
+) -> dict:
+    """
+    Add or update a collaborator on a playlist.
+
+    Args:
+        playlist_id: UUID of the playlist
+        user_id: UUID of the user to add
+        role: Collaboration role (viewer, editor, admin). Default: viewer
+
+    Returns:
+        dict: Collaborator record
+    """
+    from src.error_utils import handle_tool_error
+    from src.services import playlist_service
+
+    try:
+        return await playlist_service.add_collaborator(playlist_id, user_id, role)
+    except Exception as e:
+        error_response = handle_tool_error(e, "add_playlist_collaborator")
+        logger.error(f"Add collaborator failed: {error_response}")
+        return error_response
+
+
+@mcp.tool()
+async def remove_playlist_collaborator(playlist_id: str, user_id: str) -> dict:
+    """
+    Remove a collaborator from a playlist.
+
+    Args:
+        playlist_id: UUID of the playlist
+        user_id: UUID of the collaborator to remove
+
+    Returns:
+        dict: Removal confirmation
+    """
+    from src.error_utils import handle_tool_error
+    from src.services import playlist_service
+
+    try:
+        result = await playlist_service.remove_collaborator(playlist_id, user_id)
+        return {"success": True, "removed": result, "playlist_id": playlist_id, "user_id": user_id}
+    except Exception as e:
+        error_response = handle_tool_error(e, "remove_playlist_collaborator")
+        logger.error(f"Remove collaborator failed: {error_response}")
+        return error_response
+
+
+# ============================================================================
 # oEmbed Endpoints
 # ============================================================================
 
@@ -2037,7 +2509,7 @@ async def oembed_endpoint(request):
     try:
         # Extract query parameters
         url_param = request.query_params.get("url")
-        format_param = request.query_params.get("format", "json")
+        request.query_params.get("format", "json")
 
         # Detect platform for platform-specific optimizations
         platform = detect_platform(request)
@@ -2192,7 +2664,7 @@ async def oembed_endpoint(request):
             "height": maxheight,
             "cache_age": 3600,  # Cache for 1 hour
         }
-        
+
         logger.info(f"oEmbed response html field length: {len(iframe_html)}")
 
         # Add thumbnail if available
@@ -2660,7 +3132,7 @@ if __name__ == "__main__":
         )
     elif config.server_transport == "dual":
         # Run both HTTP web server and MCP stdio for Cursor
-        logger.info(f"🔄 Starting dual mode: HTTP server + MCP stdio")
+        logger.info("🔄 Starting dual mode: HTTP server + MCP stdio")
         import asyncio
         import threading
 

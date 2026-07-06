@@ -1,7 +1,7 @@
 """
 Service layer module.
 
-Provides business logic services for audio, party, and work operations.
+Provides business logic services for audio, party, work, album, and playlist operations.
 """
 
 from .audio_service import (
@@ -21,6 +21,26 @@ from .work_service import (
     update_work_writers,
     update_work_publishers,
 )
+from .album_service import (
+    get_album,
+    create_album,
+    update_album,
+    delete_album,
+    search_albums,
+    add_track_to_album,
+    remove_track_from_album,
+    reorder_album_tracks,
+)
+from .playlist_service import (
+    get_playlist,
+    create_playlist,
+    update_playlist,
+    delete_playlist,
+    search_playlists,
+    add_track_to_playlist,
+    remove_track_from_playlist,
+    reorder_playlist_tracks,
+)
 
 __all__ = [
     # Audio service
@@ -37,5 +57,22 @@ __all__ = [
     "search_works",
     "update_work_writers",
     "update_work_publishers",
+    # Album service
+    "get_album",
+    "create_album",
+    "update_album",
+    "delete_album",
+    "search_albums",
+    "add_track_to_album",
+    "remove_track_from_album",
+    "reorder_album_tracks",
+    # Playlist service
+    "get_playlist",
+    "create_playlist",
+    "update_playlist",
+    "delete_playlist",
+    "search_playlists",
+    "add_track_to_playlist",
+    "remove_track_from_playlist",
+    "reorder_playlist_tracks",
 ]
-

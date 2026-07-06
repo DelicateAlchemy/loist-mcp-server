@@ -1,6 +1,12 @@
 ---
+<<<<<<<< HEAD:.github/instructions/self_improve.instructions.md
 description: Guidelines for continuously improving VS Code rules based on emerging code patterns and best practices.
 applyTo: "**/*"
+========
+description: Guidelines for continuously improving Trae rules based on emerging code patterns and best practices.
+globs: **/*
+alwaysApply: true
+>>>>>>>> origin/main:.trae/rules/self_improve.md
 ---
 
 - **Rule Improvement Triggers:**
@@ -38,7 +44,11 @@ applyTo: "**/*"
     where: { status: 'ACTIVE' }
   });
   
+<<<<<<<< HEAD:.github/instructions/self_improve.instructions.md
   // Consider adding to [prisma.instructions.md](.github/instructions/prisma.instructions.md):
+========
+  // Consider adding to [prisma.md](.trae/rules/prisma.md):
+>>>>>>>> origin/main:.trae/rules/self_improve.md
   // - Standard select fields
   // - Common where conditions
   // - Performance optimization patterns
@@ -68,4 +78,8 @@ applyTo: "**/*"
   - Update references to external docs
   - Maintain links between related rules
   - Document breaking changes
+<<<<<<<< HEAD:.github/instructions/self_improve.instructions.md
 Follow [vscode_rules.instructions.md](.github/instructions/vscode_rules.instructions.md) for proper rule formatting and structure.
+========
+Follow [trae_rules.md](.trae/rules/trae_rules.md) for proper rule formatting and structure.
+>>>>>>>> origin/main:.trae/rules/self_improve.md
