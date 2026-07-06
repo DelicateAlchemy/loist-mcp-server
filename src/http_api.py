@@ -1,17 +1,26 @@
 """
-HTTP REST API wrappers for MCP tools and resources.
+Loist REST API (v1).
 
-This module provides HTTP REST endpoints that wrap existing MCP tools and resources,
-enabling frontend applications to access the music library functionality via standard
-HTTP requests instead of the MCP JSON-RPC protocol.
+This module implements the public HTTP REST API for frontend applications.
+It is an independent interface, NOT a wrapper around MCP tools: both the REST
+routes here and the MCP tools in src/server.py call the same shared service
+layer (src/services/). The two interfaces evolve independently — changes to
+MCP tool signatures do not affect REST contracts, and vice versa.
 
-All endpoints return JSON responses and handle errors appropriately for web clients.
+    Frontend / HTTP clients ──> REST API (this module, /api/v1/*) ──┐
+                                                                    ├──> src/services/
+    MCP clients (agents)    ──> MCP tools (src/server.py)  ─────────┘
+
+All endpoints live under the /api/v1 prefix. Errors use a single envelope:
+
+    {"success": false, "error": "<ERROR_CODE>", "message": "<human readable>"}
+
+See docs/frontend-api-guide.md for the full API reference.
 """
 
+import hashlib
 import logging
-import uuid
 from typing import AsyncGenerator
-from pathlib import Path
 
 from fastmcp import FastMCP
 from starlette.responses import JSONResponse, StreamingResponse, RedirectResponse, Response
@@ -19,7 +28,6 @@ from starlette.requests import Request
 from starlette.background import BackgroundTask
 
 from src.exceptions import ValidationError, ResourceNotFoundError
-from src.error_utils import handle_tool_error
 
 # Import HTTP API schemas for parameter validation
 from src.schemas.http_api import (
@@ -29,35 +37,46 @@ from src.schemas.http_api import (
     ErrorCode,
 )
 
-# Import the MCP tools and resources we'll be wrapping
 from src.services import audio_service
 from src.services import streaming_service
-from src.services import party_service
-from src.services import work_service
+from src.services import download_service
 
-# Import converter and storage modules for download endpoint
 from src.converter import (
     ConversionError,
     ConversionTimeoutError,
-    SUPPORTED_FORMATS,
-    validate_format,
-    validate_preset,
     get_default_preset,
 )
-from src.services import download_service
 
 logger = logging.getLogger(__name__)
+
+# Single source of truth for the REST API version prefix.
+API_V1_PREFIX = "/api/v1"
+
+
+def error_response(code: str, message: str, status_code: int) -> JSONResponse:
+    """
+    Build a standardized API error response.
+
+    Every REST error — validation, not-found, auth, internal — must go through
+    this helper so clients can rely on one shape:
+
+        {"success": false, "error": "<ERROR_CODE>", "message": "..."}
+    """
+    return JSONResponse(
+        {"success": False, "error": code, "message": message},
+        status_code=status_code,
+    )
 
 
 def register_http_api_routes(mcp: FastMCP) -> None:
     """
-    Register all HTTP API routes with the FastMCP server.
+    Register all v1 REST API routes with the FastMCP server.
 
     Args:
         mcp: FastMCP server instance
     """
 
-    @mcp.custom_route("/api/tracks/{audioId}", methods=["GET"])
+    @mcp.custom_route(f"{API_V1_PREFIX}/tracks/{{audioId}}", methods=["GET"])
     async def get_track(request: Request) -> Response:
         """
         Get metadata for a specific audio track.
@@ -66,15 +85,11 @@ def register_http_api_routes(mcp: FastMCP) -> None:
         try:
             audio_id = validate_uuid_path(audio_id)
         except ValidationError as e:
-            return JSONResponse({
-                "success": False,
-                "error": ErrorCode.VALIDATION_ERROR,
-                "message": str(e)
-            }, status_code=400)
+            return error_response(ErrorCode.VALIDATION_ERROR, str(e), 400)
 
         try:
             service_result = await audio_service.get_audio_metadata(audio_id)
-            
+
             # The service returns a dict with Pydantic models, need to convert to JSON-serializable
             response_data = {
                 "success": True,
@@ -85,12 +100,11 @@ def register_http_api_routes(mcp: FastMCP) -> None:
 
             # Create a JSON response to calculate ETag and then set headers
             response = JSONResponse(response_data)
-            
+
             # ETag based on content hash
-            import hashlib
             etag = hashlib.md5(response.body).hexdigest()
             response.headers["ETag"] = f'"{etag}"'
-            
+
             # Cache for 1 hour, but require re-validation
             response.headers["Cache-Control"] = "public, max-age=3600, must-revalidate"
 
@@ -101,13 +115,13 @@ def register_http_api_routes(mcp: FastMCP) -> None:
             return response
 
         except ResourceNotFoundError as e:
-            return JSONResponse({"success": False, "message": str(e)}, status_code=404)
+            return error_response(ErrorCode.TRACK_NOT_FOUND, str(e), 404)
         except Exception as e:
             logger.exception(f"Unexpected error getting track {audio_id}: {e}")
-            return JSONResponse({"success": False, "message": "Internal server error"}, status_code=500)
+            return error_response(ErrorCode.INTERNAL_ERROR, "Internal server error", 500)
 
 
-    @mcp.custom_route("/api/search", methods=["GET"])
+    @mcp.custom_route(f"{API_V1_PREFIX}/search", methods=["GET"])
     async def search_tracks(request: Request) -> Response:
         """
         Search for audio tracks.
@@ -161,23 +175,16 @@ def register_http_api_routes(mcp: FastMCP) -> None:
             return response
 
         except ValidationError as e:
-            # Handle validation errors with consistent error response format
-            return JSONResponse({
-                "success": False,
-                "error": ErrorCode.INVALID_QUERY,
-                "message": str(e)
-            }, status_code=400)
+            return error_response(ErrorCode.INVALID_QUERY, str(e), 400)
 
         except Exception as e:
             logger.exception(f"Search failed for query '{request.query_params.get('q', 'unknown')}': {e}")
-            return JSONResponse({
-                "success": False,
-                "error": ErrorCode.SEARCH_FAILED,
-                "message": "An internal error occurred during search."
-            }, status_code=500)
+            return error_response(
+                ErrorCode.SEARCH_FAILED, "An internal error occurred during search.", 500
+            )
 
 
-    @mcp.custom_route("/api/tracks/{audioId}/stream", methods=["GET"])
+    @mcp.custom_route(f"{API_V1_PREFIX}/tracks/{{audioId}}/stream", methods=["GET"])
     async def get_track_stream(request: Request) -> Response:
         """
         Get signed streaming URL for an audio track.
@@ -187,11 +194,7 @@ def register_http_api_routes(mcp: FastMCP) -> None:
         try:
             audio_id = validate_uuid_path(audio_id)
         except ValidationError as e:
-            return JSONResponse({
-                "success": False,
-                "error": ErrorCode.VALIDATION_ERROR,
-                "message": str(e)
-            }, status_code=400)
+            return error_response(ErrorCode.VALIDATION_ERROR, str(e), 400)
 
         try:
             details = await streaming_service.get_audio_stream_details(audio_id)
@@ -199,13 +202,13 @@ def register_http_api_routes(mcp: FastMCP) -> None:
             # GCS correctly handles HTTP Range requests on signed URLs.
             return RedirectResponse(url=details["signed_url"], status_code=302)
         except ResourceNotFoundError as e:
-            return JSONResponse({"success": False, "message": str(e)}, status_code=404)
+            return error_response(ErrorCode.TRACK_NOT_FOUND, str(e), 404)
         except Exception as e:
             logger.exception(f"Failed to get stream URL for {audio_id}: {e}")
-            return JSONResponse({"success": False, "message": "Internal server error"}, status_code=500)
+            return error_response(ErrorCode.INTERNAL_ERROR, "Internal server error", 500)
 
 
-    @mcp.custom_route("/api/tracks/{audioId}/thumbnail", methods=["GET"])
+    @mcp.custom_route(f"{API_V1_PREFIX}/tracks/{{audioId}}/thumbnail", methods=["GET"])
     async def get_track_thumbnail(request: Request) -> Response:
         """
         Get signed URL for track thumbnail/artwork.
@@ -215,23 +218,19 @@ def register_http_api_routes(mcp: FastMCP) -> None:
         try:
             audio_id = validate_uuid_path(audio_id)
         except ValidationError as e:
-            return JSONResponse({
-                "success": False,
-                "error": ErrorCode.VALIDATION_ERROR,
-                "message": str(e)
-            }, status_code=400)
+            return error_response(ErrorCode.VALIDATION_ERROR, str(e), 400)
 
         try:
             details = await streaming_service.get_thumbnail_details(audio_id)
             return RedirectResponse(url=details["signed_url"], status_code=302)
         except ResourceNotFoundError as e:
-            return JSONResponse({"success": False, "message": str(e)}, status_code=404)
+            return error_response(ErrorCode.TRACK_NOT_FOUND, str(e), 404)
         except Exception as e:
             logger.exception(f"Failed to get thumbnail URL for {audio_id}: {e}")
-            return JSONResponse({"success": False, "message": "Internal server error"}, status_code=500)
+            return error_response(ErrorCode.INTERNAL_ERROR, "Internal server error", 500)
 
 
-    @mcp.custom_route("/api/tracks/{audioId}/download", methods=["GET"])
+    @mcp.custom_route(f"{API_V1_PREFIX}/tracks/{{audioId}}/download", methods=["GET"])
     async def download_audio(request: Request) -> Response:
         """
         Download audio file with optional format conversion. Refactored to use download_service.
@@ -240,11 +239,7 @@ def register_http_api_routes(mcp: FastMCP) -> None:
         try:
             audio_id = validate_uuid_path(audio_id)
         except ValidationError as e:
-            return JSONResponse({
-                "success": False,
-                "error": ErrorCode.VALIDATION_ERROR,
-                "message": str(e)
-            }, status_code=400)
+            return error_response(ErrorCode.VALIDATION_ERROR, str(e), 400)
 
         target_format = request.query_params.get("format")
         preset = request.query_params.get("preset")
@@ -255,18 +250,14 @@ def register_http_api_routes(mcp: FastMCP) -> None:
             if preset is None:
                 preset = get_default_preset(target_format)
         except ValidationError as e:
-            return JSONResponse({
-                "success": False,
-                "error": ErrorCode.VALIDATION_ERROR,
-                "message": str(e)
-            }, status_code=400)
+            return error_response(ErrorCode.VALIDATION_ERROR, str(e), 400)
 
         try:
             action, data = await download_service.prepare_audio_download(audio_id, target_format, preset)
 
             if action == "redirect":
                 return RedirectResponse(url=data["url"], status_code=302)
-            
+
             if action == "stream":
                 output_path = data["output_path"]
 
@@ -275,9 +266,9 @@ def register_http_api_routes(mcp: FastMCP) -> None:
                     with open(output_path, "rb") as f:
                         while chunk := f.read(chunk_size):
                             yield chunk
-                
+
                 cleanup_task = BackgroundTask(download_service.cleanup_temp_directory, temp_dir=data["temp_dir"])
-                
+
                 return StreamingResponse(
                     file_iterator(),
                     media_type=data["mime_type"],
@@ -288,25 +279,25 @@ def register_http_api_routes(mcp: FastMCP) -> None:
                         "X-Conversion-Time": str(data["conversion_time"]),
                     },
                 )
-            
+
             # Should not be reached
-            return JSONResponse({"success": False, "message": "Unknown service action"}, status_code=500)
+            return error_response(ErrorCode.INTERNAL_ERROR, "Unknown service action", 500)
 
         except (ConversionTimeoutError, ConversionError, ResourceNotFoundError) as e:
             error_map = {
-                ConversionTimeoutError: (504, "CONVERSION_TIMEOUT", "Conversion timed out"),
-                ConversionError: (500, "CONVERSION_FAILED", f"Conversion failed: {e}"),
-                ResourceNotFoundError: (404, "TRACK_NOT_FOUND", str(e)),
+                ConversionTimeoutError: (504, ErrorCode.CONVERSION_TIMEOUT, "Conversion timed out"),
+                ConversionError: (500, ErrorCode.CONVERSION_FAILED, f"Conversion failed: {e}"),
+                ResourceNotFoundError: (404, ErrorCode.TRACK_NOT_FOUND, str(e)),
             }
-            status, code, msg = error_map.get(type(e), (500, "DOWNLOAD_FAILED", str(e)))
+            status, code, msg = error_map.get(type(e), (500, ErrorCode.DOWNLOAD_FAILED, str(e)))
             logger.error(f"Download failed for {audio_id}: {msg}")
-            return JSONResponse({"success": False, "message": msg, "error": code}, status_code=status)
+            return error_response(code, msg, status)
         except Exception as e:
             logger.exception(f"Unexpected download failure for {audio_id}: {e}")
-            return JSONResponse({"success": False, "message": "Unexpected download error"}, status_code=500)
+            return error_response(ErrorCode.INTERNAL_ERROR, "Unexpected download error", 500)
 
 
-    @mcp.custom_route("/api/tracks/{audioId}", methods=["DELETE"])
+    @mcp.custom_route(f"{API_V1_PREFIX}/tracks/{{audioId}}", methods=["DELETE"])
     async def delete_track(request: Request) -> Response:
         """
         Delete a track via HTTP API.
@@ -315,22 +306,19 @@ def register_http_api_routes(mcp: FastMCP) -> None:
         try:
             audio_id = validate_uuid_path(audio_id)
         except ValidationError as e:
-            return JSONResponse({
-                "success": False,
-                "error": ErrorCode.VALIDATION_ERROR,
-                "message": str(e)
-            }, status_code=400)
+            return error_response(ErrorCode.VALIDATION_ERROR, str(e), 400)
 
         try:
             await audio_service.delete_audio_track_and_files(audio_id)
             return Response(status_code=204)
         except ResourceNotFoundError as e:
-            return JSONResponse({"success": False, "message": str(e)}, status_code=404)
+            return error_response(ErrorCode.TRACK_NOT_FOUND, str(e), 404)
         except Exception as e:
             logger.exception(f"Failed to delete track {audio_id}: {e}")
-            return JSONResponse({"success": False, "message": "Internal server error"}, status_code=500)
+            return error_response(ErrorCode.INTERNAL_ERROR, "Internal server error", 500)
 
 
+__all__ = ["register_http_api_routes", "error_response", "API_V1_PREFIX"]
     # ====================================================================
     # Song Publishing API Endpoints
     # ====================================================================

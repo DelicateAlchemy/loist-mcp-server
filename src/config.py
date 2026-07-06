@@ -82,10 +82,16 @@ class ServerConfig(BaseSettings):
     # CORS Configuration
     enable_cors: bool = True
     cors_origins: str = "*"  # Comma-separated origins in production
-    cors_allow_credentials: bool = True
-    cors_allow_methods: str = "GET,POST,OPTIONS"
+    # Credentials default to False: browsers reject wildcard origins combined
+    # with credentials, and REST auth uses the Authorization header (not
+    # cookies), which does not need credentialed CORS. Only enable together
+    # with an explicit CORS_ORIGINS allowlist if cookie auth is ever adopted.
+    cors_allow_credentials: bool = False
+    cors_allow_methods: str = "GET,POST,DELETE,OPTIONS"
     cors_allow_headers: str = "Authorization,Content-Type,Range,X-Requested-With,Accept,Origin"
-    cors_expose_headers: str = "Content-Range,Accept-Ranges,Content-Length,Content-Type"
+    # ETag / X-Total-Count / Link / X-Conversion-Time are set by the REST API
+    # and must be exposed or browser JavaScript cannot read them.
+    cors_expose_headers: str = "Content-Range,Accept-Ranges,Content-Length,Content-Type,ETag,X-Total-Count,Link,X-Conversion-Time"
     
     # Embed Configuration
     embed_base_url: str = "https://loist.io"  # Base URL for embed links (configurable for local dev)

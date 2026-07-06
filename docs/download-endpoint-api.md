@@ -44,11 +44,11 @@ The `download_audio` tool is the canonical way to access this functionality for 
 
 ### HTTP REST API (Convenience Wrapper)
 
-For direct browser downloads, a `GET /api/tracks/{audioId}/download` endpoint is provided. This endpoint directly serves the file with appropriate `Content-Disposition` headers, making it easy to integrate with web frontends. This endpoint is a convenience wrapper around the same core logic used by the MCP tool.
+For direct browser downloads, a `GET /api/v1/tracks/{audioId}/download` endpoint is provided. This endpoint directly serves the file with appropriate `Content-Disposition` headers, making it easy to integrate with web frontends. This endpoint and the MCP `download_audio` tool are independent interfaces over the same shared download service (`src/services/download_service.py`).
 
 ## HTTP API Endpoint
 
-### `GET /api/tracks/{audioId}/download`
+### `GET /api/v1/tracks/{audioId}/download`
 
 Download an audio track in the specified format with on-the-fly conversion.
 
@@ -98,16 +98,16 @@ Download an audio track in the specified format with on-the-fly conversion.
 
 ```bash
 # Download as high-quality MP3
-GET /api/tracks/550e8400-e29b-41d4-a716-446655440000/download?format=mp3
+GET /api/v1/tracks/550e8400-e29b-41d4-a716-446655440000/download?format=mp3
 
 # Download as broadcast WAV
-GET /api/tracks/550e8400-e29b-41d4-a716-446655440000/download?format=wav&preset=broadcast
+GET /api/v1/tracks/550e8400-e29b-41d4-a716-446655440000/download?format=wav&preset=broadcast
 
 # Download as lossless FLAC
-GET /api/tracks/550e8400-e29b-41d4-a716-446655440000/download?format=flac
+GET /api/v1/tracks/550e8400-e29b-41d4-a716-446655440000/download?format=flac
 
 # Download as AAC for Apple devices
-GET /api/tracks/550e8400-e29b-41d4-a716-446655440000/download?format=aac
+GET /api/v1/tracks/550e8400-e29b-41d4-a716-446655440000/download?format=aac
 ```
 
 #### Response
@@ -267,7 +267,7 @@ All metadata uses UTF-8 encoding internally. FFmpeg handles conversion to format
 
 ```javascript
 // Download as MP3
-const response = await fetch(`/api/tracks/${audioId}/download?format=mp3`);
+const response = await fetch(`/api/v1/tracks/${audioId}/download?format=mp3`);
 if (response.ok) {
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);

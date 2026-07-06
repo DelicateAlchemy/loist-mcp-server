@@ -37,7 +37,7 @@
 					"",
 					"// SYNCHRONOUS SESSION INITIALIZATION: Block until session is ready",
 					"if (!sessionId) {",
-					"    console.log('\ud83d\udd04 No session found - synchronously initializing MCP session...');",
+					"    console.log('🔄 No session found - synchronously initializing MCP session...');",
 					"    ",
 					"    const baseUrl = pm.environment.get('base_url') || 'http://localhost:8080';",
 					"    let sessionInitComplete = false;",
@@ -70,7 +70,7 @@
 					"    // Send async request but use busy-wait to block until complete",
 					"    pm.sendRequest(initRequest, function(err, initResponse) {",
 					"        if (err) {",
-					"            console.error('\u274c Session initialization failed:', err);",
+					"            console.error('❌ Session initialization failed:', err);",
 					"            sessionInitError = err;",
 					"            sessionInitComplete = true;",
 					"            return;",
@@ -79,13 +79,13 @@
 					"        // Extract session ID from response header (try both header names)",
 					"        newSessionId = initResponse.headers.get('mcp-session-id') || initResponse.headers.get('x-mcp-session-id');",
 					"        if (!newSessionId) {",
-					"            console.error('\u274c No session ID in response headers');",
+					"            console.error('❌ No session ID in response headers');",
 					"            sessionInitError = 'No session ID returned by server';",
 					"            sessionInitComplete = true;",
 					"            return;",
 					"        }",
 					"        ",
-					"        console.log('\u2705 Got session ID:', newSessionId);",
+					"        console.log('✅ Got session ID:', newSessionId);",
 					"        pm.environment.set('sessionId', newSessionId);",
 					"        pm.environment.set('sessionInitializedAt', new Date().toISOString());",
 					"        ",
@@ -109,10 +109,10 @@
 					"        ",
 					"        pm.sendRequest(notifyRequest, function(notifyErr) {",
 					"            if (notifyErr) {",
-					"                console.error('\u274c Handshake notification failed:', notifyErr);",
+					"                console.error('❌ Handshake notification failed:', notifyErr);",
 					"                sessionInitError = notifyErr;",
 					"            } else {",
-					"                console.log('\u2705 MCP handshake complete! Session ready.');",
+					"                console.log('✅ MCP handshake complete! Session ready.');",
 					"            }",
 					"            sessionInitComplete = true;",
 					"        });",
@@ -136,14 +136,14 @@
 					"        throw new Error('Session initialization failed: ' + sessionInitError);",
 					"    }",
 					"    ",
-					"    console.log('\ud83d\udd11 Session initialization completed synchronously - ready to proceed');",
+					"    console.log('🔑 Session initialization completed synchronously - ready to proceed');",
 					"}",
 					"",
 					"// SESSION VALIDATION: Ensure session exists and is valid before proceeding",
 					"sessionId = pm.environment.get('sessionId');",
 					"if (!sessionId) {",
 					"    const errorMsg = 'MCP session not initialized. Please run the \"Initialize MCP Session\" request first, or wait for automatic initialization to complete.';",
-					"    console.error('\u274c ' + errorMsg);",
+					"    console.error('❌ ' + errorMsg);",
 					"    throw new Error(errorMsg);",
 					"}",
 					"",
@@ -153,13 +153,13 @@
 					"    const sessionAge = Date.now() - new Date(sessionAgeStr).getTime();",
 					"    const oneHourMs = 60 * 60 * 1000;",
 					"    if (sessionAge > oneHourMs) {",
-					"        console.warn('\u26a0\ufe0f Session is older than 1 hour. Consider re-initializing if requests fail.');",
+					"        console.warn('⚠️ Session is older than 1 hour. Consider re-initializing if requests fail.');",
 					"    }",
 					"}",
 					"",
 					"// Attach validated session ID to request",
 					"pm.request.headers.upsert({ key: 'mcp-session-id', value: sessionId });",
-					"console.log(`\ud83d\udd11 Using validated MCP session ${sessionId} for ${pm.info.requestName}`);"
+					"console.log(`🔑 Using validated MCP session ${sessionId} for ${pm.info.requestName}`);"
 				]
 			}
 		}
@@ -246,7 +246,7 @@
 									"});",
 									"",
 									"if (sessionId) {",
-									"    console.log('\u2705 Initialize MCP Session completed successfully');",
+									"    console.log('✅ Initialize MCP Session completed successfully');",
 									"    console.log('Session ID:', sessionId);",
 									"    console.log('Ready for MCP tool calls');",
 									"}",
@@ -392,7 +392,7 @@
 									"            ",
 									"            // Check if it's a session error",
 									"            if (errorMsg.toLowerCase().includes('session')) {",
-									"                console.log('\\n\u26a0\ufe0f SESSION ERROR DETECTED');",
+									"                console.log('\\n⚠️ SESSION ERROR DETECTED');",
 									"                console.log('FastMCP HTTP transport may require initialize() call first.');",
 									"                console.log('Try calling initialize method before tools/call');",
 									"            }",
@@ -592,7 +592,7 @@
 									"const audioUrl = pm.environment.get('audio_source_url') || pm.collectionVariables.get('audio_source_url');",
 									"",
 									"if (!audioUrl || audioUrl === 'https://example.com/audio.mp3') {",
-									"    console.warn('\u26a0\ufe0f audio_source_url is not set or is still the example URL!');",
+									"    console.warn('⚠️ audio_source_url is not set or is still the example URL!');",
 									"    console.warn('Set audio_source_url in your environment to the URL of an audio file to process.');",
 									"}",
 									"",
@@ -603,15 +603,15 @@
 									"        const urlObj = new URL(audioUrl);",
 									"        filename = urlObj.pathname.split('/').pop() || 'audio.mp3';",
 									"        pm.variables.set('audio_source_filename', filename);",
-									"        console.log('\ud83d\udcc1 Auto-derived filename from URL:', filename);",
+									"        console.log('📁 Auto-derived filename from URL:', filename);",
 									"    } catch (e) {",
 									"        console.warn('Could not parse URL for filename, using default');",
 									"        pm.variables.set('audio_source_filename', 'audio.mp3');",
 									"    }",
 									"}",
 									"",
-									"console.log('\ud83c\udfb5 Processing audio from:', audioUrl);",
-									"console.log('\ud83d\udcc1 Filename:', filename || pm.variables.get('audio_source_filename'));"
+									"console.log('🎵 Processing audio from:', audioUrl);",
+									"console.log('📁 Filename:', filename || pm.variables.get('audio_source_filename'));"
 								]
 							}
 						},
@@ -679,7 +679,7 @@
 									"    if (toolResult && toolResult.audio_id) {",
 									"        pm.environment.set('audio_id', toolResult.audio_id);",
 									"        pm.environment.set('last_processed_audio_id', toolResult.audio_id);",
-									"        console.log('\u2705 Stored audio_id for chaining:', toolResult.audio_id);",
+									"        console.log('✅ Stored audio_id for chaining:', toolResult.audio_id);",
 									"    }",
 									"    ",
 									"    // Log result summary",
@@ -714,7 +714,7 @@
 								"mcp"
 							]
 						},
-						"description": "Complete audio processing pipeline: Download \u2192 Extract metadata \u2192 Upload to GCS \u2192 Save to DB. Returns audio ID and metadata."
+						"description": "Complete audio processing pipeline: Download → Extract metadata → Upload to GCS → Save to DB. Returns audio ID and metadata."
 					},
 					"response": []
 				},
@@ -756,7 +756,7 @@
 									"// Verify audio_id is available",
 									"const audioId = pm.environment.get('audio_id');",
 									"if (!audioId) {",
-									"    console.warn('\u26a0\ufe0f No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
+									"    console.warn('⚠️ No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
 									"}"
 								]
 							}
@@ -936,7 +936,7 @@
 									"    const results = toolResult.results || toolResult.items || (Array.isArray(toolResult) ? toolResult : []);",
 									"    if (results.length > 0 && results[0].audio_id) {",
 									"        pm.environment.set('search_result_audio_id', results[0].audio_id);",
-									"        console.log('\u2705 Stored first search result audio_id:', results[0].audio_id);",
+									"        console.log('✅ Stored first search result audio_id:', results[0].audio_id);",
 									"    }",
 									"    ",
 									"    console.log('Search Result:', JSON.stringify(toolResult, null, 2));",
@@ -1081,7 +1081,7 @@
 									"// Verify audio_id is available",
 									"const audioId = pm.environment.get('audio_id');",
 									"if (!audioId) {",
-									"    console.warn('\u26a0\ufe0f No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
+									"    console.warn('⚠️ No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
 									"}"
 								]
 							}
@@ -1124,7 +1124,7 @@
 									"",
 									"if (jsonResponse.error || isFastMCPError) {",
 									"    const errorMsg = jsonResponse.error ? jsonResponse.error.message : fastMCPErrorMsg;",
-									"    console.log('\u274c Error:', errorMsg);",
+									"    console.log('❌ Error:', errorMsg);",
 									"} else {",
 									"    pm.test('Response has result', function () {",
 									"        pm.expect(jsonResponse).to.have.property('result');",
@@ -1158,7 +1158,7 @@
 									"        pm.expect(toolResult.metadata).to.be.an('object');",
 									"    });",
 									"    ",
-									"    console.log('\u2705 Update Metadata Result:');",
+									"    console.log('✅ Update Metadata Result:');",
 									"    console.log('  Updated fields:', toolResult.updated_fields);",
 									"    console.log('  New artist:', toolResult.metadata?.artist);",
 									"    console.log('  New year:', toolResult.metadata?.year);",
@@ -1241,7 +1241,7 @@
 									"    pm.expect(toolResult.error).to.equal('VALIDATION_ERROR');",
 									"});",
 									"",
-									"console.log('\u2705 Empty metadata correctly rejected:', toolResult.message);"
+									"console.log('✅ Empty metadata correctly rejected:', toolResult.message);"
 								]
 							}
 						}
@@ -1320,7 +1320,7 @@
 									"    pm.expect(toolResult.error).to.equal('RESOURCE_NOT_FOUND');",
 									"});",
 									"",
-									"console.log('\u2705 Non-existent track correctly rejected:', toolResult.message);"
+									"console.log('✅ Non-existent track correctly rejected:', toolResult.message);"
 								]
 							}
 						}
@@ -1364,7 +1364,7 @@
 								"exec": [
 									"const audioId = pm.environment.get('audio_id');",
 									"if (!audioId) {",
-									"    console.warn('\u26a0\ufe0f No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
+									"    console.warn('⚠️ No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
 									"}"
 								]
 							}
@@ -1445,7 +1445,7 @@
 									"    const embedUrl = toolResult.urls && toolResult.urls.embed;",
 									"    if (embedUrl) {",
 									"        pm.environment.set('embed_url', embedUrl);",
-									"        console.log('\u2705 Stored embed_url for oEmbed testing:', embedUrl);",
+									"        console.log('✅ Stored embed_url for oEmbed testing:', embedUrl);",
 									"    }",
 									"    ",
 									"    console.log('Embed URL Result:', JSON.stringify(toolResult, null, 2));",
@@ -1493,7 +1493,7 @@
 								"exec": [
 									"const audioId = pm.environment.get('audio_id');",
 									"if (!audioId) {",
-									"    console.warn('\u26a0\ufe0f No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
+									"    console.warn('⚠️ No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
 									"}"
 								]
 							}
@@ -1721,7 +1721,7 @@
 								"exec": [
 									"const audioId = pm.environment.get('audio_id');",
 									"if (!audioId) {",
-									"    console.warn('\u26a0\ufe0f No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
+									"    console.warn('⚠️ No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
 									"}",
 									"",
 									"// Set default download_format if not set (supports: mp3, wav, flac, aac, ogg)",
@@ -1811,7 +1811,7 @@
 									"    // Store download URL for testing",
 									"    if (toolResult.success && toolResult.download_url) {",
 									"        pm.environment.set('download_url', toolResult.download_url);",
-									"        console.log('\ud83d\udce5 Download URL stored in environment');",
+									"        console.log('📥 Download URL stored in environment');",
 									"    }",
 									"    ",
 									"    console.log('Download Result:', JSON.stringify(toolResult, null, 2));",
@@ -1859,7 +1859,7 @@
 								"exec": [
 									"const audioId = pm.environment.get('audio_id');",
 									"if (!audioId) {",
-									"    console.warn('\u26a0\ufe0f No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
+									"    console.warn('⚠️ No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
 									"}"
 								]
 							}
@@ -1983,8 +1983,8 @@
 									"// Verify audio_id is available",
 									"const audioId = pm.environment.get('audio_id');",
 									"if (!audioId) {",
-									"    console.warn('\u26a0\ufe0f No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
-									"    console.warn('\u26a0\ufe0f DELETE will fail without a valid audio_id.');",
+									"    console.warn('⚠️ No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
+									"    console.warn('⚠️ DELETE will fail without a valid audio_id.');",
 									"}"
 								]
 							}
@@ -2016,7 +2016,7 @@
 									"    pm.expect(jsonResponse).to.have.property('id');",
 									"});",
 									"",
-									"// \u2705 delete_audio is NOW IMPLEMENTED (hard delete with GCS cleanup)",
+									"// ✅ delete_audio is NOW IMPLEMENTED (hard delete with GCS cleanup)",
 									"// Removes: DB record, GCS audio file, waveform SVG, thumbnails",
 									"",
 									"// Check for FastMCP tool error format (isError: true in result)",
@@ -2059,7 +2059,7 @@
 									"    ",
 									"    // Clear the audio_id since it's been deleted",
 									"    if (toolResult.success || toolResult.deleted) {",
-									"        console.log('\u2705 Audio deleted. Clearing audio_id from environment.');",
+									"        console.log('✅ Audio deleted. Clearing audio_id from environment.');",
 									"        pm.environment.unset('audio_id');",
 									"    }",
 									"}"
@@ -2353,12 +2353,13 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/api/tracks/{{audio_id}}/stream",
+							"raw": "{{base_url}}/api/v1/tracks/{{audio_id}}/stream",
 							"host": [
 								"{{base_url}}"
 							],
 							"path": [
 								"api",
+								"v1",
 								"tracks",
 								"{{audio_id}}",
 								"stream"
@@ -2374,7 +2375,7 @@
 								"exec": [
 									"const audioId = pm.environment.get('audio_id');",
 									"if (!audioId) {",
-									"    console.warn('\u26a0\ufe0f No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
+									"    console.warn('⚠️ No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
 									"}"
 								]
 							}
@@ -2406,12 +2407,13 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/api/tracks/{{audio_id}}/stream",
+							"raw": "{{base_url}}/api/v1/tracks/{{audio_id}}/stream",
 							"host": [
 								"{{base_url}}"
 							],
 							"path": [
 								"api",
+								"v1",
 								"tracks",
 								"{{audio_id}}",
 								"stream"
@@ -2427,7 +2429,7 @@
 								"exec": [
 									"const audioId = pm.environment.get('audio_id');",
 									"if (!audioId) {",
-									"    console.warn('\u26a0\ufe0f No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
+									"    console.warn('⚠️ No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
 									"}"
 								]
 							}
@@ -2459,12 +2461,13 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/api/tracks/{{audio_id}}/thumbnail",
+							"raw": "{{base_url}}/api/v1/tracks/{{audio_id}}/thumbnail",
 							"host": [
 								"{{base_url}}"
 							],
 							"path": [
 								"api",
+								"v1",
 								"tracks",
 								"{{audio_id}}",
 								"thumbnail"
@@ -2480,7 +2483,7 @@
 								"exec": [
 									"const audioId = pm.environment.get('audio_id');",
 									"if (!audioId) {",
-									"    console.warn('\u26a0\ufe0f No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
+									"    console.warn('⚠️ No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
 									"}"
 								]
 							}
@@ -2521,12 +2524,13 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/api/tracks/{{audio_id}}/download?format=mp3",
+							"raw": "{{base_url}}/api/v1/tracks/{{audio_id}}/download?format=mp3",
 							"host": [
 								"{{base_url}}"
 							],
 							"path": [
 								"api",
+								"v1",
 								"tracks",
 								"{{audio_id}}",
 								"download"
@@ -2549,7 +2553,7 @@
 								"exec": [
 									"const audioId = pm.environment.get('audio_id');",
 									"if (!audioId) {",
-									"    console.warn('\u26a0\ufe0f No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
+									"    console.warn('⚠️ No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
 									"}"
 								]
 							}
@@ -2566,13 +2570,13 @@
 									"});",
 									"",
 									"if (pm.response.code === 404) {",
-									"    console.log('\ud83d\udea8 Expected 404: Test track has no uploaded files');",
+									"    console.log('🚨 Expected 404: Test track has no uploaded files');",
 									"} else if (pm.response.code === 302) {",
 									"    pm.test('Redirect to signed GCS URL', function () {",
 									"        const location = pm.response.headers.get('Location');",
 									"        pm.expect(location).to.include('storage.googleapis.com');",
 									"    });",
-									"    console.log('\u27a1\ufe0f Short-circuit: redirected to original file');",
+									"    console.log('➡️ Short-circuit: redirected to original file');",
 									"} else if (pm.response.code === 200) {",
 									"    pm.test('Returns audio file', function () {",
 									"        const contentType = pm.response.headers.get('Content-Type');",
@@ -2583,7 +2587,7 @@
 									"        pm.expect(contentDisposition).to.include('filename');",
 									"    });",
 									"    ",
-									"    console.log('\u2705 Downloaded converted MP3 file');",
+									"    console.log('✅ Downloaded converted MP3 file');",
 									"    console.log('Content-Type:', pm.response.headers.get('Content-Type'));",
 									"    console.log('Content-Length:', pm.response.headers.get('Content-Length'));",
 									"    console.log('Filename:', pm.response.headers.get('Content-Disposition'));",
@@ -2600,12 +2604,13 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/api/tracks/{{audio_id}}/download?format=wav&preset=broadcast",
+							"raw": "{{base_url}}/api/v1/tracks/{{audio_id}}/download?format=wav&preset=broadcast",
 							"host": [
 								"{{base_url}}"
 							],
 							"path": [
 								"api",
+								"v1",
 								"tracks",
 								"{{audio_id}}",
 								"download"
@@ -2633,7 +2638,7 @@
 								"exec": [
 									"const audioId = pm.environment.get('audio_id');",
 									"if (!audioId) {",
-									"    console.warn('\u26a0\ufe0f No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
+									"    console.warn('⚠️ No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
 									"}"
 								]
 							}
@@ -2647,7 +2652,7 @@
 									"    pm.expect(pm.response.code).to.be.oneOf([200, 302, 404]);",
 									"    ",
 									"    if (pm.response.code === 404) {",
-									"        console.log('\ud83d\udea8 Expected 404: Test track has no uploaded files');",
+									"        console.log('🚨 Expected 404: Test track has no uploaded files');",
 									"    } else if (pm.response.code === 200) {",
 									"        const contentType = pm.response.headers.get('Content-Type');",
 									"        pm.expect(contentType).to.include('audio/wav');",
@@ -2658,7 +2663,7 @@
 									"    }",
 									"});",
 									"",
-									"console.log('\u2705 Downloaded WAV file with BWF metadata');"
+									"console.log('✅ Downloaded WAV file with BWF metadata');"
 								]
 							}
 						}
@@ -2671,12 +2676,13 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/api/tracks/{{audio_id}}/download?format=flac",
+							"raw": "{{base_url}}/api/v1/tracks/{{audio_id}}/download?format=flac",
 							"host": [
 								"{{base_url}}"
 							],
 							"path": [
 								"api",
+								"v1",
 								"tracks",
 								"{{audio_id}}",
 								"download"
@@ -2699,7 +2705,7 @@
 								"exec": [
 									"const audioId = pm.environment.get('audio_id');",
 									"if (!audioId) {",
-									"    console.warn('\u26a0\ufe0f No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
+									"    console.warn('⚠️ No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
 									"}"
 								]
 							}
@@ -2713,7 +2719,7 @@
 									"    pm.expect(pm.response.code).to.be.oneOf([200, 302, 404]);",
 									"    ",
 									"    if (pm.response.code === 404) {",
-									"        console.log('\ud83d\udea8 Expected 404: Test track has no uploaded files');",
+									"        console.log('🚨 Expected 404: Test track has no uploaded files');",
 									"    } else if (pm.response.code === 200) {",
 									"        const contentType = pm.response.headers.get('Content-Type');",
 									"        pm.expect(contentType).to.include('audio/flac');",
@@ -2724,7 +2730,7 @@
 									"    }",
 									"});",
 									"",
-									"console.log('\u2705 Downloaded lossless FLAC file');"
+									"console.log('✅ Downloaded lossless FLAC file');"
 								]
 							}
 						}
@@ -2742,12 +2748,13 @@
 							}
 						],
 						"url": {
-							"raw": "{{base_url}}/api/tracks/{{audio_id}}",
+							"raw": "{{base_url}}/api/v1/tracks/{{audio_id}}",
 							"host": [
 								"{{base_url}}"
 							],
 							"path": [
 								"api",
+								"v1",
 								"tracks",
 								"{{audio_id}}"
 							]
@@ -2762,7 +2769,7 @@
 								"exec": [
 									"const audioId = pm.environment.get('audio_id');",
 									"if (!audioId) {",
-									"    console.warn('\u26a0\ufe0f No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
+									"    console.warn('⚠️ No audio_id set. Run \"Process Audio Complete\" first or set audio_id manually.');",
 									"}"
 								]
 							}
@@ -2778,10 +2785,10 @@
 									"});",
 									"",
 									"if (pm.response.code === 204) {",
-									"    console.log('\u2705 Audio track deleted successfully.');",
+									"    console.log('✅ Audio track deleted successfully.');",
 									"    pm.environment.unset('audio_id'); // Clear audio_id as it's been deleted",
 									"} else if (pm.response.code === 404) {",
-									"    console.log('\ud83d\udea8 Expected 404: Audio track not found (might have been deleted already or never existed).');",
+									"    console.log('🚨 Expected 404: Audio track not found (might have been deleted already or never existed).');",
 									"    pm.expect(pm.response.json().success).to.be.false;",
 									"    pm.expect(pm.response.json().message).to.include('not found');",
 									"} else {",

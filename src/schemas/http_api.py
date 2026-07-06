@@ -18,7 +18,14 @@ from src.exceptions import ValidationError
 # ============================================================================
 
 class ErrorCode(str):
-    """Error codes for HTTP API validation errors"""
+    """
+    Error codes for the REST API.
+
+    Every error response uses the envelope
+    {"success": false, "error": "<code>", "message": "..."} — these are the
+    valid values for the "error" field. Documented for frontend consumers in
+    docs/frontend-api-guide.md; keep the two in sync.
+    """
     INVALID_QUERY = "INVALID_QUERY"
     VALIDATION_ERROR = "VALIDATION_ERROR"
     RESOURCE_NOT_FOUND = "RESOURCE_NOT_FOUND"
@@ -27,6 +34,8 @@ class ErrorCode(str):
     TRACK_NOT_FOUND = "TRACK_NOT_FOUND"
     DOWNLOAD_FAILED = "DOWNLOAD_FAILED"
     SEARCH_FAILED = "SEARCH_FAILED"
+    UNAUTHORIZED = "UNAUTHORIZED"
+    INTERNAL_ERROR = "INTERNAL_ERROR"
 
 
 # ============================================================================
@@ -35,7 +44,7 @@ class ErrorCode(str):
 
 class SearchQueryParams(BaseModel):
     """
-    Query parameters for the search endpoint (/api/search).
+    Query parameters for the search endpoint (/api/v1/search).
 
     Provides strict validation for search parameters, rejecting invalid values
     instead of silently correcting them (aligns with MCP tool patterns).
@@ -133,7 +142,7 @@ class UUIDPathParams(BaseModel):
     """
     Path parameters containing UUID values.
 
-    Used for endpoints like /api/tracks/{audioId} to ensure
+    Used for endpoints like /api/v1/tracks/{audioId} to ensure
     audioId is a valid UUID format.
     """
     audio_id: str = Field(
@@ -174,7 +183,7 @@ class UUIDPathParams(BaseModel):
 
 class DownloadQueryParams(BaseModel):
     """
-    Query parameters for the download endpoint (/api/tracks/{audioId}/download).
+    Query parameters for the download endpoint (/api/v1/tracks/{audioId}/download).
 
     Validates format and preset parameters for audio conversion downloads.
     """
