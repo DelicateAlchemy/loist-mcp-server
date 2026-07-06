@@ -42,11 +42,14 @@ else:
 
 # Now import and run the server
 if __name__ == "__main__":
-    from src.server import mcp
+    from src.server import mcp, build_http_middleware
 
-    # Run the server
+    # Run the server. The middleware stack (CORS + REST API auth) must be
+    # passed here — FastMCP builds its Starlette app internally, so this is
+    # the only wiring point that reaches the running server.
     mcp.run(
         transport="http",
         host="0.0.0.0",
-        port=8080
+        port=8080,
+        middleware=build_http_middleware(),
     )

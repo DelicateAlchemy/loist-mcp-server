@@ -24,8 +24,8 @@ Refactor HTTP API endpoints to remove MCP coupling and introduce a service layer
 1. **Streaming Architecture:** Proxy streaming through API server vs signed URL redirect?
 2. **Image Optimization:** Should thumbnail endpoint support resizing/format conversion?
 3. **Caching Strategy:** What caching headers should be used for each endpoint?
-4. **Error Response Format:** Should HTTP API use different error format than MCP?
-5. **Versioning:** Should HTTP API be versioned (`/api/v1/...`)?
+4. **Error Response Format:** ~~Should HTTP API use different error format than MCP?~~ **Resolved (LOI-38, July 2026):** REST uses its own standardized envelope `{"success": false, "error": "<CODE>", "message": "..."}` applied uniformly via `error_response()` in `src/http_api.py`. See `docs/frontend-api-guide.md`.
+5. **Versioning:** ~~Should HTTP API be versioned (`/api/v1/...`)?~~ **Resolved (LOI-38, July 2026):** Yes — all REST endpoints moved to `/api/v1/*` (clean cutover, no legacy aliases; pre-frontend, no external consumers).
 6. **Rate Limiting:** Should rate limiting be added to HTTP API endpoints?
 
 ### Related Files

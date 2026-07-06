@@ -1,5 +1,10 @@
 # Frontend API Integration Guide
 
+> **Note (July 2026, LOI-38):** The REST API is now versioned under `/api/v1/*`
+> and the authoritative REST reference for frontend work is
+> [`frontend-api-guide.md`](frontend-api-guide.md). This document remains useful
+> for embed-player integration (PlayerConfig) and environment setup.
+
 This document provides a comprehensive list of API endpoints and environment variables needed to integrate the frontend with the Loist Music Library MCP Server backend.
 
 ## Table of Contents
@@ -336,7 +341,7 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
 Download audio tracks with on-the-fly format conversion, metadata embedding, and artwork embedding.
 
 ```http
-GET /api/tracks/{audioId}/download?format={format}&preset={preset}
+GET /api/v1/tracks/{audioId}/download?format={format}&preset={preset}
 Authorization: Bearer {token}  # If AUTH_ENABLED=true
 ```
 
@@ -369,20 +374,20 @@ Authorization: Bearer {token}  # If AUTH_ENABLED=true
 **Examples**:
 ```bash
 # Download as high-quality MP3
-GET /api/tracks/550e8400-e29b-41d4-a716-446655440000/download?format=mp3
+GET /api/v1/tracks/550e8400-e29b-41d4-a716-446655440000/download?format=mp3
 
 # Download as broadcast WAV
-GET /api/tracks/550e8400-e29b-41d4-a716-446655440000/download?format=wav&preset=broadcast
+GET /api/v1/tracks/550e8400-e29b-41d4-a716-446655440000/download?format=wav&preset=broadcast
 
 # Download as lossless FLAC
-GET /api/tracks/550e8400-e29b-41d4-a716-446655440000/download?format=flac
+GET /api/v1/tracks/550e8400-e29b-41d4-a716-446655440000/download?format=flac
 ```
 
 ---
 
 #### 8. Delete Audio Track
 ```http
-DELETE /api/tracks/{audioId}
+DELETE /api/v1/tracks/{audioId}
 Authorization: Bearer {token}  # If AUTH_ENABLED=true
 ```
 
@@ -1149,7 +1154,7 @@ export const api = {
   deleteTrack: (audioId: string) =>
     apiRequest({
       method: 'DELETE',
-      path: `/api/tracks/${audioId}`
+      path: `/api/v1/tracks/${audioId}`
     }),
 
   // Embed

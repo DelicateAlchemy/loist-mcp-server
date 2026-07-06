@@ -187,14 +187,16 @@ For operational monitoring and simple REST-based access, the server exposes stan
 -   **`get_waveform_metrics_tool`**: Provides metrics on waveform generation.
 -   **`get_circuit_breaker_status`**: Shows the status of internal circuit breakers.
 
-#### REST API Endpoints
+#### REST API Endpoints (v1)
 
-For convenience, especially for web frontends, a set of RESTful endpoints are provided as wrappers around some MCP tool functionality.
+The REST API is an independent interface for web frontends. It is **not** a wrapper around MCP tools — REST routes and MCP tools both call the same shared service layer (`src/services/`) and evolve independently. See `docs/frontend-api-guide.md` for the full reference.
 
-- `GET /api/tracks/{audioId}` - Get track metadata
-- `GET /api/search?q=<query>` - Search tracks with filters
-- `GET /api/tracks/{audioId}/stream` - Get signed streaming URL
-- `GET /api/tracks/{audioId}/thumbnail` - Get signed thumbnail URL
+- `GET /api/v1/tracks/{audioId}` - Get track metadata
+- `GET /api/v1/search?q=<query>` - Search tracks with filters
+- `GET /api/v1/tracks/{audioId}/stream` - Get signed streaming URL
+- `GET /api/v1/tracks/{audioId}/thumbnail` - Get signed thumbnail URL
+- `GET /api/v1/tracks/{audioId}/download?format=<fmt>` - Download with format conversion
+- `DELETE /api/v1/tracks/{audioId}` - Delete a track
 
 ## A2A Agent-to-Agent Protocol
 

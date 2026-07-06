@@ -2240,32 +2240,45 @@ def create_mcp_tools():
     return True
 
 
-def create_http_app():
+def build_http_middleware() -> list:
     """
-    Create HTTP application with CORS middleware for iframe embedding
-    Only used when transport is HTTP or SSE
+    Build the ASGI middleware stack for HTTP/SSE transports.
+
+    Must be passed to mcp.run(transport="http", middleware=...) — FastMCP
+    builds its own Starlette app internally, so middleware added anywhere
+    else never reaches the running server. (A previous create_http_app()
+    helper configured CORS but was never called, which meant the deployed
+    server sent no CORS headers at all.)
+
+    Order matters: CORS is outermost so that auth rejections (401) still
+    carry CORS headers and are readable by browser frontends.
     """
+    from starlette.middleware import Middleware
     from starlette.middleware.cors import CORSMiddleware
 
-    if not config.enable_cors:
-        logger.info("CORS disabled, returning plain MCP app")
-        return None
+    from src.api_auth import BearerAuthMiddleware
 
-    # Get the FastMCP HTTP app
-    mcp_app = mcp.http_app(path="/mcp")
+    middleware = []
 
-    # Add CORS middleware
-    mcp_app.add_middleware(
-        CORSMiddleware,
-        allow_origins=config.cors_origins_list,
-        allow_credentials=config.cors_allow_credentials,
-        allow_methods=config.cors_allow_methods_list,
-        allow_headers=config.cors_allow_headers_list,
-        expose_headers=config.cors_expose_headers_list,
-    )
+    if config.enable_cors:
+        middleware.append(
+            Middleware(
+                CORSMiddleware,
+                allow_origins=config.cors_origins_list,
+                allow_credentials=config.cors_allow_credentials,
+                allow_methods=config.cors_allow_methods_list,
+                allow_headers=config.cors_allow_headers_list,
+                expose_headers=config.cors_expose_headers_list,
+            )
+        )
+        logger.info(f"🌐 CORS enabled for origins: {config.cors_origins_list}")
+    else:
+        logger.info("CORS disabled")
 
-    logger.info(f"🌐 CORS enabled for origins: {config.cors_origins_list}")
-    return mcp_app
+    # Self-gates on config.auth_enabled; a no-op for MVP deploys.
+    middleware.append(Middleware(BearerAuthMiddleware))
+
+    return middleware
 
 
 if __name__ == "__main__":
@@ -2275,10 +2288,20 @@ if __name__ == "__main__":
     # Check transport mode and run accordingly
     if config.server_transport == "http":
         logger.info(f"🌐 Starting HTTP server on {config.server_host}:{config.server_port}")
-        mcp.run(transport="http", host=config.server_host, port=config.server_port)
+        mcp.run(
+            transport="http",
+            host=config.server_host,
+            port=config.server_port,
+            middleware=build_http_middleware(),
+        )
     elif config.server_transport == "sse":
         logger.info(f"📡 Starting SSE server on {config.server_host}:{config.server_port}")
-        mcp.run(transport="sse", host=config.server_host, port=config.server_port)
+        mcp.run(
+            transport="sse",
+            host=config.server_host,
+            port=config.server_port,
+            middleware=build_http_middleware(),
+        )
     elif config.server_transport == "dual":
         # Run both HTTP web server and MCP stdio for Cursor
         logger.info(f"🔄 Starting dual mode: HTTP server + MCP stdio")
@@ -2296,7 +2319,12 @@ if __name__ == "__main__":
 
         # Run HTTP server in main thread
         logger.info(f"🌐 Starting HTTP server on {config.server_host}:{config.server_port}")
-        mcp.run(transport="http", host=config.server_host, port=config.server_port)
+        mcp.run(
+            transport="http",
+            host=config.server_host,
+            port=config.server_port,
+            middleware=build_http_middleware(),
+        )
     else:
         # Default to stdio for MCP clients
         logger.info("📡 Starting STDIO server for MCP client communication")

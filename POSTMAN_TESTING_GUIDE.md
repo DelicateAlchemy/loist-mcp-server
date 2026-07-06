@@ -25,22 +25,22 @@ Test each format with the following requests:
 
 #### MP3 Downloads
 ```
-GET {{base_url}}/api/tracks/{{audio_id}}/download?format=mp3
-GET {{base_url}}/api/tracks/{{audio_id}}/download?format=mp3&preset=high
-GET {{base_url}}/api/tracks/{{audio_id}}/download?format=mp3&preset=standard
+GET {{base_url}}/api/v1/tracks/{{audio_id}}/download?format=mp3
+GET {{base_url}}/api/v1/tracks/{{audio_id}}/download?format=mp3&preset=high
+GET {{base_url}}/api/v1/tracks/{{audio_id}}/download?format=mp3&preset=standard
 ```
 
 #### WAV Downloads
 ```
-GET {{base_url}}/api/tracks/{{audio_id}}/download?format=wav&preset=broadcast
-GET {{base_url}}/api/tracks/{{audio_id}}/download?format=wav&preset=high
+GET {{base_url}}/api/v1/tracks/{{audio_id}}/download?format=wav&preset=broadcast
+GET {{base_url}}/api/v1/tracks/{{audio_id}}/download?format=wav&preset=high
 ```
 
 #### Other Formats
 ```
-GET {{base_url}}/api/tracks/{{audio_id}}/download?format=flac
-GET {{base_url}}/api/tracks/{{audio_id}}/download?format=aac
-GET {{base_url}}/api/tracks/{{audio_id}}/download?format=ogg
+GET {{base_url}}/api/v1/tracks/{{audio_id}}/download?format=flac
+GET {{base_url}}/api/v1/tracks/{{audio_id}}/download?format=aac
+GET {{base_url}}/api/v1/tracks/{{audio_id}}/download?format=ogg
 ```
 
 ### 2. MCP Tool Testing
@@ -131,13 +131,13 @@ For different presets, verify:
 
 ### Invalid Audio ID
 ```
-GET {{base_url}}/api/tracks/invalid-id/download?format=mp3
+GET {{base_url}}/api/v1/tracks/invalid-id/download?format=mp3
 ```
 **Expected**: 404 Not Found or appropriate error
 
 ### Invalid Format
 ```
-GET {{base_url}}/api/tracks/{{audio_id}}/download?format=invalid
+GET {{base_url}}/api/v1/tracks/{{audio_id}}/download?format=invalid
 ```
 **Expected**: 400 Bad Request with validation error
 
