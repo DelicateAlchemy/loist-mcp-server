@@ -7,7 +7,6 @@ including the underlying caching mechanism.
 
 import pytest
 from unittest.mock import patch, ANY
-import time
 
 from src.services import streaming_service
 from src.exceptions import ResourceNotFoundError
@@ -69,17 +68,25 @@ def test_cache_hit_and_miss(mock_generate_url):
 
 @patch('src.services.streaming_service.generate_signed_url')
 def test_cache_expiration(mock_generate_url):
-    """Test that cache entries expire correctly."""
+    """Test that cache entries expire correctly (deterministic mocked clock)."""
     mock_generate_url.return_value = "http://signed-url"
-    cache = streaming_service._SignedURLCache(default_ttl=0.1) # Short TTL
-    
-    cache.get("gs://bucket/file")
-    assert mock_generate_url.call_count == 1
-    
-    time.sleep(0.2)
-    
-    cache.get("gs://bucket/file")
-    assert mock_generate_url.call_count == 2 # Called again after expiration
+    cache = streaming_service._SignedURLCache(default_ttl=100)
+
+    with patch('src.services.streaming_service.time.time') as mock_time:
+        # Entry cached at t=1000 with TTL 100 -> expires at t=1100
+        mock_time.return_value = 1000.0
+        cache.get("gs://bucket/file")
+        assert mock_generate_url.call_count == 1
+
+        # Just before expiry: still served from cache
+        mock_time.return_value = 1099.0
+        cache.get("gs://bucket/file")
+        assert mock_generate_url.call_count == 1
+
+        # After expiry: regenerated
+        mock_time.return_value = 1101.0
+        cache.get("gs://bucket/file")
+        assert mock_generate_url.call_count == 2 # Called again after expiration
 
 # ============================================================================
 # get_audio_stream_details Tests
