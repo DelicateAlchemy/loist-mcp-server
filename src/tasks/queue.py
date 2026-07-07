@@ -177,6 +177,84 @@ def enqueue_waveform_generation(
         raise TaskQueueError(f"Failed to enqueue waveform task: {e}") from e
 
 
+def enqueue_upload_processing(
+    upload_id: str,
+    project_id: Optional[str] = None,
+    location: str = "us-central1",
+    queue_name: str = "audio-processing-queue",
+    target_url: Optional[str] = None,
+) -> str:
+    """
+    Enqueue a browser-upload processing task (LOI-45).
+
+    Creates a Cloud Task that POSTs to /tasks/process-upload, which runs the
+    staged GCS object through the ingestion pipeline and updates the uploads
+    row. Callers should catch TaskQueueError and fall back to in-process
+    execution when Cloud Tasks is not configured (local development).
+
+    Args:
+        upload_id: UUID of the upload record to process
+        project_id: GCP project ID (auto-detected if not provided)
+        location: GCP region (default: us-central1)
+        queue_name: Cloud Tasks queue name (default: audio-processing-queue)
+        target_url: HTTP endpoint URL to call (auto-configured if not provided)
+
+    Returns:
+        Task name/ID string
+
+    Raises:
+        TaskQueueError: If task creation fails or configuration is missing
+    """
+    import os
+
+    if not project_id:
+        project_id = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT")
+        if not project_id:
+            raise TaskQueueError("project_id not provided and GOOGLE_CLOUD_PROJECT env var not set")
+
+    if not target_url:
+        # Same service-URL convention as the waveform tasks
+        service_url = os.getenv("TASKS_SERVICE_URL") or os.getenv("WAVEFORM_SERVICE_URL")
+        if service_url:
+            target_url = f"{service_url}/tasks/process-upload"
+        else:
+            raise TaskQueueError(
+                "target_url not provided and TASKS_SERVICE_URL/WAVEFORM_SERVICE_URL not set"
+            )
+
+    client = _get_cloud_tasks_client()
+    queue_path = _get_queue_path(project_id, location, queue_name)
+
+    payload = _create_task_payload("process_upload", uploadId=upload_id)
+
+    task = tasks.Task(
+        http_request=tasks.HttpRequest(
+            http_method=tasks.HttpMethod.POST,
+            url=target_url,
+            headers={"Content-Type": "application/json"},
+            body=payload.encode(),
+        ),
+    )
+
+    from datetime import timedelta
+    task.dispatch_deadline = timedelta(minutes=30)
+
+    try:
+        logger.info(f"Enqueuing upload processing task for upload_id: {upload_id}")
+        response = client.create_task(parent=queue_path, task=task)
+        task_id = response.name.split('/')[-1]
+        logger.info(f"Successfully enqueued upload task: {task_id}")
+        return task_id
+
+    except google_exceptions.GoogleAPICallError as e:
+        logger.error(f"Cloud Tasks API error enqueuing upload task for {upload_id}: {e}")
+        raise TaskQueueError(f"Failed to enqueue upload task: {e}") from e
+
+    except Exception as e:
+        logger.error(f"Unexpected error enqueuing upload task for {upload_id}: {e}")
+        raise TaskQueueError(f"Failed to enqueue upload task: {e}") from e
+
+
 # ============================================================================
 # Future Task Types (Commented/Stubs)
 # ============================================================================

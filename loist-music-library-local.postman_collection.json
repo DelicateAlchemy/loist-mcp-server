@@ -3075,6 +3075,86 @@
           }
         }
       ]
+    },
+    {
+      "name": "Uploads API (v1)",
+      "description": "Browser upload & ingestion flow (LOI-45): declare file -> PUT to signed URL -> trigger processing -> poll job. The PUT to GCS happens outside Postman/the API host.",
+      "item": [
+        {
+          "name": "Create Upload (signed PUT URL)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/uploads",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "uploads"
+              ]
+            },
+            "description": "Declare the file; returns upload_id + signed_put_url (valid ~60 min). PUT the raw bytes to that URL with the exact declared Content-Type header.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"filename\": \"song.mp3\",\n  \"content_type\": \"audio/mpeg\",\n  \"size_bytes\": 8388608\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Start Processing",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/uploads/{{upload_id}}/process",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "uploads",
+                "{{upload_id}}",
+                "process"
+              ]
+            },
+            "description": "Re-validates the staged object and dispatches processing. 202 + job_id. 400 if the file was never uploaded; retry allowed after a failed job."
+          }
+        },
+        {
+          "name": "Poll Job",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/jobs/{{upload_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "jobs",
+                "{{upload_id}}"
+              ]
+            },
+            "description": "Job status: awaiting_upload | pending | processing | complete | failed. audio_id present once complete."
+          }
+        }
+      ]
     }
   ],
   "variable": [

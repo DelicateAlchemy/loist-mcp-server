@@ -5476,3 +5476,183 @@ def remove_playlist_collaborator(playlist_id: str, user_id: str) -> bool:
 # - Detailed logging
 # - Validation before database operations
 
+
+
+# ============================================================================
+# Upload Operations (LOI-45: browser upload & ingestion flow)
+# ============================================================================
+
+def create_upload(upload_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Create an upload tracking record.
+
+    Args:
+        upload_data: Dictionary containing upload fields:
+            - filename: str (required) - Original client filename
+            - content_type: str (required) - Declared MIME type
+            - size_bytes: int (required) - Declared file size in bytes
+            - gcs_object_name: str (required) - Staging object path in the bucket
+            - id: str (optional) - UUID (generated if not provided)
+
+    Returns:
+        Dictionary containing the created upload record
+
+    Raises:
+        ValidationError: If required fields are missing or invalid
+        DatabaseOperationError: If database operation fails
+    """
+    for field in ('filename', 'content_type', 'size_bytes', 'gcs_object_name'):
+        if not upload_data.get(field):
+            raise ValidationError(f"Field '{field}' is required for upload")
+
+    upload_id = upload_data.get('id')
+    if upload_id:
+        try:
+            uuid.UUID(upload_id)
+        except ValueError:
+            raise ValidationError(f"Invalid upload id format: {upload_id}")
+    else:
+        upload_id = str(uuid.uuid4())
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    INSERT INTO uploads (
+                        id, filename, content_type, size_bytes, gcs_object_name,
+                        status, created_at, updated_at
+                    ) VALUES (%s, %s, %s, %s, %s, 'awaiting_upload', NOW(), NOW())
+                    RETURNING id, filename, content_type, size_bytes, gcs_object_name,
+                              status, audio_id, error_message, created_at, updated_at
+                    """,
+                    (
+                        upload_id,
+                        upload_data['filename'],
+                        upload_data['content_type'],
+                        upload_data['size_bytes'],
+                        upload_data['gcs_object_name'],
+                    ),
+                )
+                result = cur.fetchone()
+                conn.commit()
+                logger.info(f"Successfully created upload record: {upload_id}")
+                return dict(result)
+
+    except DatabaseError as e:
+        logger.error(f"Database error creating upload: {e}")
+        raise DatabaseOperationError(f"Failed to create upload: database error - {str(e)}")
+    except Exception as e:
+        logger.error(f"Unexpected error creating upload: {e}")
+        raise DatabaseOperationError(f"Failed to create upload: {str(e)}")
+
+
+def get_upload_by_id(upload_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Retrieve an upload record by ID.
+
+    Args:
+        upload_id: UUID of the upload
+
+    Returns:
+        Upload record dictionary, or None if not found
+
+    Raises:
+        ValidationError: If upload_id is not a valid UUID
+        DatabaseOperationError: If database operation fails
+    """
+    try:
+        uuid.UUID(upload_id)
+    except (ValueError, TypeError):
+        raise ValidationError(f"Invalid upload id format: {upload_id}")
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT id, filename, content_type, size_bytes, gcs_object_name,
+                           status, audio_id, error_message, created_at, updated_at
+                    FROM uploads WHERE id = %s
+                    """,
+                    (upload_id,),
+                )
+                result = cur.fetchone()
+                return dict(result) if result else None
+
+    except DatabaseError as e:
+        logger.error(f"Database error fetching upload {upload_id}: {e}")
+        raise DatabaseOperationError(f"Failed to fetch upload: database error - {str(e)}")
+    except Exception as e:
+        logger.error(f"Unexpected error fetching upload {upload_id}: {e}")
+        raise DatabaseOperationError(f"Failed to fetch upload: {str(e)}")
+
+
+def update_upload_status(
+    upload_id: str,
+    status: str,
+    audio_id: Optional[str] = None,
+    error_message: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Update an upload's processing status (and optionally audio_id / error).
+
+    Args:
+        upload_id: UUID of the upload
+        status: New status ('awaiting_upload', 'pending', 'processing',
+                'complete', 'failed')
+        audio_id: Resulting audio track UUID (set on 'complete')
+        error_message: Failure detail (set on 'failed')
+
+    Returns:
+        The updated upload record
+
+    Raises:
+        ValidationError: If arguments are invalid
+        ResourceNotFoundError: If the upload does not exist
+        DatabaseOperationError: If database operation fails
+    """
+    valid_statuses = ('awaiting_upload', 'pending', 'processing', 'complete', 'failed')
+    if status not in valid_statuses:
+        raise ValidationError(f"Invalid upload status '{status}'. Must be one of {valid_statuses}")
+    try:
+        uuid.UUID(upload_id)
+    except (ValueError, TypeError):
+        raise ValidationError(f"Invalid upload id format: {upload_id}")
+    if audio_id is not None:
+        try:
+            uuid.UUID(audio_id)
+        except (ValueError, TypeError):
+            raise ValidationError(f"Invalid audio id format: {audio_id}")
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    UPDATE uploads
+                    SET status = %s,
+                        audio_id = COALESCE(%s, audio_id),
+                        error_message = %s,
+                        updated_at = NOW()
+                    WHERE id = %s
+                    RETURNING id, filename, content_type, size_bytes, gcs_object_name,
+                              status, audio_id, error_message, created_at, updated_at
+                    """,
+                    (status, audio_id, error_message, upload_id),
+                )
+                result = cur.fetchone()
+                if not result:
+                    raise ResourceNotFoundError(f"Upload with ID '{upload_id}' was not found")
+                conn.commit()
+                logger.info(f"Upload {upload_id} status -> {status}")
+                return dict(result)
+
+    except ResourceNotFoundError:
+        raise
+    except DatabaseError as e:
+        logger.error(f"Database error updating upload {upload_id}: {e}")
+        raise DatabaseOperationError(f"Failed to update upload: database error - {str(e)}")
+    except Exception as e:
+        logger.error(f"Unexpected error updating upload {upload_id}: {e}")
+        raise DatabaseOperationError(f"Failed to update upload: {str(e)}")

@@ -39,6 +39,12 @@ from .playlist_repository import (
     get_playlist_repository,
     set_playlist_repository,
 )
+from .upload_repository import (
+    UploadRepositoryInterface,
+    PostgresUploadRepository,
+    get_upload_repository,
+    set_upload_repository,
+)
 
 __all__ = [
     # Audio repository
@@ -71,4 +77,9 @@ __all__ = [
     "PostgresPlaylistRepository",
     "get_playlist_repository",
     "set_playlist_repository",
+    # Upload repository
+    "UploadRepositoryInterface",
+    "PostgresUploadRepository",
+    "get_upload_repository",
+    "set_upload_repository",
 ]
