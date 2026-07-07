@@ -1,5 +1,5 @@
 -- Schema Hygiene
--- migration_014_schema_hygiene.sql
+-- migration_016_schema_hygiene.sql
 -- Small cleanup pass: multi-tenancy prep on uploads, drop vestigial column,
 -- and lock down helper views to run with caller privileges (LOI-50)
 --
