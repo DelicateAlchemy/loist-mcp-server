@@ -36,6 +36,9 @@ def pytest_collection_modifyitems(config: pytest.Config, items: List[pytest.Item
             'test_oembed_endpoint.py',  # Queries database for audio
             'test_process_audio_complete.py',  # Saves to database
             'test_resource_db_connectivity.py', # New integration test for resources
+            'test_mcp_protocol.py',  # Live-server E2E suite: needs a running MCP
+                                     # server on :8080 (which itself needs DB/GCS),
+                                     # not a unit test (LOI-49).
         ]):
             item.add_marker(pytest.mark.requires_db)
 

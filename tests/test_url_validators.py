@@ -56,7 +56,10 @@ class TestURLSchemeValidation:
     
     def test_ws_scheme_blocked(self):
         """Test that ws:// scheme is blocked."""
-        with pytest.raises(URLValidationError, match="Unsupported URL scheme"):
+        # ws is explicitly denylisted (BLOCKED_SCHEMES), like javascript: above,
+        # so it gets the "Blocked" message rather than the generic "Unsupported"
+        # message used for schemes that are simply not allowlisted.
+        with pytest.raises(URLValidationError, match="Blocked URL scheme"):
             URLSchemeValidator.validate_scheme("ws://example.com/socket")
     
     def test_unknown_scheme_rejected(self):
