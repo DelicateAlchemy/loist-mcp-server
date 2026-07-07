@@ -3155,6 +3155,535 @@
           }
         }
       ]
+    },
+    {
+      "name": "Albums & Playlists API (v1)",
+      "description": "Album and playlist CRUD, track add/remove/reorder, and playlist collaborators under /api/v1 (LOI-47). Standard error envelope; bearer auth when AUTH_ENABLED.",
+      "item": [
+        {
+          "name": "Create Album",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/albums",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "albums"
+              ]
+            },
+            "description": "Create an album. 'name' required; optional: description, status (project|draft|released), cover_art_gcs_path, owner_id. Returns 201.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Abbey Road\",\n  \"description\": \"Test album\",\n  \"status\": \"project\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Search Albums",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/albums?q=abbey&limit=20&offset=0",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "albums"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "abbey"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "Search albums by name. 'q' required; optional status filter and limit/offset pagination."
+          }
+        },
+        {
+          "name": "Get Album",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/albums/{{album_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "albums",
+                "{{album_id}}"
+              ]
+            },
+            "description": "Album detail with ordered tracks. 404 RESOURCE_NOT_FOUND if unknown."
+          }
+        },
+        {
+          "name": "Update Album",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/albums/{{album_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "albums",
+                "{{album_id}}"
+              ]
+            },
+            "description": "Partial metadata update: name, description, status, cover_art_gcs_path.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Abbey Road (Remastered)\",\n  \"status\": \"released\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete Album",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/albums/{{album_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "albums",
+                "{{album_id}}"
+              ]
+            },
+            "description": "Delete the album (tracks are not deleted). Returns 204."
+          }
+        },
+        {
+          "name": "Add Track to Album",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/albums/{{album_id}}/tracks",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "albums",
+                "{{album_id}}",
+                "tracks"
+              ]
+            },
+            "description": "Add a track. 'audio_track_id' required; optional position (appends when omitted) and disc_number (default 1). Returns 201.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"audio_track_id\": \"{{audio_id}}\",\n  \"position\": 1,\n  \"disc_number\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Remove Track from Album",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/albums/{{album_id}}/tracks/{{audio_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "albums",
+                "{{album_id}}",
+                "tracks",
+                "{{audio_id}}"
+              ]
+            },
+            "description": "Remove a track from the album. Returns 204."
+          }
+        },
+        {
+          "name": "Reorder Album Tracks",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/albums/{{album_id}}/tracks/order",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "albums",
+                "{{album_id}}",
+                "tracks",
+                "order"
+              ]
+            },
+            "description": "Batch replace of the track order: send the complete ordered list of audio track UUIDs.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"track_order\": [\n    \"{{audio_id}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Create Playlist",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/playlists",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "playlists"
+              ]
+            },
+            "description": "Create a playlist. 'name' required; optional: description, is_public (default false), owner_id. Returns 201.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Late Night Mix\",\n  \"description\": \"Test playlist\",\n  \"is_public\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Search Playlists",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/playlists?q=night&limit=20&offset=0",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "playlists"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "night"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "Search playlists by name. 'q' required; limit/offset pagination."
+          }
+        },
+        {
+          "name": "Get Playlist",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/playlists/{{playlist_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "playlists",
+                "{{playlist_id}}"
+              ]
+            },
+            "description": "Playlist detail with tracks and collaborators. 404 RESOURCE_NOT_FOUND if unknown."
+          }
+        },
+        {
+          "name": "Update Playlist",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/playlists/{{playlist_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "playlists",
+                "{{playlist_id}}"
+              ]
+            },
+            "description": "Partial metadata update: name, description, is_public.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Late Night Mix v2\",\n  \"is_public\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete Playlist",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/playlists/{{playlist_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "playlists",
+                "{{playlist_id}}"
+              ]
+            },
+            "description": "Delete the playlist (tracks are not deleted). Returns 204."
+          }
+        },
+        {
+          "name": "Add Track to Playlist",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/playlists/{{playlist_id}}/tracks",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "playlists",
+                "{{playlist_id}}",
+                "tracks"
+              ]
+            },
+            "description": "Add a track. 'audio_track_id' required; optional position and added_by (user UUID). Returns 201.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"audio_track_id\": \"{{audio_id}}\",\n  \"position\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Remove Track from Playlist",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/playlists/{{playlist_id}}/tracks/{{audio_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "playlists",
+                "{{playlist_id}}",
+                "tracks",
+                "{{audio_id}}"
+              ]
+            },
+            "description": "Remove a track from the playlist. Returns 204."
+          }
+        },
+        {
+          "name": "Reorder Playlist Tracks",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/playlists/{{playlist_id}}/tracks/order",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "playlists",
+                "{{playlist_id}}",
+                "tracks",
+                "order"
+              ]
+            },
+            "description": "Batch replace of the track order: send the complete ordered list of audio track UUIDs.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"track_order\": [\n    \"{{audio_id}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Add Playlist Collaborator",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/playlists/{{playlist_id}}/collaborators",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "playlists",
+                "{{playlist_id}}",
+                "collaborators"
+              ]
+            },
+            "description": "Add a collaborator. 'user_id' required; optional role (viewer|editor|admin, default viewer). Returns 201.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"{{user_id}}\",\n  \"role\": \"editor\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Remove Playlist Collaborator",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/playlists/{{playlist_id}}/collaborators/{{user_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "playlists",
+                "{{playlist_id}}",
+                "collaborators",
+                "{{user_id}}"
+              ]
+            },
+            "description": "Remove a collaborator from the playlist. Returns 204."
+          }
+        }
+      ]
     }
   ],
   "variable": [

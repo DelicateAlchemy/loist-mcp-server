@@ -204,6 +204,72 @@ and split warnings (e.g. splits that don't sum to 100%).
 }
 ```
 
+### Album
+
+An ordered collection of tracks with a lifecycle status. `GET` by ID returns
+the album with its tracks; search returns a lighter shape (no `tracks` array).
+Album responses are wrapped: `{"success": true, "album": { ... }}`.
+
+```jsonc
+{
+  "id": "3f2b8a10-6c1d-4e5f-9a7b-1c2d3e4f5a60",
+  "name": "Abbey Road",
+  "description": null,                 // nullable
+  "status": "project",                 // "project" | "draft" | "released"
+  "cover_art_gcs_path": null,          // nullable
+  "owner_id": null,                    // UUID, nullable
+  "track_count": 2,
+  "created_at": "2026-07-01T12:00:00", // ISO timestamp
+  "updated_at": "2026-07-01T12:00:00",
+  "tracks": [
+    {
+      "audio_track_id": "550e8400-e29b-41d4-a716-446655440000",
+      "title": "Come Together",        // nullable
+      "artist": "The Beatles",         // nullable
+      "position": 1,                   // position within disc
+      "disc_number": 1,
+      "added_at": "2026-07-01T12:00:00"
+    }
+  ]
+}
+```
+
+### Playlist
+
+An ordered, optionally collaborative collection of tracks. `GET` by ID
+returns the playlist with its tracks and collaborators. Playlist responses
+are wrapped: `{"success": true, "playlist": { ... }}`.
+
+```jsonc
+{
+  "id": "8a1c2d30-4b5e-4f6a-8b9c-0d1e2f3a4b50",
+  "name": "Late Night Mix",
+  "description": null,                 // nullable
+  "is_public": false,
+  "owner_id": null,                    // UUID, nullable
+  "track_count": 1,
+  "created_at": "2026-07-01T12:00:00",
+  "updated_at": "2026-07-01T12:00:00",
+  "tracks": [
+    {
+      "audio_track_id": "550e8400-e29b-41d4-a716-446655440000",
+      "title": "Come Together",        // nullable
+      "artist": "The Beatles",         // nullable
+      "position": 1,                   // position within playlist
+      "added_by": null,                // UUID of adding user, nullable
+      "added_at": "2026-07-01T12:00:00"
+    }
+  ],
+  "collaborators": [
+    {
+      "user_id": "b7e2a910-1f2e-4c3d-9a8b-7c6d5e4f3a20",
+      "role": "editor",                // "viewer" | "editor" | "admin"
+      "created_at": "2026-07-01T12:00:00"
+    }
+  ]
+}
+```
+
 ## 6. Endpoints
 
 ### `GET /api/v1/tracks/{audioId}`
@@ -327,6 +393,85 @@ Link a party as an artist on a recording. Body:
 `{"party_id": "...", "is_primary": true, "notes": null}` (`party_id`
 required). Returns the created link with `201`.
 
+### Albums & playlists
+
+All under the same auth boundary and error envelope as the track endpoints.
+Every `{albumId}` / `{playlistId}` / `{audioId}` / `{userId}` path parameter
+is a UUID — malformed IDs return `400 VALIDATION_ERROR`, unknown IDs return
+`404 RESOURCE_NOT_FOUND`.
+
+#### `POST /api/v1/albums`
+Create an album. Body: `{"name": "..."}` (required) plus optional
+`description`, `status`, `cover_art_gcs_path`, `owner_id`. Returns
+`201 {"success": true, "album": { ... }}`.
+
+#### `GET /api/v1/albums?q=<query>&limit=20&offset=0&status=released`
+Search albums by name. `q` is required; `status` is an optional filter.
+Returns `results` / `total` / `has_more` — the same pagination caveat as
+party search applies (`total` reflects the returned page).
+
+#### `GET /api/v1/albums/{albumId}`
+Album detail — the full Album entity above, including ordered tracks.
+
+#### `PUT /api/v1/albums/{albumId}`
+Update album metadata (partial — send only the fields to change: `name`,
+`description`, `status`, `cover_art_gcs_path`). Returns the updated Album.
+
+#### `DELETE /api/v1/albums/{albumId}`
+Deletes the album (not its tracks). `204` on success.
+
+#### `POST /api/v1/albums/{albumId}/tracks`
+Add a track to an album. Body: `{"audio_track_id": "..."}` (required) plus
+optional `position` (appends when omitted) and `disc_number` (default 1).
+Returns `201 {"success": true, "track": { ... }}`.
+
+#### `DELETE /api/v1/albums/{albumId}/tracks/{audioId}`
+Remove a track from an album. `204` on success.
+
+#### `PUT /api/v1/albums/{albumId}/tracks/order`
+**Batch replace** of the track order. Body:
+`{"track_order": ["<audioId>", ...]}` — the complete ordered list of track
+UUIDs. Returns `{"success": true, ...}` with the reorder result.
+
+#### `POST /api/v1/playlists`
+Create a playlist. Body: `{"name": "..."}` (required) plus optional
+`description`, `is_public` (default `false`), `owner_id`. Returns
+`201 {"success": true, "playlist": { ... }}`.
+
+#### `GET /api/v1/playlists?q=<query>&limit=20&offset=0`
+Search playlists by name. `q` is required. Same pagination caveat as album
+search.
+
+#### `GET /api/v1/playlists/{playlistId}`
+Playlist detail — the full Playlist entity above, including tracks and
+collaborators.
+
+#### `PUT /api/v1/playlists/{playlistId}`
+Update playlist metadata (partial: `name`, `description`, `is_public`).
+Returns the updated Playlist.
+
+#### `DELETE /api/v1/playlists/{playlistId}`
+Deletes the playlist (not its tracks). `204` on success.
+
+#### `POST /api/v1/playlists/{playlistId}/tracks`
+Add a track to a playlist. Body: `{"audio_track_id": "..."}` (required) plus
+optional `position` and `added_by` (user UUID). Returns
+`201 {"success": true, "track": { ... }}`.
+
+#### `DELETE /api/v1/playlists/{playlistId}/tracks/{audioId}`
+Remove a track from a playlist. `204` on success.
+
+#### `PUT /api/v1/playlists/{playlistId}/tracks/order`
+Same contract as the album variant: `{"track_order": [...]}`, batch replace.
+
+#### `POST /api/v1/playlists/{playlistId}/collaborators`
+Add a collaborator. Body: `{"user_id": "..."}` (required) plus optional
+`role` (`"viewer"` | `"editor"` | `"admin"`, default `"viewer"`). Returns
+`201 {"success": true, "collaborator": { ... }}`.
+
+#### `DELETE /api/v1/playlists/{playlistId}/collaborators/{userId}`
+Remove a collaborator. `204` on success.
+
 ## 7. Embed player (separate from the REST API)
 
 Each track has a hosted embed player at `url_embed_link`
@@ -348,15 +493,14 @@ Available via REST **today** — safe to wireframe against:
   Uploads section above); design for a pending state
 - Publishing data: parties and works (search, detail, writer/publisher
   splits, artist↔recording links) — see the Publishing endpoints above
+- Albums & playlists — full CRUD, track add/remove/reorder, and playlist
+  collaborators under `/api/v1` with the standard error envelope (LOI-47) —
+  see the Albums & playlists endpoints above
 
 **Coming to the REST API** (status per `docs/rest-api-expansion-plan.md`;
 flag wireframes that depend on these so backend work can be sequenced):
 
 - Metadata editing — `PATCH /api/v1/tracks/{audioId}` planned (LOI-46).
-- Albums & playlists — full REST surface merged to `dev` (LOI-43) but still at
-  unversioned `/api/albums*` / `/api/playlists*` paths with pre-envelope error
-  shapes; moves under `/api/v1` + these conventions via LOI-47. Wireframe
-  against the entities, but expect the paths to change.
 - Player/waveform data as JSON — decided with the embed rework
   (`docs/embed-architecture-notes.md`, LOI-48), not standalone.
 
@@ -365,6 +509,11 @@ discovery done yet).
 
 ## 9. Changelog
 
+- **July 2026 (LOI-47):** Albums & playlists (18 endpoints: CRUD, track
+  add/remove/reorder, playlist collaborators) moved from unversioned
+  `/api/albums*` / `/api/playlists*` to `/api/v1/*` and converted to the
+  standard error envelope (old paths now 404). Album/Playlist entities and
+  endpoints documented in this guide.
 - **July 2026 (LOI-45):** Browser upload & ingestion flow added:
   `POST /api/v1/uploads` (signed PUT URL) → direct-to-GCS upload →
   `POST /api/v1/uploads/{id}/process` → `GET /api/v1/jobs/{id}` polling.
