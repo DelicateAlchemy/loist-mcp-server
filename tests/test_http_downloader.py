@@ -105,16 +105,19 @@ class TestURLSchemeValidation:
         
         downloader = HTTPDownloader()
         
-        with pytest.raises(ValueError, match="Unsupported URL scheme"):
+        # file:// is explicitly denylisted (BLOCKED_SCHEMES), which produces a
+        # more specific "Blocked URL scheme" message than the generic
+        # "Unsupported" message used for schemes that are merely not allowlisted.
+        with pytest.raises(ValueError, match="Blocked URL scheme"):
             downloader.validate_url_scheme("file:///etc/passwd")
-    
+
     def test_ftp_scheme_blocked(self):
         """Test that ftp:// scheme is blocked."""
         from src.downloader import HTTPDownloader
-        
+
         downloader = HTTPDownloader()
-        
-        with pytest.raises(ValueError, match="Unsupported URL scheme"):
+
+        with pytest.raises(ValueError, match="Blocked URL scheme"):
             downloader.validate_url_scheme("ftp://example.com/file.mp3")
     
     def test_invalid_url_no_hostname(self):

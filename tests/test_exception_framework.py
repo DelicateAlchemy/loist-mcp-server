@@ -524,6 +524,7 @@ class TestExceptionFrameworkIntegration:
         from src.exceptions.recovery import FallbackRecoveryStrategy
 
         config = ExceptionConfig().for_testing()
+        config.enable_recovery = True  # for_testing() disables recovery by default; opt back in for this test
         handler = ExceptionHandler(config)
 
         # Add recovery strategy

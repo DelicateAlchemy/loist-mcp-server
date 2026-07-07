@@ -129,9 +129,12 @@ class TestFastMCPExceptionSerialization:
         # Test that the tool execution and error handling works
         # This will test FastMCP's internal exception serialization
         try:
-            # We can't easily call the tool directly, but we can test the setup
+            # We can't easily call the tool directly, but we can test the setup.
+            # FastMCP 2.12 removed the private `_tools` attribute in favor of
+            # the async `get_tools()` accessor.
             assert mcp is not None
-            assert len(mcp._tools) > 0
+            tools = await mcp.get_tools()
+            assert len(tools) > 0
 
         except Exception as e:
             pytest.fail(f"FastMCP tool setup with exception failed: {e}")
@@ -253,7 +256,9 @@ class TestFastMCPExceptionSerialization:
 
         # SafeExceptionSerializer uses "type" and "module" keys
         assert result["type"] == "DatabaseOperationError"
-        assert result["module"] == "src.exceptions"
+        # Exception classes now live in src.exceptions_core; src.exceptions
+        # re-exports them for backward compatibility (see src/exceptions/__init__.py)
+        assert result["module"] == "src.exceptions_core"
 
         # Should be JSON serializable without NameError
         json_str = json.dumps(result)
