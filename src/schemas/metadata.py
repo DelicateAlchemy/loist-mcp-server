@@ -14,6 +14,11 @@ class ProductMetadata(BaseModel):
     mbid: Optional[str] = Field(default=None, description="MusicBrainz ID (null in MVP)")
     genre: List[str] = Field(default_factory=list, description="Genre tags")
     year: Optional[int] = Field(default=None, ge=1900, le=2100, description="Release year")
+    isrc: Optional[str] = Field(
+        default=None,
+        max_length=15,
+        description="International Standard Recording Code (ISRC), if known",
+    )
 
 
 class FormatMetadata(BaseModel):

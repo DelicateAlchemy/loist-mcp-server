@@ -54,6 +54,7 @@ def _format_metadata_response(db_metadata: Dict[str, Any]) -> AudioMetadata:
         mbid=None,  # MVP: null
         genre=[db_metadata.get("genre")] if db_metadata.get("genre") else [],
         year=db_metadata.get("year"),
+        isrc=db_metadata.get("isrc"),
     )
 
     duration = db_metadata.get("duration") or db_metadata.get("duration_seconds", 0.0)

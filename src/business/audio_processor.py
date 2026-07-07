@@ -557,7 +557,8 @@ async def process_audio_shared(request: AudioProcessingRequest) -> AudioProcessi
                     album=final_album,
                     mbid=None,
                     genre=[metadata_dict.get("genre")] if metadata_dict.get("genre") else [],
-                    year=metadata_dict.get("year")
+                    year=metadata_dict.get("year"),
+                    isrc=metadata_dict.get("isrc"),
                 ),
                 format=FormatMetadata(
                     duration=metadata_dict.get("duration"),
