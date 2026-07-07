@@ -1,7 +1,7 @@
 # "The Linear of Music" — Feasibility, Customers & Go-to-Market
 
 **Master recommendation synthesized from a five-role discovery exercise (LOI-39 follow-on)**
-Date: 2026-07-07 · Status: discovery, no product decisions taken · Doc only, no code/migrations
+Date: 2026-07-07 · **Status: RATIFIED by Gareth 2026-07-07** — thesis confirmed (clearance & rights-workflow system for publishers, sync wedge, founder-led GTM), ambition set to the **MCP/agent-layer emphasis** (§1.2.4), next step: customer discovery interviews ([06-discovery-interview-kit.md](06-discovery-interview-kit.md)) before any build commitment · Doc only, no code/migrations
 
 **Inputs** (full reports in this directory, all grounded in the live codebase and/or live web research):
 
