@@ -99,15 +99,16 @@ The database is designed to support multi-user SaaS functionality with proper da
 
 ### Migrations
 - `migrations/001_initial_schema.sql`: Initial schema creation
-- `migrations/002_add_user_id.sql`: Multi-user support (user_id column)
-- `migrations/002_add_waveform_support.sql`: Waveform generation columns
 - `migrations/002_performance_indexes.sql`: Additional performance indexes
 - `migrations/003_add_a2a_tasks.sql`: Agent-to-agent task coordination table
 - `migrations/004_add_xmp_fields.sql`: XMP metadata fields (composer, publisher, record_label, isrc)
 - `migrations/005_optimize_xmp_indexes.sql`: Composite indexes for XMP field filtering
 - `migrations/006_optimize_search_vector.sql`: Enhanced full-text search optimization
-- `migrate.py`: Migration runner with rollback support
-- `migrate.py`: Migration runner with automatic discovery and rollback support
+- `migrations/007_add_original_filename.sql` through `migrations/013_uploads_schema.sql`: see `migrations/README.md` for the full list
+- `migrations/014_add_user_id.sql`: Multi-user support (user_id column) — renamed from `002_add_user_id.sql` (LOI-51 dedupe)
+- `migrations/015_add_waveform_support.sql`: Waveform generation columns — renamed from `002_add_waveform_support.sql` (LOI-51 dedupe)
+- `migrations/README.md`: Full migration list, runner usage, and the LOI-51 old->new filename mapping
+- `migrate.py`: Migration runner with automatic discovery, rollback, dry-run, baseline, and status support
 
 ### Configuration
 - `config.py`: Database connection and pool management
@@ -124,14 +125,26 @@ The migration system automatically discovers and applies all `.sql` files in the
 
 ```bash
 # Apply all pending migrations (automatic discovery)
+python migrate.py --action=apply --database-url=postgresql://user:pass@host:port/db
+
+# Preview the plan without applying anything
+python migrate.py --action=apply --dry-run --database-url=postgresql://user:pass@host:port/db
+
+# "up" is a backward-compatible alias for "apply" (used by cloudbuild*.yaml deploy pipelines)
 python migrate.py --action=up --database-url=postgresql://user:pass@host:port/db
 
 # Check migration status
 python migrate.py --action=status --database-url=postgresql://user:pass@host:port/db
 
+# Baseline a hand-migrated database (mark files as applied without running them)
+python migrate.py --action=baseline --database-url=postgresql://user:pass@host:port/db
+
 # Rollback specific migration (manual rollback SQL required)
 python migrate.py --action=down --migration=001 --database-url=postgresql://user:pass@host:port/db
 ```
+
+See `migrations/README.md` for full details, including the LOI-51 dedupe of the historical
+duplicate `002_` prefixed migrations and how to baseline an existing hand-migrated database.
 
 ### Automated Deployment Migrations
 
