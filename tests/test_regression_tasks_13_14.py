@@ -91,7 +91,7 @@ class TestFastMCPExceptionSerialization:
 
         # The serializer stores type and module info
         assert result["type"] == "DatabaseOperationError"
-        assert result["module"] == "src.exceptions"
+        assert result["module"] == "src.exceptions_core"
         assert result["message"] == "Connection failed"
 
     def test_no_nameerror_exceptions(self):

@@ -178,9 +178,14 @@ class TestSSRFURLValidation:
                 SSRFProtector.validate_url(url, check_dns=False)
     
     def test_link_local_blocked(self):
-        """Test link-local addresses are blocked."""
+        """Test link-local addresses are blocked.
+
+        Note: 169.254.169.254 specifically is classified as a cloud metadata
+        endpoint (checked first, see test_cloud_metadata_endpoint_blocked),
+        so use a different link-local address to exercise the range check.
+        """
         with pytest.raises(SSRFProtectionError, match="private IP"):
-            SSRFProtector.validate_url("http://169.254.169.254/metadata", check_dns=False)
+            SSRFProtector.validate_url("http://169.254.1.1/metadata", check_dns=False)
     
     def test_cloud_metadata_endpoint_blocked(self):
         """Test cloud metadata endpoints are blocked."""
@@ -390,7 +395,7 @@ class TestErrorMessages:
             SSRFProtector.validate_url("http://192.168.1.1/audio.mp3", check_dns=False)
             pytest.fail("Should have raised SSRFProtectionError")
         except SSRFProtectionError as e:
-            assert "private IP" in str(e).lower()
+            assert "private ip" in str(e).lower()
             assert "192.168.1.1" in str(e)
     
     def test_metadata_endpoint_error_message(self):

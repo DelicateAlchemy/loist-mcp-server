@@ -166,7 +166,9 @@ class TestFilterValidation:
     def test_like_operator(self):
         """Test LIKE operator parsing"""
         result = parse_rsql_filter("artist=like=*beatles*")
-        assert result == {"artist_like": "*beatles*"}
+        # Parser strips user wildcards deliberately: the SQL layer wraps the
+        # value in %...% itself (see ILIKE params in database/operations.py)
+        assert result == {"artist_like": "beatles"}
 
     def test_greater_less_operators(self):
         """Test > and < operators"""

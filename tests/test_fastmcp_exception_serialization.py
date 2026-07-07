@@ -131,7 +131,8 @@ class TestFastMCPExceptionSerialization:
         try:
             # We can't easily call the tool directly, but we can test the setup
             assert mcp is not None
-            assert len(mcp._tools) > 0
+            tools = await mcp.get_tools()
+            assert len(tools) > 0
 
         except Exception as e:
             pytest.fail(f"FastMCP tool setup with exception failed: {e}")
@@ -253,7 +254,7 @@ class TestFastMCPExceptionSerialization:
 
         # SafeExceptionSerializer uses "type" and "module" keys
         assert result["type"] == "DatabaseOperationError"
-        assert result["module"] == "src.exceptions"
+        assert result["module"] == "src.exceptions_core"
 
         # Should be JSON serializable without NameError
         json_str = json.dumps(result)

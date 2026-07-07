@@ -291,7 +291,15 @@ class HTTPDownloader:
             if dest_path.exists():
                 dest_path.unlink()
             raise DownloadError(f"Download failed: {e}")
-            
+
+        except DownloadError:
+            # Already a typed download error (e.g. DownloadSizeError) —
+            # clean up and re-raise as-is so callers keep the specific type
+            # promised in the docstring.
+            if dest_path.exists():
+                dest_path.unlink()
+            raise
+
         except Exception as e:
             # Clean up partial file on any error
             if dest_path.exists():

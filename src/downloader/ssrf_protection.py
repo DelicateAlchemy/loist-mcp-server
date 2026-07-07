@@ -185,22 +185,28 @@ class SSRFProtector:
                 f"Access to cloud metadata endpoint '{hostname}' is blocked"
             )
         
-        # Check if hostname is an IP address
+        # Check if hostname is an IP address.
+        # NOTE: the private-IP check must happen OUTSIDE this try block.
+        # SSRFProtectionError subclasses ValueError, so raising it inside the
+        # try would be swallowed by `except ValueError` (treated as "not an
+        # IP") and private IPs would pass validation when check_dns=False.
         try:
-            # Try to parse as IP address
-            ip = ipaddress.ip_address(hostname)
-            
+            ip: Optional[ipaddress._BaseAddress] = ipaddress.ip_address(hostname)
+        except ValueError:
+            # Not an IP address, it's a hostname
+            ip = None
+
+        if ip is not None:
             # Check if it's a private IP
             if SSRFProtector.is_private_ip(hostname):
                 raise SSRFProtectionError(
                     f"Access to private IP address {hostname} is blocked. "
                     f"Private IPs, localhost, and internal networks are not allowed."
                 )
-            
+
             logger.debug(f"IP address {hostname} is public - allowed")
-            
-        except ValueError:
-            # Not an IP address, it's a hostname
+
+        else:
             # Perform DNS resolution check if enabled
             if check_dns:
                 try:

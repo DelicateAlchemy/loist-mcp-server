@@ -16,38 +16,51 @@ from database.operations import get_audio_metadata_by_id
 
 
 class TestComposerArtistFallbackIntegration:
-    """Integration tests for composer→artist fallback in full pipeline."""
+    """Integration tests for composer→artist fallback in full pipeline.
 
-    @patch('src.tools.process_audio.extract_metadata_with_fallback')
-    @patch('src.tools.process_audio.should_attempt_xmp_extraction')
-    @patch('src.tools.process_audio.enhance_metadata_with_xmp')
-    @patch('src.tools.process_audio.should_attempt_bwf_extraction')
-    @patch('src.tools.process_audio.enhance_metadata_with_bwf')
-    @patch('src.tools.process_audio.validate_audio_format')
-    @patch('src.tools.process_audio.extract_artwork')
-    @patch('src.tools.process_audio.upload_audio_file')
-    @patch('src.tools.process_audio.generate_signed_url')
+    The pipeline logic now lives in src/business/audio_processor.py
+    (process_audio_complete is a thin MCP adapter over process_audio_shared),
+    so mocks patch the audio_processor namespace.
+    """
+
+    @patch('src.business.audio_processor.mark_as_completed')
+    @patch('src.business.audio_processor.mark_as_processing')
+    @patch('src.business.audio_processor.save_audio_metadata')
+    @patch('src.business.audio_processor.upload_audio_file')
+    @patch('src.business.audio_processor.extract_artwork')
+    @patch('src.business.audio_processor.parse_filename_metadata')
+    @patch('src.business.audio_processor.should_attempt_bwf_extraction')
+    @patch('src.business.audio_processor.enhance_metadata_with_xmp')
+    @patch('src.business.audio_processor.should_attempt_xmp_extraction')
+    @patch('src.business.audio_processor.extract_metadata_with_fallback')
+    @patch('src.business.audio_processor.download_from_url')
+    @patch('src.business.audio_processor.validate_ssrf')
     @pytest.mark.asyncio
-    @patch('database.operations.save_audio_metadata')
-    @patch('database.operations.mark_as_processing')
-    @patch('database.operations.mark_as_completed')
     async def test_fallback_applied_in_pipeline(
         self,
-        mock_mark_completed,
-        mock_mark_processing,
-        mock_save_metadata,
-        mock_generate_signed_url,
-        mock_upload_audio,
-        mock_extract_artwork,
-        mock_validate_format,
-        mock_enhance_bwf,
-        mock_should_attempt_bwf,
-        mock_enhance_xmp,
+        mock_validate_ssrf,
+        mock_download,
+        mock_extract_metadata,
         mock_should_attempt_xmp,
-        mock_extract_metadata
+        mock_enhance_xmp,
+        mock_should_attempt_bwf,
+        mock_parse_filename,
+        mock_extract_artwork,
+        mock_upload_audio,
+        mock_save_metadata,
+        mock_mark_processing,
+        mock_mark_completed,
     ):
         """Test that fallback is applied during processing pipeline."""
-        # Mock basic metadata extraction (no artist, with composer after XMP)
+        # Create fake downloaded audio file
+        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp:
+            tmp.write(b"fake wav data")
+            tmp_path = Path(tmp.name)
+
+        mock_validate_ssrf.return_value = None
+        mock_download.return_value = str(tmp_path)
+
+        # Mock basic metadata extraction (no artist, composer arrives via XMP)
         mock_extract_metadata.return_value = ({
             "artist": "",  # Empty artist
             "title": "Test Track",
@@ -67,20 +80,17 @@ class TestComposerArtistFallbackIntegration:
         mock_enhance_xmp.side_effect = mock_xmp_enhancement
         mock_should_attempt_xmp.return_value = True
         mock_should_attempt_bwf.return_value = False
+        mock_parse_filename.return_value = None
 
         # Mock other pipeline components
-        mock_validate_format.return_value = None
         mock_extract_artwork.return_value = None
-        mock_upload_audio.return_value = "gs://test/audio/uuid/test.wav"
-        mock_generate_signed_url.return_value = "https://signed-url"
+        mock_blob = MagicMock()
+        mock_blob.bucket.name = "test-bucket"
+        mock_blob.name = "audio/test/test.wav"
+        mock_upload_audio.return_value = mock_blob
 
         # Mock database operations
         mock_save_metadata.return_value = {"id": "test-uuid", "status": "COMPLETED"}
-
-        # Create test input
-        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp:
-            tmp.write(b"fake wav data")
-            tmp_path = Path(tmp.name)
 
         try:
             # Process audio
@@ -95,7 +105,7 @@ class TestComposerArtistFallbackIntegration:
 
             # Verify result
             assert result["success"] is True
-            assert result["audio_id"] == "test-uuid"
+            assert result["audio_id"]  # Generated UUID
 
             # Check that fallback was applied in response
             metadata = result["metadata"]
@@ -110,15 +120,18 @@ class TestComposerArtistFallbackIntegration:
             assert db_metadata["composer"] == "Bach"  # Composer preserved
 
         finally:
-            tmp_path.unlink()
+            tmp_path.unlink(missing_ok=True)
 
     @pytest.mark.asyncio
-    @patch('database.operations.get_audio_metadata_by_id')
+    @patch('src.resources.metadata.get_audio_metadata_by_id')
     async def test_mcp_resource_uses_fallback(self, mock_get_metadata):
         """Test that MCP resource endpoint returns fallback-applied artist."""
+        # URI parser requires a hex/dash audio id
+        audio_id = "550e8400-e29b-41d4-a716-446655440000"
+
         # Mock database to return record with fallback-applied artist
         mock_get_metadata.return_value = {
-            "id": "test-uuid",
+            "id": audio_id,
             "artist": "Bach",  # Fallback applied in database
             "composer": "Bach",  # Original preserved
             "title": "Test Track",
@@ -136,11 +149,16 @@ class TestComposerArtistFallbackIntegration:
         # Test MCP resource retrieval
         from src.resources.metadata import get_metadata_resource
 
-        result = await get_metadata_resource("music-library://audio/test-uuid/metadata")
+        result = await get_metadata_resource(f"music-library://audio/{audio_id}/metadata")
 
-        assert result["id"] == "test-uuid"
-        assert result["Product"]["Artist"] == "Bach"  # Shows fallback artist
-        assert result["Product"]["Title"] == "Test Track"
+        # Resource returns an MCP envelope with JSON payload in "text"
+        import json
+        assert result["mimeType"] == "application/json"
+        payload = json.loads(result["text"])
+
+        assert payload["id"] == audio_id
+        assert payload["Product"]["Artist"] == "Bach"  # Shows fallback artist
+        assert payload["Product"]["Title"] == "Test Track"
 
     def test_no_fallback_when_artist_exists(self):
         """Test no fallback when artist already exists."""
