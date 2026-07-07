@@ -670,6 +670,7 @@ def get_audio_metadata_by_id(track_id: str) -> Optional[Dict[str, Any]]:
             - artist, title, album, genre, year
             - duration_seconds, channels, sample_rate, bitrate, format
             - file_size_bytes, audio_gcs_path, thumbnail_gcs_path
+            - isrc: International Standard Recording Code, if known
             - original_filename: Original filename from ingestion (for downloads)
             - created_at, updated_at timestamps
             - error_message, retry_count, last_processed_at (if applicable)
@@ -701,7 +702,7 @@ def get_audio_metadata_by_id(track_id: str) -> Optional[Dict[str, Any]]:
                         id, status, artist, title, album, genre, year,
                         duration_seconds, channels, sample_rate, bitrate,
                         format, file_size_bytes, audio_gcs_path, thumbnail_gcs_path,
-                        original_filename, created_at, updated_at, error_message, retry_count, last_processed_at
+                        isrc, original_filename, created_at, updated_at, error_message, retry_count, last_processed_at
                     FROM audio_tracks
                     WHERE id = %s
                 """
@@ -778,7 +779,7 @@ def get_audio_metadata_by_ids(track_ids: List[str]) -> List[Dict[str, Any]]:
                         id, status, artist, title, album, genre, year,
                         duration_seconds, channels, sample_rate, bitrate,
                         format, file_size_bytes, audio_gcs_path, thumbnail_gcs_path,
-                        original_filename, created_at, updated_at, error_message, retry_count, last_processed_at
+                        isrc, original_filename, created_at, updated_at, error_message, retry_count, last_processed_at
                     FROM audio_tracks
                     WHERE id = ANY(%s)
                 """
