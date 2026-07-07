@@ -55,8 +55,8 @@ class TestURLSchemeValidation:
             URLSchemeValidator.validate_scheme("javascript:alert('xss')")
     
     def test_ws_scheme_blocked(self):
-        """Test that ws:// scheme is blocked."""
-        with pytest.raises(URLValidationError, match="Unsupported URL scheme"):
+        """Test that ws:// scheme is blocked (it is in the dangerous-scheme set)."""
+        with pytest.raises(URLValidationError, match="Blocked URL scheme"):
             URLSchemeValidator.validate_scheme("ws://example.com/socket")
     
     def test_unknown_scheme_rejected(self):

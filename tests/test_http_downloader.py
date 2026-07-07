@@ -105,7 +105,7 @@ class TestURLSchemeValidation:
         
         downloader = HTTPDownloader()
         
-        with pytest.raises(ValueError, match="Unsupported URL scheme"):
+        with pytest.raises(ValueError, match="Blocked URL scheme"):
             downloader.validate_url_scheme("file:///etc/passwd")
     
     def test_ftp_scheme_blocked(self):
@@ -114,7 +114,7 @@ class TestURLSchemeValidation:
         
         downloader = HTTPDownloader()
         
-        with pytest.raises(ValueError, match="Unsupported URL scheme"):
+        with pytest.raises(ValueError, match="Blocked URL scheme"):
             downloader.validate_url_scheme("ftp://example.com/file.mp3")
     
     def test_invalid_url_no_hostname(self):

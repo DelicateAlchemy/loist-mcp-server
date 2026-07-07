@@ -14,11 +14,15 @@ import tempfile
 class TestMP3FormatSupport:
     """Test MP3 format support (ID3v1, ID3v2.3, ID3v2.4)."""
     
-    @patch('mutagen.File')
-    @patch('mutagen.mp3.MP3')
-    @patch('mutagen.id3.ID3')
-    def test_mp3_id3v2_extraction(self, mock_id3, mock_mp3, mock_file):
-        """Test MP3 with ID3v2 tags."""
+    @patch('src.metadata.extractor.MutagenFile')
+    @patch('src.metadata.extractor.ID3')
+    def test_mp3_id3v2_extraction(self, mock_id3, mock_file):
+        """Test MP3 with ID3v2 tags.
+
+        Patches target src.metadata.extractor (where the names are bound),
+        not mutagen itself — patching mutagen.* has no effect on the
+        already-imported extractor module.
+        """
         from src.metadata import extract_metadata
         
         # Mock ID3v2 tags
@@ -58,10 +62,8 @@ class TestMP3FormatSupport:
         finally:
             temp_path.unlink()
     
-    @patch('mutagen.File')
-    @patch('mutagen.mp3.MP3')
-    @patch('mutagen.id3.ID3')
-    def test_mp3_id3v23_tyer_tag(self, mock_id3, mock_mp3, mock_file):
+    @patch('src.metadata.extractor.ID3')
+    def test_mp3_id3v23_tyer_tag(self, mock_id3):
         """Test MP3 with ID3v2.3 TYER tag."""
         from src.metadata import MetadataExtractor
         
@@ -89,9 +91,8 @@ class TestMP3FormatSupport:
 class TestFLACFormatSupport:
     """Test FLAC format support (Vorbis comments)."""
     
-    @patch('mutagen.File')
-    @patch('mutagen.flac.FLAC')
-    def test_flac_vorbis_comments(self, mock_flac, mock_file):
+    @patch('src.metadata.extractor.MutagenFile')
+    def test_flac_vorbis_comments(self, mock_file):
         """Test FLAC with Vorbis comments."""
         from src.metadata import extract_metadata
         
@@ -113,12 +114,7 @@ class TestFLACFormatSupport:
         mock_audio.info.bitrate = 1000000
         mock_audio.info.bits_per_sample = 16  # Actual integer, not Mock
         mock_file.return_value = mock_audio
-        
-        # Mock FLAC call
-        mock_flac_instance = Mock()
-        mock_flac_instance.tags = mock_tags
-        mock_flac.return_value = mock_flac_instance
-        
+
         with tempfile.NamedTemporaryFile(suffix='.flac', delete=False) as f:
             temp_path = Path(f.name)
             f.write(b"fake flac")
@@ -140,9 +136,8 @@ class TestFLACFormatSupport:
 class TestM4AFormatSupport:
     """Test M4A/AAC format support (MP4 tags)."""
     
-    @patch('mutagen.File')
-    @patch('mutagen.mp4.MP4')
-    def test_m4a_mp4_tags(self, mock_mp4, mock_file):
+    @patch('src.metadata.extractor.MutagenFile')
+    def test_m4a_mp4_tags(self, mock_file):
         """Test M4A with MP4 tags."""
         from src.metadata import extract_metadata
         
@@ -163,12 +158,7 @@ class TestM4AFormatSupport:
         mock_audio.info.sample_rate = 44100
         mock_audio.info.bitrate = 256000
         mock_file.return_value = mock_audio
-        
-        # Mock MP4 call
-        mock_mp4_instance = Mock()
-        mock_mp4_instance.tags = mock_tags
-        mock_mp4.return_value = mock_mp4_instance
-        
+
         with tempfile.NamedTemporaryFile(suffix='.m4a', delete=False) as f:
             temp_path = Path(f.name)
             f.write(b"fake m4a")
@@ -189,9 +179,8 @@ class TestM4AFormatSupport:
 class TestOGGFormatSupport:
     """Test OGG format support (Vorbis comments)."""
     
-    @patch('mutagen.File')
-    @patch('mutagen.oggvorbis.OggVorbis')
-    def test_ogg_vorbis_comments(self, mock_ogg, mock_file):
+    @patch('src.metadata.extractor.MutagenFile')
+    def test_ogg_vorbis_comments(self, mock_file):
         """Test OGG with Vorbis comments."""
         from src.metadata import extract_metadata
         
@@ -212,12 +201,7 @@ class TestOGGFormatSupport:
         mock_audio.info.sample_rate = 48000
         mock_audio.info.bitrate = 160000
         mock_file.return_value = mock_audio
-        
-        # Mock OGG call
-        mock_ogg_instance = Mock()
-        mock_ogg_instance.tags = mock_tags
-        mock_ogg.return_value = mock_ogg_instance
-        
+
         with tempfile.NamedTemporaryFile(suffix='.ogg', delete=False) as f:
             temp_path = Path(f.name)
             f.write(b"fake ogg")
@@ -238,7 +222,7 @@ class TestOGGFormatSupport:
 class TestWAVFormatSupport:
     """Test WAV format support (RIFF INFO)."""
     
-    @patch('mutagen.File')
+    @patch('src.metadata.extractor.MutagenFile')
     def test_wav_riff_info(self, mock_file):
         """Test WAV with RIFF INFO tags."""
         from src.metadata import extract_metadata
@@ -258,7 +242,10 @@ class TestWAVFormatSupport:
         
         mock_audio = Mock()
         mock_audio.tags = mock_tags
-        mock_audio.info = Mock()
+        # Use a spec'd mock so hasattr() checks are accurate: WAV info has
+        # sample_width (bytes) but NOT bits_per_sample — a bare Mock would
+        # auto-create bits_per_sample and defeat the fallback logic.
+        mock_audio.info = Mock(spec=['length', 'channels', 'sample_rate', 'sample_width'])
         mock_audio.info.length = 120.0
         mock_audio.info.channels = 2
         mock_audio.info.sample_rate = 44100
@@ -286,7 +273,7 @@ class TestFormatDetectionAndValidation:
         """Test that all expected formats are supported."""
         from src.metadata import MetadataExtractor
         
-        expected_formats = {".mp3", ".flac", ".m4a", ".aac", ".ogg", ".wav"}
+        expected_formats = {".mp3", ".flac", ".m4a", ".aac", ".ogg", ".wav", ".aif", ".aiff"}
         assert MetadataExtractor.SUPPORTED_FORMATS == expected_formats
     
     def test_unsupported_format_error(self):
@@ -325,7 +312,7 @@ class TestFormatDetectionAndValidation:
 class TestCrossFormatFeatures:
     """Test features that work across all formats."""
     
-    @patch('mutagen.File')
+    @patch('src.metadata.extractor.MutagenFile')
     def test_technical_specs_extraction_all_formats(self, mock_file):
         """Test that technical specs are extracted for all formats."""
         from src.metadata import extract_metadata

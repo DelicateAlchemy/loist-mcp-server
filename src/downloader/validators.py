@@ -8,6 +8,7 @@ Provides comprehensive URL validation including:
 - URL normalization
 """
 
+import ipaddress
 import logging
 import re
 from typing import Tuple
@@ -120,8 +121,13 @@ class URLSchemeValidator:
             URLValidationError: If hostname is invalid
         """
         parsed = urlparse(url)
-        hostname = parsed.netloc.split(':')[0]  # Remove port if present
-        
+        # Use parsed.hostname (not netloc.split(':')) so credentials
+        # (user:pass@host) and IPv6 literals ([2001:db8::1]) are handled.
+        try:
+            hostname = parsed.hostname or ""
+        except ValueError as e:
+            raise URLValidationError(f"Invalid hostname: {e}")
+
         if not hostname:
             raise URLValidationError("Hostname is required")
         
@@ -139,8 +145,15 @@ class URLSchemeValidator:
             # Don't block localhost in development, but log it
         
         # Validate hostname format (basic check)
-        # Hostname should contain at least one dot (for FQDN) or be localhost
-        if "." not in hostname and hostname.lower() not in ["localhost"]:
+        # Hostname should contain at least one dot (for FQDN), be localhost,
+        # or be an IP literal (e.g. IPv6 addresses have no dots).
+        try:
+            ipaddress.ip_address(hostname)
+            is_ip_literal = True
+        except ValueError:
+            is_ip_literal = False
+
+        if not is_ip_literal and "." not in hostname and hostname.lower() not in ["localhost"]:
             raise URLValidationError(
                 f"Invalid hostname format: {hostname}. Use fully qualified domain name."
             )

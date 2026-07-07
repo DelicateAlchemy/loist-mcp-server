@@ -127,6 +127,7 @@ class TestUUIDValidation:
                 a2a_task_id="not-a-uuid"
             )
 
+    @pytest.mark.requires_db
     def test_save_audio_metadata_accepts_valid_uuid(self):
         """Test that save_audio_metadata accepts valid UUID format."""
         task_id = str(uuid.uuid4())
@@ -311,6 +312,7 @@ class TestErrorHandling:
     # that verify task metadata contains the expected processing results and errors.
 
 
+@pytest.mark.requires_db
 class TestDatabaseIntegration:
     """Test database integration for a2a_task_id linking."""
 
