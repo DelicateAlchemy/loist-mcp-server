@@ -1,4 +1,6 @@
--- migration_002_add_user_id.sql
+-- migration_014_add_user_id.sql
+-- (renamed from migration_002_add_user_id.sql on LOI-51; three files shared the
+--  002_ prefix. See database/migrations/README.md for the old->new mapping.)
 -- Add user_id column to audio_tracks table for multi-user SaaS support
 --
 -- This migration adds support for multi-user functionality by adding a user_id

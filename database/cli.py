@@ -31,15 +31,15 @@ logger = logging.getLogger(__name__)
 def migrate_command(args):
     """Handle migration commands."""
     from database.migrate import DatabaseMigrator
-    
+
     try:
         migrator = DatabaseMigrator(database_url=args.database_url)
-        
-        if args.migrate_action == 'up':
+
+        if args.migrate_action in ('apply', 'up'):
             logger.info("Applying pending migrations...")
-            success = migrator.migrate_up()
+            success = migrator.migrate_up(dry_run=getattr(args, 'dry_run', False))
             return 0 if success else 1
-            
+
         elif args.migrate_action == 'down':
             if not args.version:
                 logger.error("Migration version required for rollback")
@@ -47,11 +47,16 @@ def migrate_command(args):
             logger.info(f"Rolling back migration {args.version}...")
             success = migrator.migrate_down(args.version)
             return 0 if success else 1
-            
+
         elif args.migrate_action == 'status':
             migrator.get_status()
             return 0
-            
+
+        elif args.migrate_action == 'baseline':
+            logger.info("Baselining migrations...")
+            success = migrator.baseline(getattr(args, 'up_to', None))
+            return 0 if success else 1
+
     except Exception as e:
         logger.error(f"Migration failed: {e}")
         return 1
@@ -194,8 +199,8 @@ def main():
     migrate_parser = subparsers.add_parser('migrate', help='Database migrations')
     migrate_parser.add_argument(
         'migrate_action',
-        choices=['up', 'down', 'status'],
-        help='Migration action'
+        choices=['apply', 'up', 'down', 'status', 'baseline'],
+        help="Migration action ('up' is a backward-compatible alias for 'apply')"
     )
     migrate_parser.add_argument(
         '--version',
@@ -204,6 +209,15 @@ def main():
     migrate_parser.add_argument(
         '--database-url',
         help='Database URL (defaults to config or DATABASE_URL env var)'
+    )
+    migrate_parser.add_argument(
+        '--dry-run',
+        action='store_true',
+        help='For apply/up: print the plan without applying anything'
+    )
+    migrate_parser.add_argument(
+        '--up-to',
+        help='For baseline: only baseline up to this migration version'
     )
     migrate_parser.set_defaults(func=migrate_command)
     

@@ -1,4 +1,6 @@
--- migration_002_add_waveform_support.sql
+-- migration_015_add_waveform_support.sql
+-- (renamed from migration_002_add_waveform_support.sql on LOI-51; three files shared
+--  the 002_ prefix. See database/migrations/README.md for the old->new mapping.)
 -- Add waveform generation support to audio_tracks table
 --
 -- Adds columns for storing waveform SVG file paths, generation timestamps,

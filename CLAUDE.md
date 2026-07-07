@@ -39,6 +39,8 @@ python run_server.py    # HTTP on port 8080
 
 Environment: copy `.env.example` to `.env`. Key vars: `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `GCS_BUCKET_NAME`, `GCS_PROJECT_ID`, `SERVER_TRANSPORT` (stdio|http|sse).
 
+Migrations: `python database/migrate.py --action=apply` (see `database/migrations/README.md`).
+
 ## Testing
 
 ```bash
